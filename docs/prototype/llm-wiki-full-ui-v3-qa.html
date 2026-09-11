@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>LLM-Wiki · Product UI v2</title>
+<style>
+:root{
+  --bg:#f7f9fe;--surface:#fff;--surface2:#f9fbff;--line:#e7ebf4;
+  --text:#17233e;--sub:#6f7d95;--muted:#98a4b7;
+  --blue:#5b7cff;--blue2:#eef2ff;--cyan:#5ac7e8;--violet:#8b67f7;
+  --mint:#43c99a;--amber:#f2ae55;--rose:#ef7f9c;--red:#e45f65;
+  --nav:#fdfdff;--shadow:0 12px 34px rgba(42,59,100,.07);
+  --shadow2:0 20px 50px rgba(46,73,134,.10);--radius:18px
+}
+*{box-sizing:border-box}
+body{margin:0;background:
+ radial-gradient(circle at 8% 4%,rgba(112,132,255,.10),transparent 22%),
+ radial-gradient(circle at 88% 9%,rgba(86,208,228,.08),transparent 22%),
+ var(--bg);color:var(--text);
+ font-family:Inter,"SF Pro Display","PingFang SC","Microsoft YaHei",sans-serif;height:100vh;overflow:hidden}
+button,input,textarea,select{font:inherit}button{cursor:pointer}
+.app{display:grid;grid-template-columns:242px 1fr;height:100vh}
+.sidebar{background:rgba(255,255,255,.87);backdrop-filter:blur(16px);border-right:1px solid var(--line);padding:18px 14px;display:flex;flex-direction:column;overflow:auto}
+.brand{display:flex;align-items:center;gap:11px;padding:7px 9px 21px}
+.brandmark{width:36px;height:36px;border-radius:12px;background:linear-gradient(135deg,#5b7cff,#916bf8 65%,#63d3e8);color:#fff;display:grid;place-items:center;font-weight:800;box-shadow:0 9px 22px rgba(91,124,255,.24)}
+.brandtitle{font-size:17px;font-weight:800;letter-spacing:-.02em}.brandtitle small{display:block;font-size:9px;color:#93a0b4;font-weight:500;margin-top:2px;letter-spacing:.01em}
+.nav-group{margin-top:7px}.nav-label{padding:7px 10px 5px;color:#a0aabc;font-size:9px;letter-spacing:.11em;font-weight:700}
+.nav{display:flex;align-items:center;gap:10px;padding:10px 11px;border-radius:12px;margin:3px 0;color:#66758d;font-size:11px;transition:.17s;position:relative}
+.nav:hover{background:#f4f6fd;color:#33415d}.nav.active{background:linear-gradient(90deg,#edf2ff,#f5f3ff);color:#4e6df5;font-weight:700}
+.nav.active:before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:99px;background:linear-gradient(#5d80ff,#8568f5)}
+.ico{width:18px;text-align:center;color:inherit}.pill{margin-left:auto;background:#f2f5fb;border-radius:99px;padding:2px 6px;font-size:8px;color:#7a879c}
+.spacer{flex:1}.status{padding:11px;margin:8px 3px 0;border:1px solid #e7ecf5;background:linear-gradient(135deg,#f7fbff,#fff);border-radius:13px;font-size:9px}.status b{color:#1daf7d}.statusrow{display:flex;justify-content:space-between;margin-top:6px;color:#8490a5}
+.main{display:flex;flex-direction:column;min-width:0}.topbar{height:66px;background:rgba(255,255,255,.82);backdrop-filter:blur(15px);border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 22px;gap:14px}
+.search{flex:1;max-width:520px;position:relative}.search input{width:100%;padding:10px 14px 10px 37px;border:1px solid var(--line);border-radius:12px;background:#fafbff;outline:none;font-size:11px;color:var(--text)}.search span{position:absolute;left:13px;top:8px;color:#98a6b9;font-size:16px}
+.top-actions{display:flex;align-items:center;gap:10px;margin-left:auto;color:#68768c}.iconbtn{border:0;background:transparent;color:#68768c;font-size:16px}.profile{display:flex;align-items:center;gap:8px;font-size:10px}.avatar{width:30px;height:30px;background:linear-gradient(135deg,#845cf7,#b17cf4);border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:700}
+.content{flex:1;overflow:auto;padding:19px 20px 24px}.page{display:none;animation:fade .18s ease}.page.active{display:block}@keyframes fade{from{opacity:.2;transform:translateY(4px)}to{opacity:1;transform:none}}
+.pagehead{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:15px}.title h1{margin:0;font-size:23px;letter-spacing:-.03em}.title p{margin:5px 0 0;color:var(--sub);font-size:10px}.actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:#fff;color:#56647a;border-radius:10px;padding:8px 11px;font-size:10px;box-shadow:0 2px 8px rgba(40,59,100,.02)}.btn:hover{border-color:#ccd7f0}.btn.primary{color:#fff;border-color:transparent;background:linear-gradient(135deg,#5b7cff,#8068f2);box-shadow:0 8px 18px rgba(91,124,255,.2)}.btn.soft{background:#eef3ff;border-color:#dce5ff;color:#4e6ef5}
+.card{background:rgba(255,255,255,.96);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}.card.pad{padding:15px}.cardhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:11px}.cardhead h3{margin:0;font-size:12px}.muted{color:var(--sub)}
+.grid{display:grid;gap:14px}.g4{grid-template-columns:repeat(4,minmax(0,1fr))}.g3{grid-template-columns:repeat(3,minmax(0,1fr))}.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.kpi{padding:15px;position:relative;overflow:hidden}.kpi:after{content:"";position:absolute;width:90px;height:90px;right:-26px;top:-34px;border-radius:50%;background:radial-gradient(circle,rgba(91,124,255,.14),transparent 67%)}.klabel{font-size:9px;color:var(--sub)}.kn{font-size:25px;font-weight:800;margin-top:4px;letter-spacing:-.04em}.ktrend{font-size:9px;color:var(--mint);margin-top:4px}.ktrend.warn{color:var(--amber)}
+.table{width:100%;border-collapse:collapse;font-size:9px}.table th{padding:10px;background:#fbfcfe;color:#8b98ab;text-align:left;border-bottom:1px solid var(--line);font-weight:600}.table td{padding:11px 10px;border-bottom:1px solid #eef1f6;vertical-align:top}.table tr:last-child td{border-bottom:0}.table tr.clickable{cursor:pointer}.table tr.clickable:hover{background:#fafbff}.tag{display:inline-block;padding:4px 7px;border-radius:999px;background:#f1f4fa;color:#66748b;font-size:8px;margin:1px 3px 1px 0}.tag.blue{background:#edf2ff;color:#5371f5}.tag.green{background:#edf9f4;color:#15906a}.tag.amber{background:#fff5e8;color:#ce7e20}.tag.red{background:#fff0f1;color:#c8565f}.tag.purple{background:#f3efff;color:#7755dc}
+.toolbar{display:flex;align-items:center;gap:7px;margin-bottom:10px;flex-wrap:wrap}.grow{flex:1}.field{border:1px solid var(--line);background:#fff;border-radius:9px;padding:8px 9px;color:#526178;font-size:9px;outline:none}.field.wide{min-width:210px}.seg{display:flex;border:1px solid var(--line);border-radius:9px;background:#fafbfe;overflow:hidden}.seg button{border:0;background:transparent;padding:7px 10px;color:#7b8799;font-size:9px}.seg button.active{background:#fff;color:var(--blue);font-weight:700;box-shadow:0 2px 7px rgba(51,72,120,.06)}
+.list{display:flex;flex-direction:column;gap:8px}.listitem{border:1px solid var(--line);padding:10px;border-radius:11px;background:#fff}.listitem:hover{border-color:#d8e1f4}.listitem b{font-size:10px}.listitem p{margin:4px 0 0;color:var(--sub);font-size:9px;line-height:1.5}
+.detail{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:14px}.detailcard{padding:15px}.entityhero{display:flex;align-items:center;gap:12px}.entityicon{width:44px;height:44px;border-radius:13px;background:linear-gradient(135deg,#edf2ff,#f1edff);display:grid;place-items:center;color:#5472ef;font-weight:800;font-size:17px}.entitymeta b{font-size:12px}.entitymeta div{margin-top:4px;color:var(--sub);font-size:9px}.kv{display:grid;grid-template-columns:110px 1fr;gap:9px;margin-top:13px;font-size:9px}.kv span{color:var(--sub)}.quote{margin-top:12px;border:1px solid #e8edf5;background:#fafcff;border-radius:10px;padding:10px;font-size:9px;line-height:1.6;color:#56647b}.quote:before{content:"“";font-size:18px;color:#aac0ff;margin-right:4px}
+.chart{height:170px;position:relative;overflow:hidden}.chart svg{width:100%;height:100%}.legend{display:flex;gap:12px;font-size:8px;color:var(--sub);margin-top:4px}.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:4px}
+.timeline{padding-left:20px;position:relative}.timeline:before{content:"";position:absolute;left:7px;top:4px;bottom:4px;width:1px;background:#dfe6f0}.event{position:relative;padding-bottom:18px}.eventdot{position:absolute;left:-17px;top:2px;width:9px;height:9px;border-radius:50%;background:var(--blue);box-shadow:0 0 0 4px #edf2ff}.event b{font-size:10px}.event div{font-size:9px;color:var(--sub);margin-top:3px}
+.graph{height:500px;border-radius:15px;background:radial-gradient(circle at 50% 45%,#eff4ff 0,#fff 47%,#f7fbff 100%);position:relative;overflow:hidden}.graph svg{width:100%;height:100%}
+.workflow{display:grid;grid-template-columns:220px minmax(0,1fr) 260px;gap:14px}.nodebox{padding:11px;border:1px solid var(--line);border-radius:10px;margin-bottom:7px;background:#fff;font-size:9px}.nodebox b{font-size:10px}.canvas{height:500px;border:1px solid var(--line);border-radius:15px;position:relative;overflow:hidden;background:linear-gradient(#fff,#fbfcff)}.canvas:before{content:"";position:absolute;inset:0;background-image:radial-gradient(#dce3ef 1px,transparent 1px);background-size:18px 18px;opacity:.65}.flow{position:absolute;width:164px;padding:10px;border-radius:11px;border:1px solid #dbe3f0;background:#fff;box-shadow:0 10px 22px rgba(36,61,105,.08);z-index:2}.flow b{font-size:10px}.flow small{display:block;color:var(--sub);margin-top:3px;font-size:8px}
+.prompt-layout{display:grid;grid-template-columns:232px minmax(0,1fr) 310px;gap:14px}.agentmenu{padding:8px}.agent{display:flex;gap:9px;padding:10px;border-radius:11px;margin:4px 0}.agent.active{background:linear-gradient(90deg,#eef2ff,#f7f3ff);border:1px solid #dce5ff}.agentico{width:34px;height:34px;border-radius:10px;background:#edf2ff;color:var(--blue);display:grid;place-items:center}.agent b{font-size:10px}.agent small{display:block;color:var(--sub);font-size:8px;margin-top:2px}.promptbox{height:350px;width:100%;resize:none;background:#141c30;border:0;border-radius:12px;color:#dbe7ff;padding:15px;font:11px/1.75 ui-monospace,Consolas,monospace;outline:none}.historyrow{display:flex;gap:8px;padding:9px 0;border-bottom:1px solid var(--line)}.version{background:#eff3fa;padding:5px 7px;border-radius:6px;font-size:8px;font-weight:700;height:fit-content}
+.log{height:430px;background:#11192b;border-radius:12px;color:#dbe5fa;padding:12px;font:9px/1.65 ui-monospace,Consolas,monospace;overflow:auto}.ok{color:#55d19c}.warn{color:#f3b25e}.err{color:#ef797c}
+.settings{display:grid;grid-template-columns:188px 1fr;min-height:520px}.settingnav{border-right:1px solid var(--line);padding:9px}.settingnav div{padding:9px;border-radius:8px;font-size:9px;color:#728097;margin:2px 0}.settingnav div.active{background:var(--blue2);color:var(--blue);font-weight:700}.settingbody{padding:16px}.setting{display:grid;grid-template-columns:1fr 200px;gap:20px;padding:13px 0;border-bottom:1px solid var(--line);font-size:10px}.setting small{display:block;color:var(--sub);font-size:8px;margin-top:3px}.switch{width:38px;height:21px;border-radius:99px;background:#dce3ed;position:relative}.switch.on{background:var(--blue)}.switch:after{content:"";position:absolute;width:17px;height:17px;background:#fff;border-radius:50%;top:2px;left:2px;transition:.18s}.switch.on:after{left:19px}
+.modal{position:fixed;inset:0;background:rgba(20,30,54,.22);backdrop-filter:blur(5px);display:none;align-items:center;justify-content:center;z-index:20}.modal.show{display:flex}.modalbox{width:min(680px,92vw);background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow2);padding:17px;animation:fade .18s}.modalhead{display:flex;justify-content:space-between;align-items:center}.close{border:0;background:transparent;color:#7a8799;font-size:18px}.drawer{position:fixed;right:0;top:0;bottom:0;width:min(430px,94vw);background:#fff;box-shadow:-18px 0 50px rgba(31,50,90,.14);transform:translateX(100%);transition:.22s;z-index:15;padding:16px;overflow:auto}.drawer.show{transform:none}.drawerhead{display:flex;justify-content:space-between;align-items:center}.empty{padding:28px;text-align:center;color:#99a4b5;font-size:10px;border:1px dashed #dce3ed;border-radius:12px}
+.toast{position:fixed;right:18px;bottom:18px;background:#1c2840;color:#fff;padding:10px 13px;border-radius:10px;font-size:9px;box-shadow:0 10px 25px rgba(0,0,0,.18);opacity:0;transform:translateY(7px);pointer-events:none;transition:.2s;z-index:30}.toast.show{opacity:1;transform:none}
+@media(max-width:1250px){.g4{grid-template-columns:repeat(2,1fr)}.prompt-layout{grid-template-columns:210px 1fr}.prompt-layout .rightcol{display:none}.workflow{grid-template-columns:180px 1fr}.workflow .wf-right{display:none}.detail{grid-template-columns:1fr}}
+@media(max-width:920px){.app{grid-template-columns:70px 1fr}.brandtitle,.nav-label,.nav span:not(.ico),.pill,.status{display:none}.brand{justify-content:center}.content{padding:13px}.g3,.g2{grid-template-columns:1fr}.g4{grid-template-columns:1fr 1fr}.prompt-layout{grid-template-columns:1fr}.agentmenu{display:none}.settings{grid-template-columns:1fr}.settingnav{display:flex;gap:5px;overflow:auto;border-right:0;border-bottom:1px solid var(--line)}.settingnav div{white-space:nowrap}}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="sidebar">
+  <div class="brand"><div class="brandmark">✦</div><div class="brandtitle">LLM-Wiki<small>AI-Powered Personal Knowledge OS</small></div></div>
+
+  <div class="nav-group"><div class="nav-label">概览</div>
+    <div class="nav active" data-page="home"><span class="ico">⌂</span><span>首页</span></div>
+  </div>
+
+  <div class="nav-group"><div class="nav-label">知识空间</div>
+    <div class="nav" data-page="knowledge"><span class="ico">▤</span><span>知识库</span><span class="pill">86</span></div>
+    <div class="nav" data-page="qa"><span class="ico">⌁</span><span>知识问答</span><span class="pill">AI</span></div>
+    <div class="nav" data-page="entities"><span class="ico">◌</span><span>实体管理</span></div>
+    <div class="nav" data-page="graph"><span class="ico">⌘</span><span>关系图谱</span></div>
+    <div class="nav" data-page="events"><span class="ico">◈</span><span>事件管理</span></div>
+    <div class="nav" data-page="ideas"><span class="ico">✦</span><span>观点与想法</span></div>
+    <div class="nav" data-page="questions"><span class="ico">?</span><span>问题管理</span><span class="pill">18</span></div>
+    <div class="nav" data-page="evidence"><span class="ico">◫</span><span>证据管理</span></div>
+  </div>
+
+  <div class="nav-group"><div class="nav-label">智能体空间</div>
+    <div class="nav" data-page="tasks"><span class="ico">☷</span><span>任务管理</span></div>
+    <div class="nav" data-page="workflows"><span class="ico">◎</span><span>工作流</span></div>
+    <div class="nav" data-page="prompts"><span class="ico">✎</span><span>Prompt &amp; Skills</span></div>
+    <div class="nav" data-page="logs"><span class="ico">◒</span><span>智能体日志</span></div>
+  </div>
+
+  <div class="nav-group"><div class="nav-label">系统</div>
+    <div class="nav" data-page="settings"><span class="ico">⚙</span><span>系统设置</span></div>
+    <div class="nav" data-page="database"><span class="ico">◉</span><span>数据库</span></div>
+  </div>
+
+  <div class="spacer"></div>
+  <div class="status"><b>● 系统运行正常</b><div class="statusrow"><span>SQLite</span><span>WAL · OK</span></div><div class="statusrow"><span>AgentScope</span><span>Connected</span></div><div class="statusrow"><span>v0.5.2</span><span>Local First</span></div></div>
+</aside>
+
+<main class="main">
+<header class="topbar">
+  <div class="search"><span>⌕</span><input id="globalSearch" placeholder="搜索知识、实体、事件、问题、任务…"/></div>
+  <div class="top-actions"><button class="iconbtn" onclick="toast('没有新的通知')">♧</button><button class="iconbtn" onclick="go('settings')">⚙</button><div class="profile"><div class="avatar">A</div><span>admin⌄</span></div></div>
+</header>
+
+<div class="content">
+
+<section class="page active" id="page-home">
+<div class="pagehead"><div class="title"><h1>你好，今天继续构建你的知识系统。</h1><p>这里是 LLM-Wiki 的控制中心：知识、研究和 Agent 工作流都从这里开始。</p></div><div class="actions"><button class="btn" onclick="go('questions')">查看待办</button><button class="btn primary" onclick="openModal('newKnowledge')">＋ 新建知识</button></div></div>
+<div class="grid g4">
+ <div class="card kpi"><div class="klabel">知识对象</div><div class="kn">1,284</div><div class="ktrend">↑ 8.4% · 本周新增 97</div></div>
+ <div class="card kpi"><div class="klabel">已验证 Claims</div><div class="kn">742</div><div class="ktrend">↑ 5.1% · Evidence 覆盖 98%</div></div>
+ <div class="card kpi"><div class="klabel">待处理事项</div><div class="kn">36</div><div class="ktrend warn">12 个 Entity · 6 个冲突</div></div>
+ <div class="card kpi"><div class="klabel">Agent 运行中</div><div class="kn">4</div><div class="ktrend">● 平均延迟 1.8s</div></div>
+</div>
+<div class="grid g3" style="margin-top:14px">
+ <div class="card pad"><div class="cardhead"><h3>知识增长</h3><div class="seg"><button class="active">7D</button><button>30D</button><button>90D</button></div></div>
+  <div class="chart"><svg viewBox="0 0 520 170"><path d="M0 140 C60 125,90 128,135 103 S220 111,270 80 S360 95,405 58 S470 63,520 27" fill="none" stroke="#5b7cff" stroke-width="3"/><path d="M0 140 C60 125,90 128,135 103 S220 111,270 80 S360 95,405 58 S470 63,520 27 L520 170 L0 170Z" fill="url(#g)" opacity=".25"/><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#5b7cff"/><stop offset="1" stop-color="#fff"/></linearGradient></defs></svg></div>
+  <div class="legend"><span><i class="dot" style="background:#5b7cff"></i>知识对象</span><span><i class="dot" style="background:#5ac7e8"></i>Claims</span></div>
+ </div>
+ <div class="card pad"><div class="cardhead"><h3>待处理</h3><button class="btn" onclick="go('tasks')">查看全部</button></div><div class="list">
+  <div class="listitem" onclick="go('entities')"><b>12 个 Entity Candidate</b><p>CuratorAgent 已给出合并建议。</p></div>
+  <div class="listitem" onclick="go('evidence')"><b>6 个 Evidence 冲突</b><p>存在 quote / offset 不一致。</p></div>
+  <div class="listitem" onclick="go('questions')"><b>5 个开放问题</b><p>可以交给 ResearchAgent。</p></div>
+ </div></div>
+ <div class="card pad"><div class="cardhead"><h3>系统状态</h3><span class="tag green">Healthy</span></div>
+  <div class="listitem"><b>SQLite</b><p>WAL · FTS5 · 48.6 MB</p></div><div class="listitem"><b>AgentScope</b><p>5 Agents · 7 Skills</p></div><div class="listitem"><b>Evidence Validator</b><p>97.8% objects traceable</p></div>
+ </div>
+</div>
+<div class="card pad" style="margin-top:14px"><div class="cardhead"><h3>最近知识流</h3><button class="btn" onclick="go('knowledge')">查看知识库</button></div><table class="table"><thead><tr><th>时间</th><th>对象</th><th>动作</th><th>来源</th><th>状态</th></tr></thead><tbody>
+<tr class="clickable" onclick="openDrawer('RAG')"><td>16:03</td><td><b>Retrieval-Augmented Generation</b></td><td>新增 Entity + 8 Claims</td><td>RAG Survey · 2026</td><td><span class="tag green">verified</span></td></tr>
+<tr class="clickable" onclick="openDrawer('AgentScope')"><td>15:48</td><td><b>AgentScope</b></td><td>更新描述 + 2 Relations</td><td>Official Docs</td><td><span class="tag amber">review</span></td></tr>
+<tr class="clickable" onclick="openDrawer('MMLU')"><td>15:32</td><td><b>MMLU</b></td><td>新增 Dataset</td><td>Evaluation Notes</td><td><span class="tag green">verified</span></td></tr>
+<tr><td>15:17</td><td><b>Knowledge Staleness</b></td><td>新增 Concept</td><td>RAG Survey</td><td><span class="tag blue">candidate</span></td></tr>
+</tbody></table></div>
+</section>
+
+<section class="page" id="page-knowledge">
+<div class="pagehead"><div class="title"><h1>知识库</h1><p>Documents 是来源入口，Chunks 是检索单元，知识对象负责结构化。</p></div><div class="actions"><button class="btn" onclick="openModal('import')">⇧ 导入</button><button class="btn primary" onclick="openModal('newKnowledge')">＋ 新建知识</button></div></div>
+<div class="grid g4">
+ <div class="card kpi"><div class="klabel">Documents</div><div class="kn">86</div><div class="ktrend">4 个本周新增</div></div>
+ <div class="card kpi"><div class="klabel">Chunks</div><div class="kn">2,148</div><div class="ktrend">平均 25 chunks/doc</div></div>
+ <div class="card kpi"><div class="klabel">Knowledge Objects</div><div class="kn">1,284</div><div class="ktrend">97.8% 有 Evidence</div></div>
+ <div class="card kpi"><div class="klabel">Extraction Runs</div><div class="kn">132</div><div class="ktrend">今日运行 7 次</div></div>
+</div>
+<div class="card pad" style="margin-top:14px"><div class="toolbar"><div class="seg"><button class="active">Documents</button><button onclick="toast('Chunks 视图已切换')">Chunks</button><button onclick="toast('Claims 视图已切换')">Claims</button><button onclick="toast('Runs 视图已切换')">Extraction Runs</button></div><div class="grow"></div><input class="field wide" placeholder="搜索标题、内容、路径…" oninput="filterTable(this,'docTable')"/><select class="field"><option>全部类型</option><option>Markdown</option><option>TXT</option><option>HTML</option></select><select class="field"><option>全部状态</option><option>processed</option><option>processing</option><option>failed</option></select></div>
+<table class="table" id="docTable"><thead><tr><th>Document</th><th>类型</th><th>Chunks</th><th>对象</th><th>最后抽取</th><th>状态</th></tr></thead><tbody>
+<tr class="clickable" onclick="openDrawer('RAG Survey')"><td><b>RAG Survey · 2026</b><div class="muted">docs/rag-survey.md</div></td><td>Markdown</td><td>42</td><td>128</td><td>16:03</td><td><span class="tag green">processed</span></td></tr>
+<tr class="clickable"><td><b>AgentScope 2.x Notes</b><div class="muted">notes/agentscope.md</div></td><td>Markdown</td><td>18</td><td>54</td><td>15:48</td><td><span class="tag amber">review</span></td></tr>
+<tr class="clickable"><td><b>Graph Patterns</b><div class="muted">papers/graph-patterns.html</div></td><td>HTML</td><td>31</td><td>73</td><td>14:21</td><td><span class="tag blue">processing</span></td></tr>
+<tr class="clickable"><td><b>Personal Notes</b><div class="muted">notes/personal.txt</div></td><td>TXT</td><td>12</td><td>23</td><td>昨天 22:08</td><td><span class="tag green">processed</span></td></tr>
+</tbody></table></div>
+</section>
+
+
+<section class="page" id="page-qa">
+<div class="pagehead">
+  <div class="title"><h1>知识问答</h1><p>基于 LLM-Wiki 知识库与来源证据回答问题，区分“已知”“推断”和“未知”。</p></div>
+  <div class="actions">
+    <button class="btn" onclick="toast('已清空当前会话')">清空会话</button>
+    <button class="btn" onclick="toast('回答设置已打开')">回答设置</button>
+    <button class="btn primary" onclick="runQA()">▶ 开始回答</button>
+  </div>
+</div>
+
+<div class="grid g4">
+  <div class="card kpi"><div class="klabel">知识库命中</div><div class="kn">12</div><div class="ktrend">来自 6 个来源</div></div>
+  <div class="card kpi"><div class="klabel">引用 Evidence</div><div class="kn">8</div><div class="ktrend">覆盖充分</div></div>
+  <div class="card kpi"><div class="klabel">回答置信</div><div class="kn">0.93</div><div class="ktrend">高于 0.85 阈值</div></div>
+  <div class="card kpi"><div class="klabel">未解决点</div><div class="kn">2</div><div class="ktrend warn">建议继续研究</div></div>
+</div>
+
+<div class="detail" style="margin-top:14px;grid-template-columns:minmax(0,1.45fr) minmax(300px,.7fr)">
+  <div class="card pad">
+    <div class="toolbar">
+      <div class="grow"><b style="font-size:12px">Ask your knowledge base</b><div class="muted" style="font-size:8px;margin-top:3px">Hybrid Retrieval · FTS5 + Semantic · RRF</div></div>
+      <div class="seg"><button class="active">知识库</button><button>知识库 + Web</button></div>
+    </div>
+
+    <div style="border:1px solid #dfe6f2;background:#fbfcff;border-radius:12px;padding:12px">
+      <textarea id="qaInput" class="field" style="width:100%;height:90px;resize:none;border:0;background:transparent;outline:none;font-size:12px;line-height:1.6" placeholder="例如：为什么 RAG 不一定能提高回答质量？请给出来源依据，并区分确定性结论与条件性结论。">为什么 RAG 不一定能提高回答质量？请给出来源依据，并区分确定性结论与条件性结论。</textarea>
+      <div style="display:flex;align-items:center;gap:7px;border-top:1px solid #e8edf4;padding-top:9px">
+        <span class="tag blue">Evidence required</span>
+        <span class="tag">引用来源</span>
+        <span class="tag">保留条件</span>
+        <div class="grow"></div>
+        <button class="btn primary" onclick="runQA()">发送 ⌘↵</button>
+      </div>
+    </div>
+
+    <div id="qaAnswer" style="margin-top:13px">
+      <div class="card" style="background:linear-gradient(135deg,#fbfcff,#f5f8ff);border-color:#dfe7f6;padding:14px">
+        <div class="cardhead">
+          <h3>回答</h3>
+          <span class="tag green">grounded</span>
+        </div>
+        <div style="font-size:11px;line-height:1.75;color:#3d4e68">
+          RAG <b>并不必然</b>提高回答质量。现有知识库中的 Evidence 表明，RAG 的效果依赖于检索结果是否与当前问题相关；如果检索结果无关、噪声较高，额外上下文反而可能降低最终回答质量。
+        </div>
+        <div class="quote" style="margin-top:12px">
+          “RAG may not improve answer quality when retrieved documents are irrelevant.”
+          <div class="muted" style="margin-top:5px">RAG Survey · chunk_021 · Claim · polarity=negative · modality=possible</div>
+        </div>
+        <div style="margin-top:10px">
+          <span class="tag green">已知：retrieval relevance 是关键条件</span>
+          <span class="tag amber">条件性：irrelevant retrieval</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:12px;padding:13px">
+      <div class="cardhead"><h3>回答结构</h3><span class="muted" style="font-size:8px">Answer plan</span></div>
+      <div class="grid g3">
+        <div class="listitem"><b>① 核心结论</b><p>RAG 不保证提升。</p></div>
+        <div class="listitem"><b>② 关键条件</b><p>检索结果相关性。</p></div>
+        <div class="listitem"><b>③ 证据边界</b><p>当前知识库证据不支持绝对因果结论。</p></div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card pad">
+      <div class="cardhead"><h3>检索轨迹</h3><span class="tag blue">12 hits</span></div>
+      <div class="list">
+        <div class="listitem"><b>Hybrid Query</b><p>retrieval quality · RAG · answer quality</p></div>
+        <div class="listitem"><b>FTS5</b><p>命中 8 chunks · top 5 used</p></div>
+        <div class="listitem"><b>Semantic</b><p>命中 14 chunks · top 8 used</p></div>
+        <div class="listitem"><b>RRF</b><p>融合后 12 个 evidence candidates</p></div>
+      </div>
+    </div>
+
+    <div class="card pad" style="margin-top:12px">
+      <div class="cardhead"><h3>引用来源</h3><button class="btn" onclick="go('evidence')">查看全部</button></div>
+      <div class="list">
+        <div class="listitem"><b>RAG Survey · 2026</b><p>chunk_021 · relevance condition</p><span class="tag green">primary</span></div>
+        <div class="listitem"><b>Evaluation Notes</b><p>chunk_044 · MMLU / evaluation</p><span class="tag blue">supporting</span></div>
+        <div class="listitem"><b>Retrieval Patterns</b><p>chunk_017 · noisy retrieval</p><span class="tag">context</span></div>
+      </div>
+    </div>
+
+    <div class="card pad" style="margin-top:12px">
+      <div class="cardhead"><h3>知识边界</h3></div>
+      <div class="statusline2"><span>有直接 Evidence</span><b style="color:var(--green)">8</b></div>
+      <div class="statusline2"><span>条件性 Claim</span><b style="color:var(--amber)">3</b></div>
+      <div class="statusline2"><span>待研究问题</span><b>2</b></div>
+      <div class="notice" style="margin-top:10px;padding:10px;border-radius:9px;background:#f7f2ff;color:#6e55a8;font-size:9px;line-height:1.5">回答不会因为缺少证据而自动“补全”知识；Evidence 不足时会明确告诉你。</div>
+    </div>
+  </div>
+</div>
+
+<div class="card pad" style="margin-top:14px">
+  <div class="cardhead"><h3>最近问答</h3><button class="btn">查看历史</button></div>
+  <table class="table"><thead><tr><th>问题</th><th>命中</th><th>引用</th><th>Agent</th><th>耗时</th><th>结果</th></tr></thead><tbody>
+    <tr class="clickable"><td><b>为什么 RAG 不一定提高回答质量？</b></td><td>12</td><td>8</td><td>KnowledgeAgent</td><td>1.8s</td><td><span class="tag green">grounded</span></td></tr>
+    <tr class="clickable"><td><b>GPT-4 与 MMLU 的关系是什么？</b></td><td>9</td><td>5</td><td>KnowledgeAgent</td><td>1.2s</td><td><span class="tag green">grounded</span></td></tr>
+    <tr class="clickable"><td><b>有哪些待解决的 Retrieval 问题？</b></td><td>16</td><td>7</td><td>ResearchAgent</td><td>4.6s</td><td><span class="tag amber">research needed</span></td></tr>
+  </tbody></table>
+</div>
+</section>
+
+<section class="page" id="page-entities">
+<div class="pagehead"><div class="title"><h1>实体管理</h1><p>Entity Type Registry 驱动分类，Alias 和 Provenance 决定可复用性与可审计性。</p></div><div class="actions"><button class="btn" onclick="toast('实体合并工作台已打开')">⇄ 合并</button><button class="btn primary" onclick="openModal('entity')">＋ 新建实体</button></div></div>
+<div class="detail">
+<div class="card pad"><div class="toolbar"><input class="field grow" placeholder="搜索 Entity…" oninput="filterTable(this,'entityTable')"/><select class="field"><option>全部类型</option><option>Technology</option><option>Method</option><option>Model</option><option>Concept</option><option>Software</option></select><select class="field"><option>全部状态</option><option>verified</option><option>candidate</option><option>archived</option></select></div>
+<table class="table" id="entityTable"><thead><tr><th>Entity</th><th>Types</th><th>Aliases</th><th>Claims</th><th>Relations</th><th>状态</th></tr></thead><tbody>
+<tr class="clickable" onclick="openDrawer('Retrieval-Augmented Generation')"><td><b>Retrieval-Augmented Generation</b></td><td><span class="tag blue">Technology</span><span class="tag purple">Method</span></td><td>RAG</td><td>42</td><td>18</td><td><span class="tag green">verified</span></td></tr>
+<tr class="clickable" onclick="openDrawer('GPT-4')"><td><b>GPT-4</b></td><td><span class="tag blue">Model</span><span class="tag">Product</span></td><td>GPT-4</td><td>31</td><td>12</td><td><span class="tag green">verified</span></td></tr>
+<tr class="clickable" onclick="openDrawer('Knowledge Staleness')"><td><b>Knowledge Staleness</b></td><td><span class="tag">Concept</span></td><td>—</td><td>8</td><td>2</td><td><span class="tag amber">candidate</span></td></tr>
+<tr class="clickable"><td><b>Vector Database</b></td><td><span class="tag blue">Technology</span></td><td>Vector DB</td><td>17</td><td>9</td><td><span class="tag green">verified</span></td></tr>
+</tbody></table></div>
+<div class="card detailcard"><div class="entityhero"><div class="entityicon">R</div><div class="entitymeta"><b>Retrieval-Augmented Generation</b><div>Technology · Method · verified</div></div></div>
+<div class="kv"><span>Canonical Name</span><b>Retrieval-Augmented Generation</b><span>Aliases</span><b>RAG</b><span>Evidence</span><b>37 sources</b><span>Claims</span><b>42</b><span>Relations</span><b>18</b><span>Created</span><b>2026-09-02</b></div>
+<div class="quote">RAG combines information retrieval with language generation and provides external context to a language model.<div class="muted" style="margin-top:6px">rag-survey.md · chunk_018 · [812, 925)</div></div>
+<div style="margin-top:13px"><h3>Type Decision</h3><div class="listitem"><b>Technology</b><p>来源将其作为可独立讨论的技术系统。</p></div><div class="listitem"><b>Method</b><p>来源同时将其描述为用于 grounding responses 的方法。</p></div></div></div>
+</div>
+</section>
+
+<section class="page" id="page-graph">
+<div class="pagehead"><div class="title"><h1>关系图谱</h1><p>只展示通过 Predicate Registry 与 Evidence 验证后的长期图谱关系。</p></div><div class="actions"><button class="btn" onclick="toast('关系筛选器已打开')">筛选</button><button class="btn" onclick="toast('图谱已导出')">⇩ 导出</button></div></div>
+<div class="card pad"><div class="toolbar"><input class="field wide" value="Retrieval-Augmented Generation"/><select class="field"><option>2 hops</option><option>1 hop</option><option>3 hops</option></select><select class="field"><option>全部 Predicate</option><option>uses</option><option>based_on</option><option>trained_on</option><option>depends_on</option></select><div class="grow"></div><span class="tag blue">20 Core Predicates</span></div>
+<div class="graph">
+<svg viewBox="0 0 1100 500">
+<defs><marker id="arr" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0 0 L7 3.5 L0 7z" fill="#9faeca"/></marker></defs>
+<g stroke="#a7b6cf" stroke-width="1.6" marker-end="url(#arr)">
+<line x1="550" y1="250" x2="240" y2="120"/><line x1="550" y1="250" x2="228" y2="372"/><line x1="550" y1="250" x2="870" y2="120"/><line x1="550" y1="250" x2="884" y2="372"/><line x1="550" y1="250" x2="545" y2="80"/><line x1="550" y1="250" x2="610" y2="430"/>
+</g>
+<g font-size="11" fill="#76869d"><text x="366" y="175">uses</text><text x="365" y="329">addresses</text><text x="688" y="174">trained_on</text><text x="694" y="330">improves</text><text x="562" y="155">based_on</text><text x="580" y="390">applied_to</text></g>
+<g>
+<circle cx="550" cy="250" r="47" fill="#5b7cff"/><text x="550" y="247" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">RAG</text><text x="550" y="263" text-anchor="middle" fill="#dfe7ff" font-size="9">Technology</text>
+<circle cx="240" cy="120" r="35" fill="#62c6e4"/><text x="240" y="124" text-anchor="middle" fill="#fff" font-size="10">Vector DB</text>
+<circle cx="228" cy="372" r="35" fill="#8a69e9"/><text x="228" y="376" text-anchor="middle" fill="#fff" font-size="10">Knowledge</text>
+<circle cx="870" cy="120" r="35" fill="#45c49a"/><text x="870" y="124" text-anchor="middle" fill="#fff" font-size="10">MMLU</text>
+<circle cx="884" cy="372" r="35" fill="#f1a456"/><text x="884" y="376" text-anchor="middle" fill="#fff" font-size="10">Answer Quality</text>
+<circle cx="545" cy="80" r="35" fill="#6a8cf2"/><text x="545" y="84" text-anchor="middle" fill="#fff" font-size="10">Transformer</text>
+<circle cx="610" cy="430" r="35" fill="#ef809a"/><text x="610" y="434" text-anchor="middle" fill="#fff" font-size="10">Q&amp;A</text>
+</g></svg>
+<div style="position:absolute;left:14px;bottom:13px;background:rgba(255,255,255,.9);border:1px solid var(--line);padding:8px;border-radius:9px;font-size:8px">蓝色：核心实体 · 紫色：Concept · 绿色：Dataset · 橙色：Concept</div>
+</div></div>
+</section>
+
+<section class="page" id="page-events">
+<div class="pagehead"><div class="title"><h1>事件管理</h1><p>Event 是“发生了什么”，独立于 Entity 的静态身份与 Relation。</p></div><div class="actions"><button class="btn">时间过滤</button><button class="btn primary" onclick="openModal('event')">＋ 新建事件</button></div></div>
+<div class="grid g4"><div class="card kpi"><div class="klabel">Events</div><div class="kn">143</div><div class="ktrend">↑ 12 本周</div></div><div class="card kpi"><div class="klabel">Release</div><div class="kn">23</div></div><div class="card kpi"><div class="klabel">Evaluation</div><div class="kn">18</div></div><div class="card kpi"><div class="klabel">时间不完整</div><div class="kn">9</div><div class="ktrend warn">建议补充时间</div></div></div>
+<div class="grid g2" style="margin-top:14px"><div class="card pad"><div class="cardhead"><h3>2026 · September</h3><button class="btn">月视图</button></div><div class="timeline">
+<div class="event"><span class="eventdot"></span><b>RAG Survey 发布</b><div>Sep 10 · publication · completed · 1 document</div></div>
+<div class="event"><span class="eventdot"></span><b>Extraction Pipeline 更新</b><div>Sep 09 · update · completed · v2.0 normalization</div></div>
+<div class="event"><span class="eventdot"></span><b>AgentScope Workflow Evaluation</b><div>Sep 08 · evaluation · completed · 12 runs</div></div>
+<div class="event"><span class="eventdot"></span><b>Prompt v3.2 发布</b><div>Sep 05 · release · completed</div></div>
+</div></div>
+<div class="card pad"><div class="cardhead"><h3>事件筛选</h3><button class="btn">清除</button></div><div class="listitem"><b>Type</b><p><span class="tag">creation</span><span class="tag blue">development</span><span class="tag green">release</span><span class="tag purple">evaluation</span></p></div><div class="listitem"><b>Status</b><p><span class="tag green">completed</span><span class="tag blue">ongoing</span><span class="tag amber">planned</span></p></div><div class="listitem"><b>Time Precision</b><p>exact · day · month · year · range · relative · unknown</p></div></div></div>
+</section>
+
+<section class="page" id="page-ideas">
+<div class="pagehead"><div class="title"><h1>观点与想法</h1><p>保留来源明确提出的方案、假设和研究方向，不把 Agent 自己的建议写进知识库。</p></div><div class="actions"><button class="btn">状态筛选</button><button class="btn primary" onclick="openModal('idea')">＋ 记录想法</button></div></div>
+<div class="grid g3"><div class="card pad"><div class="cardhead"><h3>Candidate</h3><span class="tag amber">12</span></div><div class="listitem"><b>为 RAG 增加 adaptive reranking</b><p>来源：RAG Survey · 可能改善 retrieval quality。</p></div><div class="listitem"><b>将 Entity Resolution 放入确定性层</b><p>来源：Ontology Notes · 设计方向。</p></div></div>
+<div class="card pad"><div class="cardhead"><h3>Accepted</h3><span class="tag blue">7</span></div><div class="listitem"><b>Evidence quote 必须逐字来自 Source</b><p>已进入 Evidence Standard。</p></div><div class="listitem"><b>Claim 与 Relation 分层</b><p>已进入 Extraction v2.0。</p></div></div>
+<div class="card pad"><div class="cardhead"><h3>Implemented</h3><span class="tag green">19</span></div><div class="listitem"><b>Predicate Registry 受控枚举</b><p>已接入 Normalization Engine。</p></div><div class="listitem"><b>Prompt Profile SQLite 化</b><p>已接入 Agent 配置。</p></div></div></div>
+</section>
+
+<section class="page" id="page-questions">
+<div class="pagehead"><div class="title"><h1>问题管理</h1><p>问题不是普通问句，而是能够驱动后续知识获取、研究或验证的知识对象。</p></div><div class="actions"><button class="btn" onclick="toast('已生成研究任务')">分配研究</button><button class="btn primary" onclick="openModal('question')">＋ 新问题</button></div></div>
+<div class="card pad"><div class="toolbar"><div class="seg"><button class="active">全部</button><button>open</button><button>partially answered</button><button>resolved</button></div><div class="grow"></div><input class="field wide" placeholder="搜索问题…"/></div><table class="table"><thead><tr><th>问题</th><th>类型</th><th>状态</th><th>关联知识</th><th>负责 Agent</th><th>操作</th></tr></thead><tbody>
+<tr><td><b>Retrieval Quality 如何影响 RAG 的最终效果？</b><div class="muted">source: RAG Survey</div></td><td><span class="tag purple">research</span></td><td><span class="tag amber">open</span></td><td>7 Claims</td><td>ResearchAgent</td><td><button class="btn" onclick="toast('已创建 Research Task')">研究</button></td></tr>
+<tr><td><b>为什么某些 benchmark 上 reranking 没有改善？</b></td><td><span class="tag blue">evaluation</span></td><td><span class="tag blue">partial</span></td><td>4 Claims</td><td>ResearchAgent</td><td><button class="btn">查看</button></td></tr>
+<tr><td><b>Resource 类型应该在哪些情况下使用？</b></td><td><span class="tag">design</span></td><td><span class="tag green">resolved</span></td><td>11 Claims</td><td>CuratorAgent</td><td><button class="btn">查看</button></td></tr>
+</tbody></table></div>
+</section>
+
+<section class="page" id="page-evidence">
+<div class="pagehead"><div class="title"><h1>证据与来源</h1><p>Document → Chunk → Evidence → Knowledge Object，确保每条知识都能回到原文。</p></div><div class="actions"><button class="btn" onclick="toast('完整性检查已启动')">✓ 完整性检查</button><button class="btn primary">＋ 添加来源</button></div></div>
+<div class="grid g4"><div class="card kpi"><div class="klabel">Documents</div><div class="kn">86</div></div><div class="card kpi"><div class="klabel">Chunks</div><div class="kn">2,148</div></div><div class="card kpi"><div class="klabel">Evidence Coverage</div><div class="kn">97.8%</div><div class="ktrend">优秀</div></div><div class="card kpi"><div class="klabel">异常</div><div class="kn">19</div><div class="ktrend warn">需要修复</div></div></div>
+<div class="card pad" style="margin-top:14px"><div class="toolbar"><div class="seg"><button class="active">全部</button><button>Valid</button><button>Invalid</button><button>Missing</button></div><div class="grow"></div><input class="field wide" placeholder="搜索对象、Document、Chunk…"/></div>
+<table class="table"><thead><tr><th>Knowledge Object</th><th>Document</th><th>Chunk</th><th>Evidence Quote</th><th>Offset</th><th>校验</th></tr></thead><tbody>
+<tr><td><b>RAG → improves → Answer Quality</b></td><td>rag-survey.md</td><td>chunk_018</td><td>“RAG may improve answer quality…”</td><td>[812, 846)</td><td><span class="tag green">valid</span></td></tr>
+<tr><td><b>GPT-4 → trained_on → MMLU</b></td><td>eval.md</td><td>chunk_044</td><td>“GPT-4 was trained…”</td><td>[1022,1059)</td><td><span class="tag green">valid</span></td></tr>
+<tr><td><b>AgentScope → based_on → …</b></td><td>agentscope.md</td><td>chunk_007</td><td>quote mismatch</td><td>[210,246)</td><td><span class="tag red">invalid</span></td></tr>
+<tr><td><b>Vector DB → part_of → RAG</b></td><td>rag-survey.md</td><td>chunk_019</td><td>missing quote</td><td>—</td><td><span class="tag red">missing</span></td></tr>
+</tbody></table></div>
+</section>
+
+<section class="page" id="page-tasks">
+<div class="pagehead"><div class="title"><h1>任务管理</h1><p>所有导入、Extraction、Research、Curation、Review 都变成可追踪任务。</p></div><div class="actions"><button class="btn">筛选</button><button class="btn primary" onclick="openModal('task')">＋ 新任务</button></div></div>
+<div class="grid g4"><div class="card kpi"><div class="klabel">运行中</div><div class="kn">4</div></div><div class="card kpi"><div class="klabel">排队</div><div class="kn">9</div></div><div class="card kpi"><div class="klabel">今日完成</div><div class="kn">27</div></div><div class="card kpi"><div class="klabel">失败</div><div class="kn">1</div><div class="ktrend warn">1 个需重试</div></div></div>
+<div class="card pad" style="margin-top:14px"><table class="table"><thead><tr><th>任务</th><th>Agent</th><th>进度</th><th>状态</th><th>运行时间</th><th>操作</th></tr></thead><tbody>
+<tr><td><b>Extract · RAG Survey</b><div class="muted">schema v2.0 · 42 chunks</div></td><td>ExtractionAgent</td><td>78%</td><td><span class="tag blue">running</span></td><td>2m 14s</td><td><button class="btn" onclick="go('logs')">日志</button></td></tr>
+<tr><td><b>Research · Retrieval Quality</b></td><td>ResearchAgent</td><td>42%</td><td><span class="tag blue">running</span></td><td>8m 02s</td><td><button class="btn">查看</button></td></tr>
+<tr><td><b>Curate · Entity Merge</b></td><td>CuratorAgent</td><td>100%</td><td><span class="tag green">completed</span></td><td>1m 18s</td><td><button class="btn">结果</button></td></tr>
+<tr><td><b>Review · Candidate Queue</b></td><td>ReviewAgent</td><td>0%</td><td><span class="tag amber">queued</span></td><td>—</td><td><button class="btn">启动</button></td></tr></tbody></table></div>
+</section>
+
+<section class="page" id="page-workflows">
+<div class="pagehead"><div class="title"><h1>工作流</h1><p>把 Agent、Tools、Skills、Human Review 和持久化节点编排成可复用流程。</p></div><div class="actions"><button class="btn">模板</button><button class="btn primary" onclick="toast('新建工作流')">＋ 新建工作流</button></div></div>
+<div class="workflow">
+<div class="card pad"><div class="cardhead"><h3>节点库</h3></div><div class="nodebox"><b>Input</b><div class="muted">User / Document / Question</div></div><div class="nodebox"><b>Knowledge Search</b><div class="muted">FTS5 + Vector + RRF</div></div><div class="nodebox"><b>ResearchAgent</b><div class="muted">Multi-step research</div></div><div class="nodebox"><b>CuratorAgent</b><div class="muted">Dedup + Resolution</div></div><div class="nodebox"><b>Human Review</b><div class="muted">HITL checkpoint</div></div><div class="nodebox"><b>Persist</b><div class="muted">SQLite + Provenance</div></div></div>
+<div class="canvas">
+<svg width="100%" height="100%" style="position:absolute;inset:0;z-index:1"><defs><marker id="arr2" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0 0 L7 3.5 L0 7z" fill="#9aaaca"/></marker></defs><line x1="182" y1="85" x2="315" y2="85" stroke="#9aaaca" stroke-width="1.5" marker-end="url(#arr2)"/><line x1="475" y1="110" x2="600" y2="110" stroke="#9aaaca" stroke-width="1.5" marker-end="url(#arr2)"/><line x1="685" y1="145" x2="685" y2="280" stroke="#9aaaca" stroke-width="1.5" marker-end="url(#arr2)"/><line x1="580" y1="320" x2="400" y2="320" stroke="#9aaaca" stroke-width="1.5" marker-end="url(#arr2)"/></svg>
+<div class="flow" style="left:28px;top:59px"><b>Input</b><small>Document / Question</small></div>
+<div class="flow" style="left:315px;top:59px"><b>Knowledge Search</b><small>Hybrid Retrieval</small></div>
+<div class="flow" style="left:600px;top:85px"><b>ResearchAgent</b><small>Research Skill</small></div>
+<div class="flow" style="left:600px;top:285px"><b>ReviewAgent</b><small>Human approval</small></div>
+<div class="flow" style="left:400px;top:285px"><b>Persist</b><small>SQLite / Evidence</small></div>
+</div>
+<div class="card pad wf-right"><div class="cardhead"><h3>工作流配置</h3><span class="tag green">active</span></div><div class="setting"><div><b>Version</b><small>当前版本</small></div><strong>v2.4</strong></div><div class="setting"><div><b>Trigger</b><small>触发方式</small></div><strong>Manual</strong></div><div class="setting"><div><b>HITL</b><small>人工审核</small></div><strong>Required</strong></div><div class="setting"><div><b>Timeout</b><small>执行上限</small></div><strong>15m</strong></div><button class="btn primary" style="width:100%;margin-top:11px" onclick="toast('Workflow started')">▶ 运行工作流</button></div>
+</div>
+</section>
+
+<section class="page" id="page-prompts">
+<div class="pagehead"><div class="title"><h1>Prompt &amp; Skills</h1><p>Prompt 负责行为层，Skill 负责可复用能力，Registry / Schema 仍由系统契约控制。</p></div><div class="actions"><button class="btn" onclick="toast('已保存为新版本')">＋ 新建版本</button><button class="btn primary" onclick="toast('Prompt 已保存到 SQLite')">保存修改</button></div></div>
+<div class="prompt-layout">
+<div class="card agentmenu"><div class="toolbar"><b style="font-size:10px">全部智能体 · 6</b></div>
+<div class="agent active"><div class="agentico">◉</div><div><b>PersonalAgent</b><small>个人助手 · 协调</small></div></div>
+<div class="agent"><div class="agentico">◇</div><div><b>KnowledgeAgent</b><small>知识检索 · Evidence</small></div></div>
+<div class="agent"><div class="agentico">⌁</div><div><b>ResearchAgent</b><small>研究 · 分析</small></div></div>
+<div class="agent"><div class="agentico">◇</div><div><b>CuratorAgent</b><small>整理 · 融合</small></div></div>
+<div class="agent"><div class="agentico">✓</div><div><b>ReviewAgent</b><small>审核 · 评估</small></div></div>
+<div class="agent"><div class="agentico">◌</div><div><b>ExtractionAgent</b><small>知识抽取 · Skill</small></div></div></div>
+<div class="card pad">
+<div class="toolbar"><div class="grow"><b style="font-size:12px">PersonalAgent</b><div class="muted" style="font-size:8px;margin-top:3px">当前版本 v3.2 · 保存于 SQLite</div></div><button class="btn">恢复默认</button><button class="btn soft">预览 Effective Prompt</button></div>
+<div class="seg" style="margin-bottom:10px"><button class="active">Prompt</button><button>Skills</button><button>运行参数</button><button>版本历史</button></div>
+<textarea class="promptbox">你是 LLM-Wiki 的 PersonalAgent。
+
+你的主要职责是：
+1. 理解用户需求并进行任务规划；
+2. 协调 KnowledgeAgent / ResearchAgent / CuratorAgent；
+3. 综合知识库中的高质量证据；
+4. 关注任务进度、证据充分性与最终结果质量。
+
+行为原则：
+- 以用户目标为导向；
+- 优先复用已有知识；
+- 不把推测当作事实；
+- 信息不足时明确说明；
+- 对复杂任务先规划，再执行。
+
+注意：
+Ontology、Schema、Evidence、Registry 等属于系统契约，不在此 Prompt 中修改。</textarea>
+<div style="margin-top:9px;background:#f8faff;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:9px"><b>Effective Prompt 结构</b><div class="muted" style="margin-top:4px">Bootstrap Contract → Skills → Custom Prompt → Runtime Input</div></div>
+</div>
+<div class="card pad rightcol"><div class="cardhead"><h3>版本历史</h3><button class="btn">查看全部</button></div>
+<div class="historyrow"><div class="version">v3.2</div><div><b style="font-size:9px">当前版本</b><div class="muted" style="font-size:8px;margin-top:3px">今天 15:30 · admin</div></div></div>
+<div class="historyrow"><div class="version">v3.1</div><div><b style="font-size:9px">已保存</b><div class="muted" style="font-size:8px;margin-top:3px">09-08 · admin</div></div></div>
+<div class="historyrow"><div class="version">v3.0</div><div><b style="font-size:9px">已保存</b><div class="muted" style="font-size:8px;margin-top:3px">09-03 · admin</div></div></div>
+<div class="cardhead" style="margin-top:13px"><h3>已启用 Skills</h3></div>
+<div class="listitem"><b>knowledge-retrieval</b><p>FTS5 + semantic + evidence citation <span class="tag green">ON</span></p></div>
+<div class="listitem"><b>knowledge-curation</b><p>Entity resolution + dedup <span class="tag green">ON</span></p></div>
+<div class="listitem"><b>web-research</b><p>External research capability <span class="tag">OFF</span></p></div>
+</div>
+</div>
+</section>
+
+<section class="page" id="page-logs">
+<div class="pagehead"><div class="title"><h1>智能体日志</h1><p>查看 Agent → Skill → Tool → Model 的完整运行链路。</p></div><div class="actions"><button class="btn">清除筛选</button><button class="btn">⇩ 导出日志</button></div></div>
+<div class="grid g4"><div class="card kpi"><div class="klabel">今日调用</div><div class="kn">1,284</div></div><div class="card kpi"><div class="klabel">成功率</div><div class="kn">98.7%</div><div class="ktrend">↑ 0.4%</div></div><div class="card kpi"><div class="klabel">平均延迟</div><div class="kn">1.8s</div></div><div class="card kpi"><div class="klabel">失败</div><div class="kn">17</div><div class="ktrend warn">需要关注</div></div></div>
+<div class="grid g2" style="margin-top:14px"><div class="card pad"><div class="cardhead"><h3>Runtime Trace</h3><div class="seg"><button class="active">Live</button><button>1h</button><button>24h</button></div></div><div class="log"><div><span class="ok">[16:05:12] OK</span> ExtractionAgent.reply</div><div>  skill=knowledge-extraction</div><div>  schema=extraction.v2.0</div><div>  input=chunk_018</div><div>  output=5 entities, 8 claims</div><div style="margin-top:7px"><span class="ok">[16:04:38] OK</span> KnowledgeAgent.search_knowledge</div><div>  query="retrieval quality"</div><div>  results=12</div><div style="margin-top:7px"><span class="warn">[16:03:21] WARN</span> EvidenceValidator</div><div>  chunk_007 quote mismatch</div><div style="margin-top:7px"><span class="err">[15:58:09] ERROR</span> ResearchAgent</div><div>  provider timeout; retry=1</div><div style="margin-top:7px"><span class="ok">[15:56:22] OK</span> CuratorAgent</div><div>  entity_candidates=12</div><div>  merged=4 · rejected=3</div></div></div>
+<div class="card pad"><div class="cardhead"><h3>最近调用</h3><button class="btn">打开 Trace</button></div><div class="listitem"><b>PersonalAgent · 4.2s</b><p>Prompt v3.2 → Knowledge Search → ResearchAgent</p></div><div class="listitem"><b>ExtractionAgent · 1.9s</b><p>Skill → Schema → Evidence Validator → Persist</p></div><div class="listitem"><b>CuratorAgent · 0.8s</b><p>Resolution → Dedup → Candidate Review</p></div><div class="listitem"><b>ReviewAgent · 1.3s</b><p>12 candidates → 9 passed → 3 rejected</p></div></div></div>
+</section>
+
+<section class="page" id="page-settings">
+<div class="pagehead"><div class="title"><h1>系统设置</h1><p>Provider、检索、Agent Runtime、数据与安全策略。</p></div><div class="actions"><button class="btn">导出设置</button><button class="btn primary" onclick="toast('系统设置已保存')">保存设置</button></div></div>
+<div class="card settings"><div class="settingnav"><div class="active">基础配置</div><div>LLM / Provider</div><div>检索与 Embedding</div><div>Agent Runtime</div><div>数据与备份</div><div>安全</div></div>
+<div class="settingbody"><div class="setting"><div><b>SQLite 数据库</b><small>Canonical persistence layer</small></div><strong>data/llm-wiki.db</strong></div>
+<div class="setting"><div><b>OpenAI Base URL</b><small>OpenAI-compatible endpoint</small></div><input class="field" value="https://api.openai.com/v1"/></div>
+<div class="setting"><div><b>默认模型</b><small>普通 Agent 请求</small></div><select class="field"><option>gpt-5.6</option><option>gpt-5.6-mini</option><option>local-model</option></select></div>
+<div class="setting"><div><b>AgentScope</b><small>Agent workflow runtime</small></div><div class="switch on" onclick="this.classList.toggle('on')"></div></div>
+<div class="setting"><div><b>自动 Evidence 校验</b><small>保存前验证 quote / offset</small></div><div class="switch on" onclick="this.classList.toggle('on')"></div></div>
+<div class="setting"><div><b>Embedding Model</b><small>Semantic retrieval</small></div><select class="field"><option>text-embedding-3-small</option><option>local embedding</option></select></div>
+<div class="setting"><div><b>备份策略</b><small>定期备份 SQLite DB</small></div><select class="field"><option>每日</option><option>每周</option><option>手动</option></select></div>
+</div></div>
+</section>
+
+<section class="page" id="page-database">
+<div class="pagehead"><div class="title"><h1>数据库</h1><p>SQLite 是所有知识与配置状态的 canonical persistence layer。</p></div><div class="actions"><button class="btn" onclick="toast('数据库完整性检查通过')">✓ 完整性检查</button><button class="btn primary" onclick="toast('数据库备份已开始')">备份数据库</button></div></div>
+<div class="grid g4"><div class="card kpi"><div class="klabel">Database Size</div><div class="kn">48.6 MB</div></div><div class="card kpi"><div class="klabel">Tables</div><div class="kn">15</div></div><div class="card kpi"><div class="klabel">Indexes</div><div class="kn">31</div></div><div class="card kpi"><div class="klabel">Integrity</div><div class="kn" style="color:var(--mint)">100%</div></div></div>
+<div class="card pad" style="margin-top:14px"><div class="cardhead"><h3>Schema Overview</h3><button class="btn">查看 Migration</button></div><table class="table"><thead><tr><th>Table</th><th>Rows</th><th>Purpose</th><th>Indexes</th><th>Status</th></tr></thead><tbody>
+<tr><td class="mono">documents</td><td>86</td><td>原始文档</td><td>4</td><td><span class="tag green">OK</span></td></tr>
+<tr><td class="mono">chunks</td><td>2,148</td><td>检索单元</td><td>6</td><td><span class="tag green">OK</span></td></tr>
+<tr><td class="mono">entities</td><td>1,284</td><td>Entity</td><td>5</td><td><span class="tag green">OK</span></td></tr>
+<tr><td class="mono">claims</td><td>742</td><td>Source Claims</td><td>7</td><td><span class="tag green">OK</span></td></tr>
+<tr><td class="mono">relations</td><td>386</td><td>Normalized Graph Edges</td><td>5</td><td><span class="tag green">OK</span></td></tr>
+<tr><td class="mono">events</td><td>143</td><td>Temporal Events</td><td>3</td><td><span class="tag green">OK</span></td></tr>
+<tr><td class="mono">agent_prompt_profiles</td><td>6</td><td>Current Prompt Profiles</td><td>2</td><td><span class="tag green">OK</span></td></tr>
+<tr><td class="mono">agent_prompt_versions</td><td>41</td><td>Prompt History</td><td>2</td><td><span class="tag green">OK</span></td></tr>
+</tbody></table></div>
+</section>
+
+</div>
+</main>
+</div>
+
+<div class="drawer" id="drawer"><div class="drawerhead"><b id="drawerTitle">详情</b><button class="close" onclick="closeDrawer()">×</button></div><div id="drawerBody"></div></div>
+
+<div class="modal" id="modal">
+<div class="modalbox" id="modalBox"></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const pageIds=[...document.querySelectorAll('.page')];
+function go(id){
+ pageIds.forEach(p=>p.classList.toggle('active',p.id==='page-'+id));
+ document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('active',n.dataset.page===id));
+ document.querySelector('.content').scrollTop=0;
+}
+document.querySelectorAll('.nav').forEach(n=>n.addEventListener('click',()=>go(n.dataset.page)));
+
+function toast(msg){
+ const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');
+ clearTimeout(window.__toast);window.__toast=setTimeout(()=>t.classList.remove('show'),1700);
+}
+
+function runQA(){
+  const input=document.getElementById('qaInput');
+  const answer=document.getElementById('qaAnswer');
+  if(!input || !input.value.trim()){toast('请输入问题');return;}
+  answer.innerHTML=`<div class="card" style="background:linear-gradient(135deg,#fbfcff,#f5f8ff);border-color:#dfe7f6;padding:14px">
+    <div class="cardhead"><h3>回答</h3><span class="tag blue">generating…</span></div>
+    <div class="muted" style="font-size:10px">正在执行 Hybrid Retrieval → Evidence Ranking → Grounded Answer…</div>
+  </div>`;
+  setTimeout(()=>{
+    answer.innerHTML=`<div class="card" style="background:linear-gradient(135deg,#fbfcff,#f5f8ff);border-color:#dfe7f6;padding:14px">
+      <div class="cardhead"><h3>回答</h3><span class="tag green">grounded</span></div>
+      <div style="font-size:11px;line-height:1.75;color:#3d4e68">
+        基于当前 LLM-Wiki 知识库，最稳妥的结论是：<b>不能仅凭现有证据断言 RAG 必然提高回答质量。</b>
+        相关 Evidence 表明，效果明显依赖检索结果的相关性与质量；当检索内容与问题不相关时，额外上下文可能带来负面影响。
+      </div>
+      <div class="quote" style="margin-top:12px">“RAG may not improve answer quality when retrieved documents are irrelevant.”
+        <div class="muted" style="margin-top:5px">RAG Survey · chunk_021 · evidence verified</div>
+      </div>
+      <div style="margin-top:10px"><span class="tag green">直接 Evidence：8</span><span class="tag amber">条件性 Claims：3</span><span class="tag purple">置信：0.93</span></div>
+    </div>`;
+    toast('回答完成：已附 Evidence');
+  },700);
+}
+
+function filterTable(input,id){
+ const q=input.value.toLowerCase();
+ document.querySelectorAll('#'+id+' tbody tr').forEach(r=>r.style.display=r.innerText.toLowerCase().includes(q)?'':'none');
+}
+function openDrawer(name){
+ const d=document.getElementById('drawer');document.getElementById('drawerTitle').textContent=name;
+ let body='';
+ if(name==='RAG' || name==='Retrieval-Augmented Generation'){
+  body=`<div style="margin-top:16px"><span class="tag blue">Technology</span><span class="tag purple">Method</span><span class="tag green">verified</span></div>
+  <div class="kv"><span>Canonical</span><b>Retrieval-Augmented Generation</b><span>Aliases</span><b>RAG</b><span>Claims</span><b>42</b><span>Relations</span><b>18</b><span>Evidence</span><b>37 sources</b></div>
+  <div class="quote">RAG combines information retrieval with language generation and provides external context to a language model.<div class="muted">rag-survey.md · chunk_018</div></div>
+  <h3 style="margin-top:18px">Relations</h3><div class="listitem"><b>uses → Vector Database</b><p>Predicate: uses · verified</p></div><div class="listitem"><b>based_on → Transformer</b><p>Predicate: based_on · verified</p></div><div class="listitem"><b>applied_to → Question Answering</b><p>Predicate: applied_to · candidate</p></div>`;
+ }else{
+  body=`<div style="margin-top:14px" class="list"><div class="listitem"><b>类型</b><p>Knowledge Object</p></div><div class="listitem"><b>状态</b><p><span class="tag green">verified</span></p></div><div class="listitem"><b>最近更新</b><p>2026-09-10 16:03</p></div><div class="listitem"><b>来源</b><p>Official / Personal Knowledge Source</p></div></div>`;
+ }
+ document.getElementById('drawerBody').innerHTML=body;d.classList.add('show');
+}
+function closeDrawer(){document.getElementById('drawer').classList.remove('show')}
+
+const modalTemplates={
+ newKnowledge:`<div class="modalhead"><div><h2 style="font-size:17px;margin:0">新建知识</h2><p class="muted" style="font-size:9px">选择从文档导入，或直接记录结构化知识。</p></div><button class="close" onclick="closeModal()">×</button></div>
+ <div class="grid g2" style="margin-top:15px"><div class="listitem" onclick="closeModal();toast('已进入文档导入')"><b>📄 从文档创建</b><p>Markdown / TXT / HTML</p></div><div class="listitem" onclick="closeModal();toast('已进入结构化记录')"><b>✦ 直接记录</b><p>Entity / Claim / Event / Idea / Question</p></div></div>`,
+ import:`<div class="modalhead"><h2 style="font-size:17px;margin:0">导入知识</h2><button class="close" onclick="closeModal()">×</button></div><div class="empty" style="margin-top:14px">拖拽 Markdown / TXT / HTML 文件到这里<br><button class="btn primary" style="margin-top:11px" onclick="closeModal();toast('导入任务已创建')">选择文件</button></div>`,
+ entity:`<div class="modalhead"><h2 style="font-size:17px;margin:0">新建 Entity</h2><button class="close" onclick="closeModal()">×</button></div><div style="margin-top:14px" class="grid g2"><div><label style="font-size:9px">Canonical Name</label><input class="field" style="width:100%;margin-top:5px" placeholder="例如 RAG"/></div><div><label style="font-size:9px">Types</label><select class="field" style="width:100%;margin-top:5px"><option>Technology</option><option>Method</option><option>Concept</option></select></div></div><textarea class="field" style="margin-top:12px;width:100%;height:90px" placeholder="Description"></textarea><div style="display:flex;justify-content:flex-end;gap:7px;margin-top:12px"><button class="btn" onclick="closeModal()">取消</button><button class="btn primary" onclick="closeModal();toast('Entity 已保存为 candidate')">保存</button></div>`,
+ event:`<div class="modalhead"><h2 style="font-size:17px;margin:0">新建 Event</h2><button class="close" onclick="closeModal()">×</button></div><div class="grid g2" style="margin-top:14px"><select class="field"><option>release</option><option>development</option><option>evaluation</option><option>update</option></select><input class="field" placeholder="描述"/></div><div class="grid g2" style="margin-top:9px"><input class="field" placeholder="Start time"/><input class="field" placeholder="End time"/></div><div style="display:flex;justify-content:flex-end;gap:7px;margin-top:12px"><button class="btn" onclick="closeModal()">取消</button><button class="btn primary" onclick="closeModal();toast('Event 已创建')">保存</button></div>`,
+ idea:`<div class="modalhead"><h2 style="font-size:17px;margin:0">记录 Idea</h2><button class="close" onclick="closeModal()">×</button></div><textarea class="field" style="margin-top:14px;width:100%;height:110px" placeholder="来自来源的想法、方案或研究方向…"></textarea><div style="display:flex;justify-content:flex-end;gap:7px;margin-top:12px"><button class="btn" onclick="closeModal()">取消</button><button class="btn primary" onclick="closeModal();toast('Idea 已保存为 candidate')">保存</button></div>`,
+ question:`<div class="modalhead"><h2 style="font-size:17px;margin:0">新问题</h2><button class="close" onclick="closeModal()">×</button></div><textarea class="field" style="margin-top:14px;width:100%;height:90px" placeholder="能够驱动知识获取、研究或验证的问题…"></textarea><div class="grid g2" style="margin-top:9px"><select class="field"><option>research</option><option>knowledge</option><option>design</option><option>evaluation</option></select><select class="field"><option>open</option><option>partially_answered</option></select></div><div style="display:flex;justify-content:flex-end;gap:7px;margin-top:12px"><button class="btn" onclick="closeModal()">取消</button><button class="btn primary" onclick="closeModal();toast('Question 已保存')">保存</button></div>`,
+ task:`<div class="modalhead"><h2 style="font-size:17px;margin:0">新任务</h2><button class="close" onclick="closeModal()">×</button></div><div class="grid g2" style="margin-top:14px"><input class="field" placeholder="任务名称"/><select class="field"><option>ExtractionAgent</option><option>ResearchAgent</option><option>CuratorAgent</option><option>ReviewAgent</option></select></div><select class="field" style="margin-top:9px;width:100%"><option>手动触发</option><option>工作流触发</option></select><div style="display:flex;justify-content:flex-end;gap:7px;margin-top:12px"><button class="btn" onclick="closeModal()">取消</button><button class="btn primary" onclick="closeModal();toast('任务已加入队列')">创建任务</button></div>`
+};
+function openModal(type){
+ document.getElementById('modalBox').innerHTML=modalTemplates[type];
+ document.getElementById('modal').classList.add('show');
+}
+function closeModal(){document.getElementById('modal').classList.remove('show')}
+document.getElementById('modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal()});
+document.getElementById('globalSearch').addEventListener('keydown',e=>{if(e.key==='Enter' && e.target.value.trim()){go('knowledge');toast('已将搜索条件带入知识库')}});
+
+// Lightweight interactions for segment tabs
+document.querySelectorAll('.seg').forEach(seg=>{
+  seg.querySelectorAll('button').forEach(btn=>btn.addEventListener('click',()=>{
+    seg.querySelectorAll('button').forEach(x=>x.classList.remove('active'));btn.classList.add('active');
+  }));
+});
+</script>
+</body>
+</html>

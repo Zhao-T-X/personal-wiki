@@ -1,0 +1,22 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Env & secrets
+.env
+# data/ holds the SQLite DB and settings.json (which contains the API key)
+data/
+
+# Node / build output
+node_modules/
+frontend/dist/
+web/dist/
+
+# Machine-local tool data
+.codebuddy/
+
+# OS noise
+Thumbs.db
+.DS_Store

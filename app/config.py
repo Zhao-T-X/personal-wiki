@@ -1,0 +1,73 @@
+from __future__ import annotations
+import json, os
+from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
+
+SETTINGS_PATH = os.getenv('SETTINGS_PATH', './data/settings.json')
+DEFAULTS = {
+    'database_path': os.getenv('DATABASE_PATH', './data/wiki.db'),
+    'openai_api_key': os.getenv('OPENAI_API_KEY', ''),
+    'openai_base_url': os.getenv('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
+    'openai_model': os.getenv('OPENAI_MODEL', 'gpt-4.1-mini'),
+    'openai_embedding_model': os.getenv('OPENAI_EMBEDDING_MODEL', 'text-embedding-3-small'),
+    'embedding_dims': int(os.getenv('EMBEDDING_DIMS', '1536')),
+    'llm_batch_chunks': int(os.getenv('LLM_BATCH_CHUNKS', '8')),
+    'max_search_results': int(os.getenv('MAX_SEARCH_RESULTS', '50')),
+    'auto_embed': os.getenv('AUTO_EMBED', 'false').lower() in {'1','true','yes'},
+    'agentscope_enabled': os.getenv('AGENTSCOPE_ENABLED', 'true').lower() in {'1','true','yes'},
+    # Per-agent context budgets in tokens, e.g. {"KnowledgeAgent": 2500}.
+    # Empty means "use app/context/budget.py::AGENT_BUDGETS".
+    'agent_context_budgets': {},
+    # Tool Result Compression (Context Runtime P2b): bounds on what the agent
+    # tools append to the ReAct context. Ids always survive; only payload size
+    # is capped. See app/tools/compression.py.
+    'tool_quote_chars': int(os.getenv('TOOL_QUOTE_CHARS', '240')),
+    'tool_entity_claims': int(os.getenv('TOOL_ENTITY_CLAIMS', '8')),
+    'tool_graph_nodes': int(os.getenv('TOOL_GRAPH_NODES', '25')),
+    'tool_batch_size': int(os.getenv('TOOL_BATCH_SIZE', '8')),
+}
+
+
+def get_settings() -> dict:
+    data = dict(DEFAULTS)
+    try:
+        p = Path(SETTINGS_PATH)
+        if p.exists():
+            loaded = json.loads(p.read_text(encoding='utf-8'))
+            if isinstance(loaded, dict):
+                data.update(loaded)
+    except Exception:
+        pass
+    return data
+
+
+def save_settings(updates: dict) -> dict:
+    data = get_settings()
+    allowed = set(DEFAULTS)
+    for key, value in updates.items():
+        if key in allowed and value is not None:
+            data[key] = value
+    p = Path(SETTINGS_PATH)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(p.suffix + '.tmp')
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
+    tmp.replace(p)
+    return data
+
+
+def runtime():
+    s = get_settings()
+    return s
+
+# Backward-compatible constants for callers that have not yet been migrated.
+DATABASE_PATH = DEFAULTS['database_path']
+OPENAI_API_KEY = DEFAULTS['openai_api_key']
+OPENAI_BASE_URL = DEFAULTS['openai_base_url']
+OPENAI_MODEL = DEFAULTS['openai_model']
+OPENAI_EMBEDDING_MODEL = DEFAULTS['openai_embedding_model']
+EMBEDDING_DIMS = DEFAULTS['embedding_dims']
+LLM_BATCH_CHUNKS = DEFAULTS['llm_batch_chunks']
+MAX_SEARCH_RESULTS = DEFAULTS['max_search_results']
+AUTO_EMBED = DEFAULTS['auto_embed']

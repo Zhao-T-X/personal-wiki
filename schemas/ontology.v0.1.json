@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LLM-Wiki Personal Knowledge Ontology v0.1",
+  "entity_types": ["person", "organization", "place", "concept", "project"],
+  "knowledge_types": ["document", "chunk", "claim", "relation", "idea", "question", "event"],
+  "relation_types": [
+    "is_a", "part_of", "contains", "instance_of", "related_to", "similar_to",
+    "depends_on", "enables", "used_for", "supports", "contradicts", "refines",
+    "extends", "explains", "derived_from", "supported_by", "mentioned_in", "cites",
+    "believes", "interested_in", "working_on", "decided", "learned"
+  ],
+  "statuses": {
+    "knowledge": ["draft", "candidate", "verified", "rejected", "archived"],
+    "idea": ["hypothesis", "proposal", "observation", "draft"],
+    "question": ["open", "answered", "parked"]
+  },
+  "principles": [
+    "Original documents are immutable source-of-truth inputs.",
+    "Structured knowledge is derived data and must retain provenance.",
+    "LLM-generated knowledge starts as candidate unless explicitly verified.",
+    "A claim may carry context so opposite conclusions can coexist without contradiction.",
+    "Entity resolution is conservative and must not silently merge unrelated entities."
+  ]
+}

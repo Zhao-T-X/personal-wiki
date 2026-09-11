@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>LLM-Wiki · Personal Knowledge OS</title>
+<style>
+:root{
+  --bg:#f6f8fc;--surface:rgba(255,255,255,.92);--surface2:#fbfcff;--line:#e9edf5;--hair:#eff2f8;
+  --text:#16203a;--sub:#66748f;--faint:#9aa5ba;
+  --brand1:#5b7cff;--brand2:#8b67f7;--grad:linear-gradient(120deg,#5b7cff,#8b67f7);
+  --mint:#2fae87;--amber:#d99338;--rose:#e46a85;
+  --tint-blue:#eef2ff;--tint-violet:#f4f0ff;--tint-mint:#e9f7f1;--tint-amber:#fdf4e7;--tint-rose:#fdeef1;
+  --shadow:0 10px 34px rgba(38,54,102,.06);--shadow2:0 24px 60px rgba(38,54,102,.12);--r:20px;--r2:13px
+}
+*{box-sizing:border-box}
+body{margin:0;background:
+ radial-gradient(circle at 12% -4%,rgba(91,124,255,.09),transparent 26%),
+ radial-gradient(circle at 92% 0%,rgba(139,103,247,.07),transparent 24%),
+ var(--bg);color:var(--text);
+ font-family:Inter,"SF Pro Display","PingFang SC","Microsoft YaHei",sans-serif;height:100vh;overflow:hidden;
+ -webkit-font-smoothing:antialiased}
+button,input,textarea,select{font:inherit;color:inherit}button{cursor:pointer;border:0;background:none}
+h1,h2,h3{margin:0;letter-spacing:-.02em}
+::selection{background:rgba(91,124,255,.18)}
+
+/* ───── shell ───── */
+.app{display:grid;grid-template-columns:228px 1fr;height:100vh}
+.side{background:rgba(255,255,255,.72);backdrop-filter:blur(18px);border-right:1px solid var(--hair);padding:20px 13px 14px;display:flex;flex-direction:column}
+.brand{display:flex;align-items:center;gap:11px;padding:4px 8px 22px}
+.brandmark{width:34px;height:34px;border-radius:11px;background:var(--grad);color:#fff;display:grid;place-items:center;font-size:15px;box-shadow:0 8px 20px rgba(91,124,255,.28)}
+.brand b{font-size:15.5px;display:block;letter-spacing:-.02em}
+.brand small{display:block;font-size:8.5px;color:var(--faint);margin-top:2px;letter-spacing:.06em}
+.navlbl{padding:10px 10px 5px;color:var(--faint);font-size:8.5px;letter-spacing:.14em;font-weight:700}
+.nav{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:11px;margin:2px 0;color:var(--sub);font-size:11.5px;transition:.16s;position:relative}
+.nav:hover{background:#f2f5fc;color:var(--text)}
+.nav.active{background:linear-gradient(90deg,rgba(91,124,255,.10),rgba(139,103,247,.08));color:#4a63e8;font-weight:650}
+.nav.active:before{content:"";position:absolute;left:0;top:9px;bottom:9px;width:3px;border-radius:99px;background:var(--grad)}
+.nico{width:19px;text-align:center;font-size:13px}
+.npill{margin-left:auto;font-size:8.5px;background:#eef1f8;color:#8593ab;border-radius:99px;padding:2px 7px}
+.spacer{flex:1}
+.healthcard{margin:10px 4px 0;border-top:1px solid var(--hair);padding:12px 8px 2px;font-size:8.5px;color:var(--faint)}
+.healthcard .ok{color:var(--mint)}
+.healthrow{display:flex;justify-content:space-between;margin-top:5px}
+
+.main{display:flex;flex-direction:column;min-width:0}
+.topbar{height:62px;display:flex;align-items:center;gap:12px;padding:0 26px;border-bottom:1px solid var(--hair);background:rgba(246,248,252,.8);backdrop-filter:blur(14px);position:relative;z-index:5}
+.omni{flex:1;max-width:560px;display:flex;align-items:center;gap:9px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:9px 13px;color:var(--faint);font-size:11px;cursor:pointer;transition:.16s;box-shadow:0 2px 10px rgba(40,58,110,.04)}
+.omni:hover{border-color:#d9e1f2;box-shadow:0 4px 14px rgba(40,58,110,.07)}
+.omni kbd{margin-left:auto;font-family:inherit;font-size:8.5px;color:var(--faint);background:#f1f4fa;border:1px solid var(--line);border-radius:6px;padding:2px 6px}
+.crumb{display:flex;align-items:center;gap:7px;font-size:10.5px;color:var(--sub)}
+.crumb b{color:var(--text);font-weight:650}
+.crumb .sep{color:#c9d2e2}
+
+.content{flex:1;overflow:auto;padding:26px 30px 40px}
+.page{display:none;max-width:1180px;margin:0 auto;animation:fade .2s ease}
+.page.active{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+
+/* ───── primitives ───── */
+.eyebrow{font-size:8.5px;letter-spacing:.14em;color:var(--faint);font-weight:700;text-transform:uppercase}
+.pagehead{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:20px;gap:14px;flex-wrap:wrap}
+.pagehead h1{font-size:22px}
+.pagehead p{margin:6px 0 0;color:var(--sub);font-size:10.5px}
+.btn{border:1px solid var(--line);background:#fff;color:#4d5c76;border-radius:11px;padding:8px 13px;font-size:10.5px;transition:.16s;box-shadow:0 1px 6px rgba(40,58,110,.04)}
+.btn:hover{border-color:#d3dcec;color:var(--text);transform:translateY(-1px)}
+.btn.primary{background:var(--grad);color:#fff;border-color:transparent;box-shadow:0 8px 20px rgba(91,124,255,.24)}
+.btn.primary:hover{filter:brightness(1.05)}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--sub)}
+.btn.ghost:hover{background:#f1f4fa;color:var(--text)}
+.btn.sm{padding:5px 10px;font-size:9px;border-radius:9px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}
+.pad{padding:18px 20px}
+.sechead{display:flex;align-items:center;justify-content:space-between;margin:26px 0 12px}
+.sechead:first-child{margin-top:0}
+.sechead h3{font-size:13px}
+.sechead .more{font-size:9.5px;color:var(--brand1);cursor:pointer}
+.hairline{border:0;border-top:1px solid var(--hair);margin:14px 0}
+.tag{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:99px;font-size:8.5px;font-weight:600;background:#f0f3f9;color:#6a7893}
+.tag.blue{background:var(--tint-blue);color:#4a63e8}.tag.green{background:var(--tint-mint);color:#1e8f6b}
+.tag.amber{background:var(--tint-amber);color:#b97b22}.tag.red{background:var(--tint-rose);color:#c14d67}
+.tag.violet{background:var(--tint-violet);color:#7350d6}
+.dot{display:inline-block;width:6px;height:6px;border-radius:99px;margin-right:5px}
+.muted{color:var(--sub)}.faint{color:var(--faint)}
+.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.row{display:flex;align-items:center;gap:10px}
+.grow{flex:1}
+.grid{display:grid;gap:16px}.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--hair);margin-bottom:16px;flex-wrap:wrap}
+.tabs button{padding:9px 13px;font-size:10.5px;color:var(--sub);border-radius:9px 9px 0 0;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button.active{color:#4a63e8;font-weight:650;border-bottom-color:var(--brand1)}
+.tabs button:hover{color:var(--text)}
+.empty{padding:26px;text-align:center;color:var(--faint);font-size:10px;border:1.5px dashed #dfe5f0;border-radius:14px}
+.notice{border-radius:12px;padding:11px 13px;font-size:9.5px;line-height:1.6}
+.notice.violet{background:var(--tint-violet);color:#6a4fc0}
+
+/* ask box */
+.askbox{background:var(--surface);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow2);padding:6px 6px 6px 20px;display:flex;align-items:center;gap:10px;transition:.18s}
+.askbox:focus-within{border-color:#c8d4f5;box-shadow:0 18px 50px rgba(70,95,190,.14)}
+.askbox input{flex:1;border:0;background:none;outline:none;font-size:13px;padding:12px 0}
+.askbox .go{width:38px;height:38px;border-radius:14px;background:var(--grad);color:#fff;display:grid;place-items:center;box-shadow:0 6px 16px rgba(91,124,255,.3)}
+
+/* list rows */
+.item{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border-radius:14px;transition:.15s;cursor:pointer}
+.item:hover{background:#f4f7fd}
+.item+.item{border-top:1px solid var(--hair)}
+.item b{font-size:11px;display:block}
+.item p{margin:3px 0 0;font-size:9.5px;color:var(--sub);line-height:1.55}
+.ico-badge{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;font-size:13px;flex:none}
+.ib-blue{background:var(--tint-blue);color:#4a63e8}.ib-violet{background:var(--tint-violet);color:#7350d6}
+.ib-mint{background:var(--tint-mint);color:#1e8f6b}.ib-amber{background:var(--tint-amber);color:#b97b22}
+
+/* kv */
+.kv{display:grid;grid-template-columns:96px 1fr;gap:8px 14px;font-size:9.5px}
+.kv span{color:var(--faint)}
+
+/* claim triple */
+.triple{display:flex;align-items:center;gap:14px;padding:16px 6px}
+.tnode{padding:9px 16px;border-radius:13px;font-size:11.5px;font-weight:650;background:var(--tint-blue);color:#3d55d8}
+.tnode.obj{background:var(--tint-violet);color:#6a4fc0}
+.tpred{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:110px}
+.tpred .line{width:100%;height:1.5px;background:linear-gradient(90deg,#c9d4f5,#d9ccf6);position:relative}
+.tpred .line:after{content:"";position:absolute;right:-1px;top:-3px;border:4px solid transparent;border-left-color:#c4b5f0}
+.tpred em{font-style:normal;font-size:10px;color:#7350d6;font-weight:650}
+.propgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.prop{background:var(--surface2);border:1px solid var(--hair);border-radius:13px;padding:10px 12px}
+.prop span{display:block;font-size:8px;color:var(--faint);letter-spacing:.08em;text-transform:uppercase;font-weight:700}
+.prop b{display:block;font-size:10.5px;margin-top:4px}
+.evidence{border-left:3px solid #b9c8f5;background:var(--surface2);border-radius:0 13px 13px 0;padding:12px 15px;font-size:10px;line-height:1.7;color:#41506b}
+.evidence .src{margin-top:7px;font-size:8.5px;color:var(--faint)}
+
+/* timeline */
+.timeline{position:relative;padding-left:22px}
+.timeline:before{content:"";position:absolute;left:6px;top:6px;bottom:6px;width:1.5px;background:linear-gradient(#dfe6f3,#e8e2f6)}
+.tle{position:relative;padding-bottom:16px}
+.tle:before{content:"";position:absolute;left:-20px;top:4px;width:8px;height:8px;border-radius:99px;background:var(--brand1);box-shadow:0 0 0 4px var(--tint-blue)}
+.tle b{font-size:10.5px}.tle div{font-size:9px;color:var(--sub);margin-top:3px}
+
+/* flow */
+.flowrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fstep{background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:8px 12px;font-size:9.5px}
+.fstep b{font-size:10px}
+.farrow{color:#c3cde0;font-size:12px}
+
+/* boundary */
+.brow{display:flex;align-items:center;gap:9px;padding:7px 0;font-size:10px;border-bottom:1px solid var(--hair)}
+.brow:last-child{border-bottom:0}
+.bmark{width:18px;height:18px;border-radius:99px;display:grid;place-items:center;font-size:9px;flex:none}
+.b-ok{background:var(--tint-mint);color:#1e8f6b}.b-cond{background:var(--tint-amber);color:#b97b22}.b-open{background:var(--tint-blue);color:#4a63e8}
+
+/* agent */
+.agrow{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:13px;cursor:pointer;transition:.15s}
+.agrow:hover{background:#f3f6fc}
+.agrow.active{background:linear-gradient(90deg,var(--tint-blue),var(--tint-violet));box-shadow:inset 0 0 0 1px #dfe6fb}
+.agavatar{width:36px;height:36px;border-radius:12px;display:grid;place-items:center;color:#fff;font-weight:750;font-size:13px;flex:none}
+.agrow b{font-size:11px;display:block}.agrow small{font-size:8.5px;color:var(--faint)}
+.pipeline{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.pnode{border-radius:11px;padding:8px 13px;font-size:9.5px}
+.pnode.lock{background:#f0f3f9;color:#7b8aa5;border:1px dashed #d6deec}
+.pnode.custom{background:var(--tint-blue);color:#3d55d8;font-weight:650}
+.pnode.skill{background:var(--tint-mint);color:#1e8f6b}
+.pnode.io{background:var(--tint-violet);color:#6a4fc0}
+.lockico{font-size:9px;margin-left:5px}
+
+/* runs trace */
+.trace{background:#121a2c;border-radius:15px;padding:15px 17px;color:#d6e1f8;font:9.5px/1.8 ui-monospace,Consolas,monospace;white-space:pre-wrap;overflow:auto;max-height:300px}
+.trace .ok{color:#5fd6a2}.trace .warn{color:#f2b45f}.trace .err{color:#f07d84}.trace .dim{color:#7285a8}
+
+/* table-lite */
+.ltable{width:100%;border-collapse:collapse;font-size:10px}
+.ltable th{text-align:left;padding:8px 10px;color:var(--faint);font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid var(--hair);font-weight:700}
+.ltable td{padding:11px 10px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ltable tr:last-child td{border-bottom:0}
+.ltable tr.click{cursor:pointer}.ltable tr.click:hover{background:#f6f8fd}
+
+/* graph */
+.gcanvas{height:440px;border-radius:18px;background:radial-gradient(circle at 50% 42%,#eef3ff 0,#fbfcff 55%,#f7faff 100%);position:relative;overflow:hidden;border:1px solid var(--hair)}
+
+/* command palette */
+.cmdk{position:fixed;inset:0;background:rgba(22,32,58,.28);backdrop-filter:blur(6px);display:none;align-items:flex-start;justify-content:center;z-index:60;padding-top:12vh}
+.cmdk.show{display:flex}
+.cmdbox{width:min(600px,92vw);background:#fff;border-radius:18px;box-shadow:var(--shadow2);overflow:hidden;animation:fade .16s}
+.cmdbox input{width:100%;border:0;outline:none;padding:16px 18px;font-size:13px;border-bottom:1px solid var(--hair)}
+.cmdlist{max-height:340px;overflow:auto;padding:8px}
+.cmdgroup{padding:8px 10px 3px;font-size:8px;letter-spacing:.12em;color:var(--faint);font-weight:700}
+.cmditem{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:10px;font-size:11px;cursor:pointer}
+.cmditem:hover,.cmditem.hot{background:var(--tint-blue)}
+.cmditem .ico-badge{width:28px;height:28px;font-size:11px;border-radius:9px}
+kbd.k{font-family:inherit;font-size:8px;color:var(--faint);background:#f1f4fa;border:1px solid var(--line);border-radius:5px;padding:1px 6px}
+
+/* drawer + toast */
+.drawer{position:fixed;right:0;top:0;bottom:0;width:min(420px,94vw);background:#fff;box-shadow:-20px 0 60px rgba(30,48,90,.16);transform:translateX(102%);transition:.24s;z-index:40;padding:18px 20px;overflow:auto}
+.drawer.show{transform:none}
+.toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,16px);background:#1b2540;color:#fff;padding:10px 16px;border-radius:12px;font-size:10px;box-shadow:0 14px 34px rgba(0,0,0,.22);opacity:0;transition:.22s;z-index:70;pointer-events:none}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+/* weak KPI strip */
+.strip{display:flex;gap:0;background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.strip .cell{flex:1;padding:12px 16px;border-right:1px solid var(--hair)}
+.strip .cell:last-child{border-right:0}
+.strip span{font-size:8px;letter-spacing:.1em;color:var(--faint);text-transform:uppercase;font-weight:700}
+.strip b{display:block;font-size:16px;margin-top:3px;letter-spacing:-.02em}
+.strip small{font-size:8.5px;color:var(--faint)}
+
+@media(max-width:1150px){.propgrid{grid-template-columns:1fr 1fr}}
+@media(max-width:920px){
+ .app{grid-template-columns:64px 1fr}
+ .brand b,.brand small,.navlbl,.nav span:not(.nico),.npill,.healthcard{display:none}
+ .brand{justify-content:center;padding-left:0;padding-right:0}
+ .content{padding:18px 16px 30px}
+ .g2,.g3{grid-template-columns:1fr}
+ .strip{flex-wrap:wrap}.strip .cell{flex:1 1 40%}
+}
+</style>
+</head>
+<body>
+<div class="app">
+<!-- ══════════ sidebar ══════════ -->
+<aside class="side">
+  <div class="brand"><div class="brandmark">✦</div><div><b>LLM-Wiki</b><small>PERSONAL KNOWLEDGE OS</small></div></div>
+  <div class="navlbl">空间</div>
+  <div class="nav active" data-go="home"><span class="nico">⌂</span><span>首页</span></div>
+  <div class="nav" data-go="knowledge"><span class="nico">✦</span><span>知识</span></div>
+  <div class="nav" data-go="qa"><span class="nico">◎</span><span>问答</span></div>
+  <div class="nav" data-go="research"><span class="nico">◇</span><span>研究</span><span class="npill">5</span></div>
+  <div class="nav" data-go="agent"><span class="nico">◌</span><span>Agent 工作台</span></div>
+  <div class="nav" data-go="settings" style="margin-top:auto"><span class="nico">⚙</span><span>设置</span></div>
+  <div class="healthcard">
+    <div class="healthrow"><span class="ok">● 运行正常</span><span>v0.5.2</span></div>
+    <div class="healthrow"><span>SQLite · WAL</span><span>Local-first</span></div>
+  </div>
+</aside>
+
+<main class="main">
+  <div class="topbar">
+    <div class="crumb"><span id="crumbRoot">首页</span><span class="sep" id="crumbSep" style="display:none">/</span><b id="crumbLeaf"></b></div>
+    <div class="grow"></div>
+    <div class="omni" onclick="openCmd()"><span>⌕</span><span>搜索知识，或直接提问…</span><kbd>⌘K</kbd></div>
+  </div>
+
+  <div class="content">
+
+  <!-- ══════════ HOME ══════════ -->
+  <section class="page active" id="page-home">
+    <div style="max-width:720px;margin:7vh auto 0;text-align:center">
+      <div class="eyebrow">Good afternoon</div>
+      <h1 style="font-size:30px;margin:10px 0 24px">What do you want to know?</h1>
+      <div class="askbox">
+        <input id="homeAsk" placeholder="Ask anything about your knowledge…" onkeydown="if(event.key==='Enter')go('qa')"/>
+        <button class="go" onclick="go('qa')">↑</button>
+      </div>
+      <div class="row" style="justify-content:center;gap:8px;margin-top:14px">
+        <span class="tag" onclick="fillAsk('为什么 RAG 不一定提高回答质量？')">为什么 RAG 不一定提高回答质量？</span>
+        <span class="tag" onclick="fillAsk('GOMS 分页接口的调用链是什么？')">GOMS 分页接口的调用链？</span>
+        <span class="tag" onclick="fillAsk('AgentScope 的结构化输出如何实现？')">AgentScope 结构化输出？</span>
+      </div>
+    </div>
+
+    <div class="strip" style="max-width:720px;margin:40px auto 0">
+      <div class="cell"><span>知识对象</span><b>86</b><small>+4 本周</small></div>
+      <div class="cell"><span>已验证</span><b>61%</b><small>of claims</small></div>
+      <div class="cell"><span>开放问题</span><b>5</b><small>2 可研究</small></div>
+      <div class="cell"><span>证据覆盖</span><b>97.8%</b><small>healthy</small></div>
+    </div>
+
+    <div class="grid g2" style="margin-top:34px">
+      <div>
+        <div class="sechead"><h3>Recent Knowledge</h3><span class="more" onclick="go('knowledge')">进入知识空间 →</span></div>
+        <div class="panel pad" style="padding:6px">
+          <div class="item" onclick="go('ko')"><div class="ico-badge ib-blue">✦</div><div class="grow"><b>Retrieval-Augmented Generation</b><p>Technology · 42 Claims · 上次更新今天 16:03</p></div><span class="tag green">verified</span></div>
+          <div class="item" onclick="go('ko')"><div class="ico-badge ib-violet">✦</div><div class="grow"><b>AgentScope</b><p>Software · 28 Claims · 上次更新今天 15:48</p></div><span class="tag amber">review</span></div>
+          <div class="item" onclick="go('ko')"><div class="ico-badge ib-mint">✦</div><div class="grow"><b>GomsPagingController</b><p>Software · 12 Claims · 来自 GOMS 设计文档</p></div><span class="tag green">verified</span></div>
+          <div class="item" onclick="go('ko')"><div class="ico-badge ib-amber">✦</div><div class="grow"><b>Knowledge Staleness</b><p>Concept · 8 Claims · 候选待审</p></div><span class="tag amber">candidate</span></div>
+        </div>
+      </div>
+      <div>
+        <div class="sechead"><h3>Research</h3><span class="more" onclick="go('research')">进入研究空间 →</span></div>
+        <div class="panel pad" style="padding:6px">
+          <div class="item" onclick="go('research')"><div class="ico-badge ib-blue">◇</div><div class="grow"><b>5 个开放问题</b><p>其中 2 个已具备研究条件</p></div><span class="tag blue">open</span></div>
+          <div class="item" onclick="go('research');researchTab('conflicts')"><div class="ico-badge ib-amber">⚠</div><div class="grow"><b>2 个知识冲突</b><p>同一主题存在不同结论的 Claims</p></div><span class="tag amber">conflict</span></div>
+          <div class="item" onclick="go('research')"><div class="ico-badge ib-mint">◇</div><div class="grow"><b>7 条新证据</b><p>最近一次抽取产生</p></div><span class="tag green">new</span></div>
+        </div>
+        <div class="sechead"><h3>Recent Activity</h3></div>
+        <div class="panel pad">
+          <div class="timeline">
+            <div class="tle"><b>RAG Survey · 2026 完成 LLM 抽取</b><div>16:03 · 42 chunks · 128 知识对象 · <span class="tag green" style="margin:0">success</span></div></div>
+            <div class="tle"><b>回答了「RAG 与回答质量」</b><div>15:52 · 8 条证据引用 · grounded</div></div>
+            <div class="tle"><b>AgentScope 描述与关系更新</b><div>15:48 · +2 Relations</div></div>
+            <div class="tle" style="padding-bottom:0"><b>GOMS 文档重试抽取成功</b><div>06:45 · 10 chunks · 73 Claims</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ KNOWLEDGE ══════════ -->
+  <section class="page" id="page-knowledge">
+    <div class="askbox" style="margin-bottom:20px">
+      <input placeholder="Search knowledge…" oninput="filterLibrary(this.value)"/>
+      <button class="go" onclick="go('qa')" title="转为提问">◎</button>
+    </div>
+    <div class="tabs" id="kTabs">
+      <button class="active" onclick="kTab('library',this)">Library</button>
+      <button onclick="kTab('graph',this)">Graph</button>
+      <button onclick="kTab('timeline',this)">Timeline</button>
+    </div>
+
+    <div id="k-library">
+      <div class="sechead"><h3>Documents</h3><span class="more" onclick="toast('导入功能连接后端后开放')">＋ 导入</span></div>
+      <div class="panel pad" style="padding:6px">
+        <div class="item" onclick="toast('文档详情：42 chunks · 128 对象')"><div class="ico-badge ib-blue">▤</div><div class="grow"><b>RAG Survey · 2026</b><p>docs/rag-survey.md · Markdown · 42 chunks · 128 对象</p></div><span class="tag green">processed</span></div>
+        <div class="item" onclick="toast('文档详情：10 chunks · 73 Claims')"><div class="ico-badge ib-blue">▤</div><div class="grow"><b>GOMS 分页查询接口设计文档</b><p>design/goms-paging.md · Markdown · 10 chunks · 73 Claims</p></div><span class="tag green">processed</span></div>
+        <div class="item" onclick="toast('文档详情：18 chunks')"><div class="ico-badge ib-blue">▤</div><div class="grow"><b>AgentScope 2.x Notes</b><p>notes/agentscope.md · Markdown · 18 chunks</p></div><span class="tag green">processed</span></div>
+        <div class="item" onclick="toast('文档详情：12 chunks')"><div class="ico-badge ib-blue">▤</div><div class="grow"><b>Personal Notes</b><p>notes/personal.txt · TXT · 12 chunks</p></div><span class="tag amber">review</span></div>
+      </div>
+      <div class="sechead"><h3>Knowledge Objects</h3><span class="faint" style="font-size:9px">点击进入对象详情</span></div>
+      <div class="grid g3">
+        <div class="panel pad item" style="display:block" onclick="go('ko')"><div class="row"><div class="ico-badge ib-blue">✦</div><div><b>RAG</b><div class="faint" style="font-size:8.5px">Technology · Method</div></div></div><hr class="hairline"/><p style="margin:0">结合检索与生成的接地方法，效果取决于检索相关性。</p><div style="margin-top:9px"><span class="tag blue">42 claims</span><span class="tag">18 relations</span></div></div>
+        <div class="panel pad item" style="display:block" onclick="go('ko')"><div class="row"><div class="ico-badge ib-violet">✦</div><div><b>AgentScope</b><div class="faint" style="font-size:8.5px">Software</div></div></div><hr class="hairline"/><p style="margin:0">多智能体框架，通过 tool calling 实现结构化输出。</p><div style="margin-top:9px"><span class="tag blue">28 claims</span><span class="tag">11 relations</span></div></div>
+        <div class="panel pad item" style="display:block" onclick="go('ko')"><div class="row"><div class="ico-badge ib-mint">✦</div><div><b>GomsPagingController</b><div class="faint" style="font-size:8.5px">Software</div></div></div><hr class="hairline"/><p style="margin:0">GOMS 订单与库存分页查询控制器。</p><div style="margin-top:9px"><span class="tag blue">12 claims</span><span class="tag">6 relations</span></div></div>
+      </div>
+    </div>
+
+    <div id="k-graph" style="display:none">
+      <div class="toolbar row" style="margin-bottom:12px">
+        <input class="btn" style="min-width:220px;cursor:text" value="焦点：Retrieval-Augmented Generation" readonly onclick="toast('焦点切换连接后端后开放')"/>
+        <span class="tag blue">2 hops</span><span class="tag">uses</span><span class="tag">based_on</span><span class="tag">improves</span>
+        <div class="grow"></div>
+        <span class="faint" style="font-size:8.5px">点击节点进入对象详情</span>
+      </div>
+      <div class="gcanvas">
+        <svg viewBox="0 0 1100 440" width="100%" height="100%">
+          <defs><marker id="arr" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0 0 L7 3.5 L0 7z" fill="#b3c0d9"/></marker></defs>
+          <g stroke="#c2cde3" stroke-width="1.5" marker-end="url(#arr)">
+            <line x1="550" y1="220" x2="250" y2="110"/><line x1="550" y1="220" x2="240" y2="330"/>
+            <line x1="550" y1="220" x2="860" y2="110"/><line x1="550" y1="220" x2="870" y2="330"/>
+            <line x1="550" y1="220" x2="545" y2="70"/><line x1="550" y1="220" x2="615" y2="385"/>
+          </g>
+          <g font-size="10" fill="#8595b0">
+            <text x="380" y="158">uses</text><text x="378" y="288">addresses</text>
+            <text x="700" y="158">trained_on</text><text x="706" y="288">improves</text>
+            <text x="558" y="140">based_on</text><text x="576" y="312">applied_to</text>
+          </g>
+          <g style="cursor:pointer">
+            <circle cx="550" cy="220" r="44" fill="#5b7cff" onclick="go('ko')"/><text x="550" y="217" text-anchor="middle" fill="#fff" font-size="11.5" font-weight="700" style="cursor:pointer" onclick="go('ko')">RAG</text><text x="550" y="232" text-anchor="middle" fill="#dfe7ff" font-size="8" style="cursor:pointer" onclick="go('ko')">Technology</text>
+            <circle cx="250" cy="110" r="31" fill="#62c6e4" onclick="go('ko')"/><text x="250" y="114" text-anchor="middle" fill="#fff" font-size="9" style="cursor:pointer" onclick="go('ko')">Vector DB</text>
+            <circle cx="240" cy="330" r="31" fill="#8a69e9" onclick="go('ko')"/><text x="240" y="334" text-anchor="middle" fill="#fff" font-size="9" style="cursor:pointer" onclick="go('ko')">Knowledge</text>
+            <circle cx="860" cy="110" r="31" fill="#45c49a" onclick="go('ko')"/><text x="860" y="114" text-anchor="middle" fill="#fff" font-size="9" style="cursor:pointer" onclick="go('ko')">MMLU</text>
+            <circle cx="870" cy="330" r="31" fill="#f1a456" onclick="go('ko')"/><text x="870" y="334" text-anchor="middle" fill="#fff" font-size="9" style="cursor:pointer" onclick="go('ko')">Answer Quality</text>
+            <circle cx="545" cy="70" r="31" fill="#6a8cf2" onclick="go('ko')"/><text x="545" y="74" text-anchor="middle" fill="#fff" font-size="9" style="cursor:pointer" onclick="go('ko')">Transformer</text>
+            <circle cx="615" cy="385" r="31" fill="#ef809a" onclick="go('ko')"/><text x="615" y="389" text-anchor="middle" fill="#fff" font-size="9" style="cursor:pointer" onclick="go('ko')">Q&amp;A</text>
+          </g>
+        </svg>
+      </div>
+    </div>
+
+    <div id="k-timeline" style="display:none">
+      <div class="panel pad">
+        <div class="timeline">
+          <div class="tle"><b>RAG Survey 完成 LLM 抽取</b><div>Sep 10 · 42 chunks · 128 对象 · verified 61%</div></div>
+          <div class="tle"><b>GOMS 设计文档重试抽取成功</b><div>Sep 10 · 10 chunks · 73 Claims · 6 条引文为 chunk 级定位</div></div>
+          <div class="tle"><b>AgentScope 结构化输出相关 Claims 更新</b><div>Sep 10 · +4 Claims · +2 Relations</div></div>
+          <div class="tle"><b>Knowledge Staleness 进入候选</b><div>Sep 09 · Concept · 等待审核</div></div>
+          <div class="tle" style="padding-bottom:0"><b>首次启用 Evidence 分层校验</b><div>Sep 08 · system</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ KNOWLEDGE OBJECT ══════════ -->
+  <section class="page" id="page-ko">
+    <div class="pagehead">
+      <div>
+        <div class="row" style="gap:9px;flex-wrap:wrap">
+          <h1 style="font-size:22px">Retrieval-Augmented Generation</h1>
+          <span class="tag green">✓ Verified</span>
+        </div>
+        <p style="margin-top:6px" class="muted"><span class="tag blue">Technology</span> <span class="tag violet">Method</span> <span class="faint" style="font-size:9px">别名：RAG · 创建于 2026-09-02 · 12 个来源文档</span></p>
+      </div>
+      <div class="row">
+        <button class="btn" onclick="toast('Explain：打开类型判定详情')">Explain</button>
+        <button class="btn" onclick="go('research')">Research</button>
+        <button class="btn primary" onclick="go('qa');fillAsk('RAG 在什么条件下会降低回答质量？')">Ask about this</button>
+      </div>
+    </div>
+
+    <div class="panel pad">
+      <div class="row" style="gap:26px;flex-wrap:wrap;font-size:10.5px">
+        <div><span class="faint" style="font-size:8px;display:block;letter-spacing:.1em">CLAIMS</span><b style="font-size:17px">42</b></div>
+        <div><span class="faint" style="font-size:8px;display:block;letter-spacing:.1em">RELATIONS</span><b style="font-size:17px">18</b></div>
+        <div><span class="faint" style="font-size:8px;display:block;letter-spacing:.1em">EVENTS</span><b style="font-size:17px">7</b></div>
+        <div><span class="faint" style="font-size:8px;display:block;letter-spacing:.1em">EVIDENCE</span><b style="font-size:17px">37</b></div>
+        <div><span class="faint" style="font-size:8px;display:block;letter-spacing:.1em">QUESTIONS</span><b style="font-size:17px">4</b></div>
+        <div><span class="faint" style="font-size:8px;display:block;letter-spacing:.1em">IDEAS</span><b style="font-size:17px">6</b></div>
+        <div><span class="faint" style="font-size:8px;display:block;letter-spacing:.1em">DOCUMENTS</span><b style="font-size:17px">12</b></div>
+      </div>
+    </div>
+
+    <div class="tabs" style="margin-top:18px" id="koTabs">
+      <button class="active" onclick="koTab('overview',this)">Overview</button>
+      <button onclick="koTab('claims',this)">Claims</button>
+      <button onclick="koTab('relations',this)">Relations</button>
+      <button onclick="koTab('events',this)">Events</button>
+      <button onclick="koTab('evidence',this)">Evidence</button>
+      <button onclick="koTab('questions',this)">Questions</button>
+      <button onclick="koTab('ideas',this)">Ideas</button>
+    </div>
+
+    <div id="ko-overview">
+      <div class="grid g2">
+        <div>
+          <div class="sechead"><h3>What is it?</h3></div>
+          <div class="panel pad" style="font-size:10.5px;line-height:1.8;color:#3c4b66">RAG（Retrieval-Augmented Generation）将<b>信息检索</b>与<b>语言模型生成</b>结合：先从外部知识库检索相关内容，再将其作为上下文提供给模型，用于生成有依据的回答。其效果显著依赖检索结果的相关性——这是当前知识库中多条 Claims 的共同结论。</div>
+          <div class="sechead"><h3>Type Decision <span class="faint" style="font-size:9px;font-weight:400">· 为什么是这两个类型</span></h3></div>
+          <div class="panel pad" style="padding:6px">
+            <div class="item" style="cursor:default"><span class="tag green" style="flex:none">✓</span><div><b>Technology</b><p>3 个来源将其作为可独立讨论的技术系统（含 benchmark 对比）。</p></div></div>
+            <div class="item" style="cursor:default"><span class="tag green" style="flex:none">✓</span><div><b>Method</b><p>2 个来源将其描述为 grounding responses 的一种方法。</p></div></div>
+            <div class="item" style="cursor:default"><span class="tag red" style="flex:none">✕</span><div><b>Software</b><p>未发现可执行的软件身份（无仓库、无版本号）。</p></div></div>
+          </div>
+        </div>
+        <div>
+          <div class="sechead"><h3>Key Claims</h3><span class="more" onclick="koTab('claims',document.querySelectorAll('#koTabs button')[1])">全部 42 →</span></div>
+          <div class="panel pad" style="padding:6px">
+            <div class="item" onclick="go('claim')"><div><b>RAG → improves → Answer Quality</b><p>Causal · Positive · 条件：检索相关</p></div><span class="tag violet" style="margin-left:auto">claim</span></div>
+            <div class="item" onclick="go('claim')"><div><b>RAG → may reduce → Answer Quality</b><p>Causal · Negative · 条件：检索噪声高</p></div><span class="tag amber" style="margin-left:auto">conflict</span></div>
+            <div class="item" onclick="go('claim')"><div><b>RAG → based_on → Transformer</b><p>Factual · Positive</p></div><span class="tag violet" style="margin-left:auto">claim</span></div>
+          </div>
+          <div class="sechead"><h3>Connections</h3></div>
+          <div class="panel pad" style="padding:6px">
+            <div class="item" style="cursor:default"><div class="ico-badge ib-blue">→</div><div><b>uses → Vector Database</b><p>verified · 3 sources</p></div></div>
+            <div class="item" style="cursor:default"><div class="ico-badge ib-blue">→</div><div><b>based_on → Transformer</b><p>verified · 2 sources</p></div></div>
+            <div class="item" style="cursor:default"><div class="ico-badge ib-violet">→</div><div><b>applied_to → Question Answering</b><p>candidate</p></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="ko-claims" style="display:none">
+      <div class="panel pad" style="padding:6px">
+        <div class="item" onclick="go('claim')"><div class="ico-badge ib-blue">⇢</div><div class="grow"><b>RAG improves Answer Quality</b><p>causal · positive · possible · 条件：retrieval relevance</p></div><span class="tag green">verified</span></div>
+        <div class="item" onclick="go('claim')"><div class="ico-badge ib-amber">⇢</div><div class="grow"><b>RAG may reduce Answer Quality（噪声检索）</b><p>causal · negative · possible · 条件：irrelevant retrieval</p></div><span class="tag amber">conflict</span></div>
+        <div class="item" onclick="go('claim')"><div class="ico-badge ib-blue">⇢</div><div class="grow"><b>RAG combines retrieval with generation</b><p>definitional · positive · asserted</p></div><span class="tag green">verified</span></div>
+        <div class="item" onclick="go('claim')"><div class="ico-badge ib-blue">⇢</div><div class="grow"><b>RAG evaluated on MMLU-style benchmarks</b><p>evaluative · positive · asserted</p></div><span class="tag blue">candidate</span></div>
+        <div class="item" onclick="go('claim')"><div class="ico-badge ib-blue">⇢</div><div class="grow"><b>Adaptive reranking 可以改善 RAG 检索质量</b><p>predictive · positive · probable · 来源：RAG Survey §6</p></div><span class="tag blue">candidate</span></div>
+      </div>
+    </div>
+
+    <div id="ko-relations" style="display:none">
+      <div class="panel pad" style="padding:6px">
+        <div class="item" style="cursor:default"><div class="ico-badge ib-blue">→</div><div class="grow"><b>uses → Vector Database</b><p>verified · 3 sources · predicate registry: uses</p></div><span class="tag green">in graph</span></div>
+        <div class="item" style="cursor:default"><div class="ico-badge ib-blue">→</div><div class="grow"><b>based_on → Transformer</b><p>verified · 2 sources</p></div><span class="tag green">in graph</span></div>
+        <div class="item" style="cursor:default"><div class="ico-badge ib-violet">→</div><div class="grow"><b>applied_to → Question Answering</b><p>candidate · 等待第二条证据</p></div><span class="tag amber">pending</span></div>
+      </div>
+      <div class="notice violet" style="margin-top:12px">为什么有的 Claim 没有变成 Relation？<b>Normalization 规则</b>：modality = possible / probable 的因果 Claim 仅保留为 Claim，需第二条独立证据才进入图谱。</div>
+    </div>
+
+    <div id="ko-events" style="display:none">
+      <div class="panel pad"><div class="timeline">
+        <div class="tle"><b>RAG Survey · 2026 发布</b><div>Sep 10 · publication · completed</div></div>
+        <div class="tle"><b>RAG 在内部评测中完成基线对比</b><div>Sep 09 · evaluation · completed · 12 runs</div></div>
+        <div class="tle" style="padding-bottom:0"><b>Adaptive reranking 提案记录</b><div>Sep 08 · announcement · planned</div></div>
+      </div></div>
+    </div>
+
+    <div id="ko-evidence" style="display:none">
+      <div class="evidence" style="margin-bottom:12px">“RAG may improve answer quality when retrieved documents are relevant…”
+        <div class="src">RAG Survey · 2026 · chunk_021 · offset [812, 846) · <span class="tag green" style="margin:0">valid</span></div></div>
+      <div class="evidence" style="margin-bottom:12px">“Irrelevant retrieved context can introduce noise and degrade generation quality…”
+        <div class="src">Evaluation Notes · chunk_044 · offset [1022, 1059) · <span class="tag green" style="margin:0">valid</span></div></div>
+      <div class="evidence">“RAG combines information retrieval with language generation…”
+        <div class="src">rag-survey.md · chunk_018 · offset [512, 588) · <span class="tag green" style="margin:0">valid</span></div></div>
+    </div>
+
+    <div id="ko-questions" style="display:none">
+      <div class="panel pad" style="padding:6px">
+        <div class="item" onclick="go('research')"><div class="ico-badge ib-blue">?</div><div class="grow"><b>检索质量如何量化影响 RAG 的最终效果？</b><p>research · open · 可直接创建研究任务</p></div><span class="tag blue">open</span></div>
+        <div class="item" onclick="go('research')"><div class="ico-badge ib-blue">?</div><div class="grow"><b>哪些 benchmark 上 reranking 未带来改善？</b><p>evaluation · partially answered</p></div><span class="tag amber">partial</span></div>
+      </div>
+    </div>
+
+    <div id="ko-ideas" style="display:none">
+      <div class="panel pad" style="padding:6px">
+        <div class="item" style="cursor:default"><div class="ico-badge ib-violet">✦</div><div class="grow"><b>为 RAG 增加 adaptive reranking</b><p>来源：RAG Survey §6 · candidate</p></div><span class="tag amber">candidate</span></div>
+        <div class="item" style="cursor:default"><div class="ico-badge ib-mint">✦</div><div class="grow"><b>将 Entity Resolution 放入确定性层</b><p>来源：Ontology Notes · accepted</p></div><span class="tag blue">accepted</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ CLAIM DETAIL ══════════ -->
+  <section class="page" id="page-claim">
+    <div class="pagehead">
+      <div><div class="eyebrow" style="cursor:pointer" onclick="go('ko')">← RAG · Claims</div><h1 style="margin-top:8px">Claim 详情</h1></div>
+      <div class="row">
+        <button class="btn" onclick="toast('已复制 Claim 引用')">复制引用</button>
+        <button class="btn primary" onclick="go('research');researchTab('conflicts')">查看相关冲突</button>
+      </div>
+    </div>
+
+    <div class="panel pad">
+      <div class="triple">
+        <div class="tnode">RAG</div>
+        <div class="tpred"><em>improves</em><div class="line"></div><span class="faint" style="font-size:8px">predicate</span></div>
+        <div class="tnode obj">Answer Quality</div>
+      </div>
+      <hr class="hairline"/>
+      <div class="propgrid">
+        <div class="prop"><span>Claim Type</span><b>Causal</b></div>
+        <div class="prop"><span>Polarity</span><b>Positive</b></div>
+        <div class="prop"><span>Modality</span><b>Possible</b></div>
+        <div class="prop"><span>Condition</span><b>Retrieved documents are relevant</b></div>
+      </div>
+      <div class="sechead"><h3>Evidence</h3><span class="tag green">1 / 1 verified</span></div>
+      <div class="evidence">“RAG may improve answer quality when retrieved documents are relevant; the effect size depends on retrieval relevance.”
+        <div class="src">RAG Survey · 2026 · chunk_021 · offset [812, 846) · 精确匹配</div></div>
+      <div class="sechead"><h3>Normalization</h3><span class="tag violet">Claim Only</span></div>
+      <div class="notice violet">这条 Claim <b>没有进入关系图谱</b>。原因：modality = <b>possible</b>。Normalize 规则要求因果类 Claim 具备 asserted 以上的确定性、或存在第二条独立证据，才会派生为 Relation。</div>
+      <div class="row" style="margin-top:14px;gap:8px">
+        <button class="btn" onclick="toast('已提交审核：verified')">✓ Verify</button>
+        <button class="btn" onclick="toast('已标记 rejected')">✕ Reject</button>
+        <div class="grow"></div>
+        <button class="btn primary" onclick="go('research')">就此创建研究</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ QA ══════════ -->
+  <section class="page" id="page-qa">
+    <div style="text-align:center;margin:4vh 0 22px">
+      <h1 style="font-size:24px">Ask your knowledge</h1>
+      <p class="muted" style="font-size:10.5px;margin-top:7px">答案 + Evidence + 知识边界 —— 不确定的部分会明确告诉你</p>
+    </div>
+    <div class="askbox" style="max-width:760px;margin:0 auto">
+      <input id="qaInput" value="为什么 RAG 不一定提高回答质量？" onkeydown="if(event.key==='Enter')runQA()"/>
+      <button class="go" onclick="runQA()">↑</button>
+    </div>
+    <div class="row" style="justify-content:center;margin-top:12px">
+      <div class="seg-tabs row" style="gap:2px;background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:3px">
+        <button class="btn sm" style="border-radius:9px;background:var(--grad);color:#fff;border-color:transparent">Knowledge</button>
+        <button class="btn sm ghost" onclick="toast('Web 检索将在接入外源后开放')">Knowledge + Web</button>
+      </div>
+    </div>
+
+    <div id="qaResult" style="max-width:860px;margin:26px auto 0">
+      <div class="panel pad">
+        <div class="row"><h3 style="font-size:13px">Answer</h3><span class="tag green" id="qaTag" style="display:none">Grounded</span></div>
+        <div id="qaBody" style="font-size:11px;line-height:1.85;color:#3c4b66;margin-top:10px">
+          RAG <b>并不必然</b>提高回答质量。知识库中的多条证据指向同一个条件性结论：<b>效果取决于检索结果与问题的相关性</b>。当检索内容相关时，额外上下文提供 grounding；当检索噪声高时，无关上下文反而可能降低生成质量。
+        </div>
+        <div id="qaLoad" class="faint" style="font-size:10px;margin-top:10px;display:none">Retrieval → Ranking → Grounded Generation…</div>
+      </div>
+
+      <div class="grid g2" style="margin-top:16px">
+        <div>
+          <div class="sechead"><h3>Evidence <span class="faint" style="font-weight:400;font-size:9px">· 3 sources</span></h3><span class="more" onclick="go('ko');koTab('evidence',document.querySelectorAll('#koTabs button')[4])">查看全部 →</span></div>
+          <div class="panel pad" style="padding:6px">
+            <div class="item" onclick="go('ko')"><span class="tag green" style="flex:none">1</span><div><b>RAG Survey · 2026</b><p>chunk_021 · “RAG may improve answer quality…” · primary</p></div></div>
+            <div class="item" onclick="go('ko')"><span class="tag blue" style="flex:none">2</span><div><b>Evaluation Notes</b><p>chunk_044 · “Irrelevant context introduces noise…” · supporting</p></div></div>
+            <div class="item" onclick="go('ko')"><span class="tag" style="flex:none">3</span><div><b>Retrieval Patterns</b><p>chunk_017 · noisy retrieval case · context</p></div></div>
+          </div>
+          <div class="sechead"><h3>Knowledge Boundary</h3></div>
+          <div class="panel pad">
+            <div class="brow"><span class="bmark b-ok">✓</span><span>直接证据支持：检索相关性是关键条件（8 条）</span></div>
+            <div class="brow"><span class="bmark b-cond">△</span><span>条件性 Claim：噪声检索的负面影响（3 条，未入图谱）</span></div>
+            <div class="brow"><span class="bmark b-open">?</span><span>开放问题：检索质量的量化阈值（2 个）</span></div>
+          </div>
+        </div>
+        <div>
+          <div class="sechead"><h3>Retrieval Trace</h3><span class="tag blue" style="margin:0">12 hits</span></div>
+          <div class="panel pad" style="padding:6px">
+            <div class="item" style="cursor:default"><div class="ico-badge ib-blue">⌕</div><div><b>Hybrid Query</b><p>retrieval quality · RAG · answer quality</p></div></div>
+            <div class="item" style="cursor:default"><div class="ico-badge ib-violet">⊞</div><div><b>FTS5</b><p>命中 8 chunks · top 5 used</p></div></div>
+            <div class="item" style="cursor:default"><div class="ico-badge ib-violet">◈</div><div><b>Semantic</b><p>命中 14 chunks · top 8 used</p></div></div>
+            <div class="item" style="cursor:default"><div class="ico-badge ib-mint">Σ</div><div><b>RRF 融合</b><p>12 个 evidence candidates</p></div></div>
+          </div>
+          <div class="sechead"><h3>下一步</h3></div>
+          <button class="btn primary" style="width:100%" onclick="go('research')">◇ 就此问题继续研究</button>
+          <button class="btn" style="width:100%;margin-top:8px" onclick="toast('已保存到研究清单')">保存这次问答</button>
+        </div>
+      </div>
+
+      <div class="sechead"><h3>最近问答</h3></div>
+      <div class="panel pad" style="padding:6px">
+        <div class="item" onclick="fillAsk('GPT-4 与 MMLU 的关系是什么？')"><div class="ico-badge ib-blue">◎</div><div class="grow"><b>GPT-4 与 MMLU 的关系是什么？</b><p>9 hits · 5 citations · grounded · 1.2s</p></div><span class="tag green">grounded</span></div>
+        <div class="item" onclick="fillAsk('有哪些待解决的 Retrieval 问题？')"><div class="ico-badge ib-amber">◎</div><div class="grow"><b>有哪些待解决的 Retrieval 问题？</b><p>16 hits · 7 citations · research needed · 4.6s</p></div><span class="tag amber">research needed</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ RESEARCH ══════════ -->
+  <section class="page" id="page-research">
+    <div class="pagehead">
+      <div><h1>研究</h1><p class="muted" style="margin-top:6px;font-size:10.5px">Question → Evidence → Claims → Review → Knowledge，一个闭环。</p></div>
+      <button class="btn primary" onclick="toast('新建问题：连接后端后开放')">＋ 新问题</button>
+    </div>
+    <div class="strip" style="margin-bottom:20px">
+      <div class="cell"><span>Open Questions</span><b>5</b><small>2 可研究</small></div>
+      <div class="cell"><span>In Progress</span><b>1</b><small>ResearchAgent</small></div>
+      <div class="cell"><span>Completed</span><b>12</b><small>近 30 天</small></div>
+      <div class="cell"><span>Conflicts</span><b>2</b><small>待处理</small></div>
+    </div>
+
+    <div class="tabs" id="rTabs">
+      <button class="active" onclick="researchTab('questions',this)">Questions</button>
+      <button onclick="researchTab('conflicts',this)">Conflicts <span class="tag amber" style="margin-left:4px">2</span></button>
+      <button onclick="researchTab('health',this)">Knowledge Health</button>
+    </div>
+
+    <div id="r-questions">
+      <div class="grid g2">
+        <div>
+          <div class="sechead"><h3>Open Questions</h3></div>
+          <div class="panel pad" style="padding:6px">
+            <div class="item" style="cursor:default"><div class="ico-badge ib-blue">?</div><div class="grow"><b>检索质量如何量化影响 RAG 的最终效果？</b><p>research · 7 关联 Claims · 可研究</p></div><button class="btn sm primary" onclick="openResearchFlow()">继续研究</button></div>
+            <div class="item" style="cursor:default"><div class="ico-badge ib-blue">?</div><div class="grow"><b>Resource 类型应该在哪些情况下使用？</b><p>design · 11 Claims · 已解决</p></div><span class="tag green">resolved</span></div>
+            <div class="item" style="cursor:default"><div class="ico-badge ib-amber">?</div><div class="grow"><b>为什么某些 benchmark 上 reranking 没有改善？</b><p>evaluation · partially answered · 4 Claims</p></div><span class="tag amber">partial</span></div>
+          </div>
+          <div class="sechead"><h3>Research in Progress</h3></div>
+          <div class="panel pad" style="padding:6px">
+            <div class="item" style="cursor:default"><div class="ico-badge ib-violet">◇</div><div class="grow"><b>Retrieval Quality → RAG 效果的量化关系</b><p>ResearchAgent · step 3/5 · 已收集 9 条证据</p></div><span class="tag blue">running</span></div>
+          </div>
+        </div>
+        <div>
+          <div id="rflow" style="display:none">
+            <div class="sechead"><h3>研究闭环 · 检索质量如何量化影响 RAG 的最终效果？</h3></div>
+            <div class="panel pad">
+              <div class="flowrow">
+                <div class="fstep"><b>Question</b><div class="faint">open</div></div><span class="farrow">↓</span>
+                <div class="fstep"><b>Known</b><div class="faint">7 claims</div></div><span class="farrow">↓</span>
+                <div class="fstep"><b>Unknown</b><div class="faint">量化阈值</div></div><span class="farrow">↓</span>
+                <div class="fstep"><b>Research Plan</b><div class="faint">3 steps</div></div>
+              </div>
+              <div class="flowrow" style="margin-top:10px">
+                <div class="fstep"><b>Sources</b><div class="faint">9 条证据</div></div><span class="farrow">↓</span>
+                <div class="fstep"><b>Findings</b><div class="faint">2 项</div></div><span class="farrow">↓</span>
+                <div class="fstep"><b>Claims</b><div class="faint">+2 candidate</div></div><span class="farrow">↓</span>
+                <div class="fstep"><b>Review</b><div class="faint">待审</div></div>
+              </div>
+              <hr class="hairline"/>
+              <div class="sechead" style="margin:4px 0 10px"><h3>Research Plan</h3><span class="tag blue" style="margin:0">step 3/5</span></div>
+              <div class="item" style="cursor:default"><span class="tag green" style="flex:none">✓</span><div><b>收集 benchmark 指标定义</b><p>FTS5 + Semantic · 已完成</p></div></div>
+              <div class="item" style="cursor:default"><span class="tag green" style="flex:none">✓</span><div><b>对比 reranking 前后的检索命中率</b><p>9 条证据 · 已完成</p></div></div>
+              <div class="item" style="cursor:default"><span class="tag blue" style="flex:none">→</span><div><b>建立量化阈值假设并生成 Candidate Claims</b><p>进行中</p></div></div>
+              <div class="row" style="margin-top:12px">
+                <button class="btn primary" onclick="toast('ResearchAgent 已继续执行')">继续研究</button>
+                <button class="btn" onclick="toast('查看 9 条证据（连接后端后开放）')">查看 Sources</button>
+              </div>
+            </div>
+          </div>
+          <div id="rflowHint">
+            <div class="sechead"><h3>研究如何运作</h3></div>
+            <div class="panel pad">
+              <div class="flowrow">
+                <div class="fstep"><b>Question</b></div><span class="farrow">→</span>
+                <div class="fstep"><b>Known / Unknown</b></div><span class="farrow">→</span>
+                <div class="fstep"><b>Plan</b></div><span class="farrow">→</span>
+                <div class="fstep"><b>Evidence</b></div>
+              </div>
+              <div class="flowrow" style="margin-top:8px">
+                <div class="fstep"><b>Findings</b></div><span class="farrow">→</span>
+                <div class="fstep"><b>Candidate Claims</b></div><span class="farrow">→</span>
+                <div class="fstep"><b>Review</b></div><span class="farrow">→</span>
+                <div class="fstep"><b>Knowledge</b></div>
+              </div>
+              <hr class="hairline"/>
+              <p class="muted" style="font-size:10px;line-height:1.7;margin:0">点击左侧任一开放问题的<b style="color:var(--text)">「继续研究」</b>，查看完整闭环：系统会先整理已知与未知，生成研究计划，再由 ResearchAgent 收集证据、产出候选知识，交给你审核。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="r-conflicts" style="display:none">
+      <div class="panel pad">
+        <div class="row" style="gap:10px;flex-wrap:wrap">
+          <span class="tag amber">Conflict #1</span><span class="faint" style="font-size:9px">同一主题 · 不同条件 · 两个来源</span>
+        </div>
+        <div class="grid g2" style="margin-top:14px">
+          <div class="panel pad" style="background:var(--surface2)">
+            <span class="tag green">Claim A</span>
+            <div style="font-size:11px;margin-top:9px;line-height:1.7"><b>RAG improves answer quality.</b><p class="muted" style="font-size:9.5px;margin-top:5px">来源：RAG Survey · 2026 · verified · 3 条证据</p></div>
+          </div>
+          <div class="panel pad" style="background:var(--surface2)">
+            <span class="tag amber">Claim B</span>
+            <div style="font-size:11px;margin-top:9px;line-height:1.7"><b>RAG may reduce answer quality when retrieval is noisy.</b><p class="muted" style="font-size:9.5px;margin-top:5px">来源：Evaluation Notes · candidate · 1 条证据</p></div>
+          </div>
+        </div>
+        <div class="sechead"><h3>Difference</h3><span class="faint" style="font-size:9px">为什么两个来源结论不同</span></div>
+        <div class="propgrid" style="grid-template-columns:repeat(3,1fr)">
+          <div class="prop"><span>Benchmark</span><b>MMLU-style vs open-domain QA</b></div>
+          <div class="prop"><span>Retrieval Quality</span><b>curated corpus vs noisy web</b></div>
+          <div class="prop"><span>Evaluation Setup</span><b>top-5 vs top-20 rerank</b></div>
+        </div>
+        <div class="row" style="margin-top:16px;gap:8px;flex-wrap:wrap">
+          <button class="btn" onclick="go('claim')">查看 Evidence</button>
+          <button class="btn" onclick="toast('已保留两条 Claim 并互相标注条件')">保留两者</button>
+          <button class="btn primary" onclick="toast('已创建研究：哪种检索质量条件下 RAG 仍有效？')">创建研究</button>
+          <button class="btn ghost" onclick="toast('进入审核队列')">审核</button>
+        </div>
+        <div class="notice violet" style="margin-top:14px">冲突处理的目标不是强行选出“真相”，而是<b>记录两个结论成立的条件</b>——它们很可能都是对的，只是适用范围不同。</div>
+      </div>
+    </div>
+
+    <div id="r-health" style="display:none">
+      <div class="panel pad">
+        <div class="kv" style="grid-template-columns:200px 1fr;gap:14px;font-size:10.5px">
+          <span>Evidence Coverage</span><b>97.8% <span class="tag green" style="margin-left:6px">healthy</span></b>
+          <span>Entity Resolution</span><b>94.2% <span class="tag green" style="margin-left:6px">healthy</span></b>
+          <span>Contradictions</span><b>2.1% <span class="tag amber" style="margin-left:6px">2 组</span></b>
+          <span>Orphan Claims</span><b>16 <span class="tag amber" style="margin-left:6px">建议归组</span></b>
+          <span>Open Questions</span><b>18</b>
+          <span>Stale Knowledge</span><b>7 <span class="tag" style="margin-left:6px">> 90 天未验证</span></b>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ AGENT WORKSPACE ══════════ -->
+  <section class="page" id="page-agent">
+    <div class="pagehead"><div><h1>Agent 工作台</h1><p class="muted" style="margin-top:6px;font-size:10.5px">六个智能体、它们的能力、行为配置与运行历史。</p></div></div>
+    <div style="display:grid;grid-template-columns:250px minmax(0,1fr);gap:18px">
+      <div class="panel pad" style="padding:8px;align-self:start" id="agentList"></div>
+      <div>
+        <div class="tabs" id="aTabs">
+          <button class="active" onclick="agentTab('overview',this)">Overview</button>
+          <button onclick="agentTab('prompt',this)">Prompt</button>
+          <button onclick="agentTab('skills',this)">Skills</button>
+          <button onclick="agentTab('tools',this)">Tools</button>
+          <button onclick="agentTab('runs',this)">Runs</button>
+        </div>
+        <div id="aBody"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ SETTINGS ══════════ -->
+  <section class="page" id="page-settings">
+    <div class="pagehead"><div><h1>设置</h1><p class="muted" style="margin-top:6px;font-size:10.5px">Provider、检索、Agent Runtime；数据库等实现细节收在高级选项里。</p></div>
+      <button class="btn primary" onclick="toast('设置已保存')">保存设置</button></div>
+    <div style="max-width:760px">
+      <div class="sechead"><h3>LLM Provider</h3></div>
+      <div class="panel pad">
+        <div class="kv" style="grid-template-columns:150px 1fr;gap:16px;font-size:10.5px">
+          <span>Base URL</span><input class="btn" style="cursor:text;text-align:left" value="https://api.openai.com/v1"/>
+          <span>Model</span><input class="btn" style="cursor:text;text-align:left" value="deepseek-v4-flash"/>
+          <span>API Key</span><input class="btn" type="password" style="cursor:text;text-align:left" placeholder="已配置 — 留空保持不变"/>
+        </div>
+      </div>
+      <div class="sechead"><h3>检索与 Embedding</h3></div>
+      <div class="panel pad">
+        <div class="kv" style="grid-template-columns:150px 1fr;gap:16px;font-size:10.5px">
+          <span>Embedding Model</span><input class="btn" style="cursor:text;text-align:left" value="text-embedding-3-small"/>
+          <span>Dimensions</span><input class="btn" style="cursor:text;text-align:left;width:110px" value="1536"/>
+          <span>Batch Chunks</span><input class="btn" style="cursor:text;text-align:left;width:110px" value="8"/>
+          <span>Max Search Results</span><input class="btn" style="cursor:text;text-align:left;width:110px" value="50"/>
+        </div>
+      </div>
+      <div class="sechead"><h3>Runtime</h3></div>
+      <div class="panel pad">
+        <div class="row" style="justify-content:space-between;padding:6px 0"><div><b style="font-size:10.5px">AgentScope</b><div class="faint" style="font-size:8.5px">Agent workflow runtime</div></div><div class="switch on" onclick="this.classList.toggle('on')"></div></div>
+        <div class="row" style="justify-content:space-between;padding:6px 0"><div><b style="font-size:10.5px">索引后自动嵌入</b><div class="faint" style="font-size:8.5px">Auto embeddings</div></div><div class="switch" onclick="this.classList.toggle('on')"></div></div>
+      </div>
+      <div class="sechead"><h3>高级</h3><span class="faint" style="font-size:9px;font-weight:400">实现细节</span></div>
+      <div class="panel pad" style="padding:6px">
+        <div class="item" onclick="go('db')"><div class="ico-badge ib-violet">◉</div><div class="grow"><b>Database</b><p>SQLite · 表计数 · 完整性检查</p></div><span class="faint">→</span></div>
+        <div class="item" onclick="toast('导出功能连接后端后开放')"><div class="ico-badge ib-violet">⇩</div><div class="grow"><b>导出全部知识</b><p>JSON 快照</p></div><span class="faint">→</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ DATABASE（Settings → Advanced 内部页） ══════════ -->
+  <section class="page" id="page-db">
+    <div class="pagehead">
+      <div><div class="eyebrow" style="cursor:pointer" onclick="go('settings')">← 设置 · 高级</div><h1 style="margin-top:8px">Database</h1></div>
+      <button class="btn" onclick="toast('integrity_check: ok')">✓ 完整性检查</button>
+    </div>
+    <div class="strip" style="margin-bottom:18px">
+      <div class="cell"><span>Size</span><b>0.7 MB</b><small>172 pages</small></div>
+      <div class="cell"><span>Integrity</span><b style="color:var(--mint)">ok</b><small>pragma check</small></div>
+      <div class="cell"><span>Documents</span><b>86</b></div>
+      <div class="cell"><span>Claims</span><b>742</b></div>
+    </div>
+    <div class="panel pad">
+      <table class="ltable"><thead><tr><th>Table</th><th>Rows</th><th>Purpose</th></tr></thead><tbody>
+        <tr><td class="mono">documents</td><td>86</td><td class="muted">原始文档</td></tr>
+        <tr><td class="mono">chunks</td><td>2,148</td><td class="muted">检索单元</td></tr>
+        <tr><td class="mono">entities</td><td>1,284</td><td class="muted">知识对象</td></tr>
+        <tr><td class="mono">claims</td><td>742</td><td class="muted">来源声明</td></tr>
+        <tr><td class="mono">relations</td><td>386</td><td class="muted">图谱关系（由 Claims 派生）</td></tr>
+        <tr><td class="mono">llm_runs / llm_run_steps</td><td>132 / 489</td><td class="muted">任务执行记录</td></tr>
+      </tbody></table>
+    </div>
+  </section>
+
+  </div>
+</main>
+</div>
+
+<!-- ══════════ Command Palette ══════════ -->
+<div class="cmdk" id="cmdk" onclick="if(event.target===this)closeCmd()">
+  <div class="cmdbox">
+    <input id="cmdInput" placeholder="输入命令，或直接输入问题…" oninput="cmdFilter(this.value)" onkeydown="cmdKey(event)"/>
+    <div class="cmdlist" id="cmdList"></div>
+  </div>
+</div>
+
+<div class="drawer" id="drawer"><div class="row" style="justify-content:space-between"><b id="drawerTitle">详情</b><button class="close" style="font-size:18px;color:var(--faint)" onclick="closeDrawer()">×</button></div><div id="drawerBody" style="margin-top:14px"></div></div>
+<div class="toast" id="toastEl"></div>
+
+<script>
+/* ── navigation ── */
+const CRUMBS={home:'首页',knowledge:'知识',qa:'问答',research:'研究',agent:'Agent 工作台',settings:'设置',db:'设置 / Database',ko:'知识 / Knowledge Object',claim:'知识 / Claim'}
+function go(id){
+  document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id==='page-'+id));
+  document.querySelectorAll('.nav').forEach(n=>n.classList.toggle('active',n.dataset.go===id||((id==='ko'||id==='claim')&&n.dataset.go==='knowledge')||(id==='db'&&n.dataset.go==='settings')));
+  const c=CRUMBS[id]||id,parts=c.split(' / ');
+  document.getElementById('crumbRoot').textContent=parts[0];
+  document.getElementById('crumbSep').style.display=parts[1]?'':'none';
+  document.getElementById('crumbLeaf').textContent=parts[1]||'';
+  document.querySelector('.content').scrollTop=0;
+}
+document.querySelectorAll('.nav').forEach(n=>n.addEventListener('click',()=>go(n.dataset.go)));
+
+/* ── toast ── */
+let _tt;function toast(m){const t=document.getElementById('toastEl');t.textContent=m;t.classList.add('show');clearTimeout(_tt);_tt=setTimeout(()=>t.classList.remove('show'),1800)}
+
+/* ── tabs ── */
+function bindTabs(tabsId,fn){document.querySelectorAll('#'+tabsId+' button').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('#'+tabsId+' button').forEach(x=>x.classList.remove('active'));b.classList.add('active')}))}
+function kTab(id,btn){['library','graph','timeline'].forEach(x=>document.getElementById('k-'+x).style.display=x===id?'':'none')}
+function koTab(id,btn){['overview','claims','relations','events','evidence','questions','ideas'].forEach(x=>document.getElementById('ko-'+x).style.display=x===id?'':'none')}
+function researchTab(id,btn){if(btn){document.querySelectorAll('#rTabs button').forEach(x=>x.classList.remove('active'));btn.classList.add('active')}['questions','conflicts','health'].forEach(x=>document.getElementById('r-'+x).style.display=x===id?'':'none')}
+function agentTab(id,btn){document.querySelectorAll('#aTabs button').forEach(x=>x.classList.remove('active'));btn.classList.add('active');renderAgent(id)}
+function openResearchFlow(){document.getElementById('rflow').style.display='';document.getElementById('rflowHint').style.display='none';toast('研究闭环已展开')}
+
+/* ── home ask ── */
+function fillAsk(q){const i=document.getElementById('qaInput');if(i){i.value=q}const h=document.getElementById('homeAsk');if(h&&document.getElementById('page-home').classList.contains('active')){h.value=q}go('qa');toast('问题已带入问答')}
+
+/* ── qa ── */
+function runQA(){
+  const tag=document.getElementById('qaTag'),load=document.getElementById('qaLoad');
+  tag.style.display='none';load.style.display='';toast('正在检索知识库…');
+  setTimeout(()=>{load.style.display='none';tag.style.display='';toast('回答完成：已附 3 条证据')},900);
+}
+
+/* ── library filter ── */
+function filterLibrary(q){q=q.toLowerCase();document.querySelectorAll('#k-library .item').forEach(it=>it.style.display=it.textContent.toLowerCase().includes(q)?'':'none')}
+
+/* ── agent workspace ── */
+const AGENTS=[
+ {id:'personal',name:'PersonalAgent',desc:'个人助手 · 任务规划与协调',c:'#5b7cff',skills:['knowledge-retrieval','task-planning'],prompt:'你是 LLM-Wiki 的 PersonalAgent…\n\n职责：\n1. 理解用户需求并规划任务；\n2. 协调 Knowledge / Research / Curator；\n3. 综合高质量证据回答。\n\n原则：优先复用已有知识；不把推测当事实；信息不足时明确说明。',runs:[['回答「RAG 与回答质量」','success · 4.2s · 8 citations'],['规划 GOMS 文档研究','success · 2.1s']]},
+ {id:'knowledge',name:'KnowledgeAgent',desc:'知识检索 · Evidence 引用',c:'#8b67f7',skills:['knowledge-retrieval','evidence-citation'],prompt:'你是 KnowledgeAgent…\n\n只基于提供的 evidence 回答，引用格式 [doc:ID chunk:ID]；证据不足时明确说明，不编造。',runs:[['检索：retrieval quality','success · 0.9s · 12 results'],['实体图谱查询：RAG','success · 0.4s']]},
+ {id:'research',name:'ResearchAgent',desc:'多步研究 · 分析综合',c:'#2fae87',skills:['web-research','multi-step-analysis'],prompt:'你是 ResearchAgent…\n\n先整理 Known / Unknown，产出研究计划，再逐步收集证据，最终输出 Findings 与 Candidate Claims 供人工审核。',runs:[['Retrieval Quality 量化研究','running · step 3/5'],['Reranking benchmark 对比','success · 4.6s']]},
+ {id:'curator',name:'CuratorAgent',desc:'去重 · 冲突 · 知识质量',c:'#d99338',skills:['entity-resolution','conflict-detection'],prompt:'你是 CuratorAgent…\n\n负责实体消歧、合并建议与冲突标注；不做删除决定，只产出建议供人工审核。',runs:[['候选实体合并建议','success · 12 candidates → 4 merged'],['冲突检测','success · 2 conflicts found']]},
+ {id:'review',name:'ReviewAgent',desc:'候选知识人工审核辅助',c:'#e46a85',skills:['review-assist'],prompt:'你是 ReviewAgent…\n\n为人工审核准备材料：证据、来源可信度、与既有知识的冲突情况；绝不直接修改知识状态。',runs:[['审核队列整理','success · 12 candidates → 9 passed']]},
+ {id:'extractor',name:'ExtractionAgent',desc:'文档知识抽取 · Skill 驱动',c:'#5ac7e8',skills:['knowledge-extraction'],prompt:'你是 ExtractionAgent…\n\n依据 Knowledge Extraction v2.0 契约抽取结构化知识；每条 Claim 必须带逐字 evidence_quote。',runs:[['GOMS 设计文档抽取','success · 250s · 2 steps'],['RAG Survey 抽取','success · 148s · 2 steps']]}
+];
+let curAgent=AGENTS[0];
+function renderAgentList(){
+  document.getElementById('agentList').innerHTML=AGENTS.map(a=>`<div class="agrow ${a.id===curAgent.id?'active':''}" onclick="pickAgent('${a.id}')"><div class="agavatar" style="background:${a.c}">${a.name[0]}</div><div><b>${a.name}</b><small>${a.desc}</small></div></div>`).join('');
+}
+function pickAgent(id){curAgent=AGENTS.find(a=>a.id===id);renderAgentList();document.querySelectorAll('#aTabs button')[0].click()}
+function renderAgent(tab){
+  const a=curAgent,B=document.getElementById('aBody');
+  if(tab==='overview')B.innerHTML=`<div class="panel pad"><div class="row"><div class="agavatar" style="background:${a.c};width:44px;height:44px;font-size:16px">${a.name[0]}</div><div><b style="font-size:14px">${a.name}</b><div class="faint" style="font-size:9px;margin-top:3px">${a.desc}</div></div></div><hr class="hairline"/><div class="kv" style="grid-template-columns:120px 1fr;font-size:10px"><span>Skills</span><b>${a.skills.join(' · ')}</b><span>Tools</span><b>search_knowledge · get_entity · get_entity_graph</b><span>最近运行</span><b>${a.runs.length} 次</b></div><div class="sechead"><h3>Recent Runs</h3><span class="more" onclick="agentTab('runs',document.querySelectorAll('#aTabs button')[4])">全部 →</span></div><div class="item" style="cursor:default">${a.runs.map(r=>`<div style="margin-bottom:8px"><b>${r[0]}</b><p class="muted" style="font-size:9px">${r[1]}</p></div>`).join('')}</div></div>`;
+  else if(tab==='prompt')B.innerHTML=`<div class="panel pad"><div class="sechead" style="margin:0 0 12px"><h3>Effective Prompt 组成</h3><button class="btn sm" onclick="toast('Effective Prompt 预览（连接后端后开放）')">预览组合结果</button></div><div class="pipeline"><div class="pnode lock">System Contract<span class="lockico">🔒</span></div><span class="farrow">→</span><div class="pnode skill">Skills</div><span class="farrow">→</span><div class="pnode custom">Custom Prompt</div><span class="farrow">→</span><div class="pnode io">Runtime Input</div></div><div class="notice violet" style="margin-top:12px">System Contract（Ontology · Schema · Evidence · Registry · Safety）不可编辑，保证抽取与校验契约稳定；你能调整的是下方 Custom Prompt。</div><div class="sechead"><h3>Custom Prompt</h3><span class="faint" style="font-size:9px;font-weight:400">保存于 SQLite · 立即生效</span></div><textarea class="promptbox" style="width:100%;height:170px;background:#141c30;border:0;border-radius:13px;color:#dbe7ff;padding:14px;font:10px/1.75 ui-monospace,Consolas,monospace;outline:none;resize:vertical">${a.prompt}</textarea><div class="row" style="margin-top:10px;justify-content:flex-end"><button class="btn" onclick="toast('已恢复默认')">恢复默认</button><button class="btn primary" onclick="toast('Prompt 已保存，新请求立即生效')">保存</button></div></div>`;
+  else if(tab==='skills')B.innerHTML=`<div class="grid g2">${a.skills.map(s=>`<div class="panel pad"><div class="row"><div class="ico-badge ib-mint">◈</div><b style="font-size:11.5px">${s}</b></div><hr class="hairline"/><div class="kv" style="grid-template-columns:80px 1fr;font-size:9.5px"><span>Purpose</span><b>来源接地的可复用能力</b><span>Instructions</span><b class="mono" style="font-size:9px">SKILL.md</b><span>References</span><b>Entity Types · Predicates · Evidence</b><span>Used By</span><b>${a.name}</b><span>Version</span><b>v1.2</b></div><div class="row" style="margin-top:10px"><button class="btn sm" onclick="toast('查看 SKILL.md（连接后端后开放）')">查看 SKILL.md</button><span class="tag green" style="margin-left:auto">ON</span></div></div>`).join('')}</div>`;
+  else if(tab==='tools')B.innerHTML=`<div class="panel pad" style="padding:6px"><div class="item" style="cursor:default"><div class="ico-badge ib-blue">⌕</div><div><b>search_knowledge</b><p>混合检索：FTS5 + Semantic + RRF · read-only</p></div><span class="tag green" style="margin-left:auto">always allowed</span></div><div class="item" style="cursor:default"><div class="ico-badge ib-blue">✦</div><div><b>get_entity</b><p>读取实体详情与别名 · read-only</p></div><span class="tag green" style="margin-left:auto">always allowed</span></div><div class="item" style="cursor:default"><div class="ico-badge ib-blue">⌘</div><div><b>get_entity_graph</b><p>实体一跳邻居图谱 · read-only</p></div><span class="tag green" style="margin-left:auto">always allowed</span></div><div class="item" style="cursor:default"><div class="ico-badge ib-violet">📖</div><div><b>read_skill_reference</b><p>读取 Skill 参考文档</p></div><span class="tag green" style="margin-left:auto">always allowed</span></div></div>`;
+  else if(tab==='runs')B.innerHTML=`<div class="panel pad" style="padding:6px">${a.runs.map(r=>`<div class="item" onclick="expandRun(this,'${r[1]}')"><div class="ico-badge ib-violet">◒</div><div class="grow"><b>${r[0]}</b><p>${r[1]}</p></div><span class="faint">展开 →</span></div>`).join('')}</div><div class="notice violet" style="margin-top:12px">普通视图只显示结果；展开可查看 <b>Prompt → Skill → Tool → Model</b> 的完整 Trace（输入输出、耗时、错误）。</div>`;
+}
+function expandRun(el,meta){
+  const d=document.createElement('div');d.className='trace';d.style.marginTop='8px';
+  d.innerHTML=`<span class="ok">[16:05:12] OK</span> ${curAgent.name}.reply\n  <span class="dim">skill</span>   = ${curAgent.skills[0]}\n  <span class="dim">input</span>   = user message (${meta.split('·')[0].trim()})\n  <span class="dim">model</span>   = deepseek-v4-flash\n  <span class="dim">latency</span> = ${meta.includes('s ·')?meta:'—'}\n  <span class="dim">steps</span>   = prompt → skill → tool → model → persist`;
+  el.after(d);el.onclick=null;el.querySelector('.faint').textContent='已展开';
+}
+renderAgentList();renderAgent('overview');
+
+/* ── command palette ── */
+const CMDS=[
+ {g:'搜索与提问',icon:'⌕',cls:'ib-blue',t:'搜索知识',k:'S',act:()=>{closeCmd();go('knowledge')}},
+ {g:'搜索与提问',icon:'◎',cls:'ib-violet',t:'Ask knowledge',k:'A',act:()=>{closeCmd();go('qa')}},
+ {g:'知识',icon:'✦',cls:'ib-blue',t:'打开 Knowledge Object · RAG',k:'',act:()=>{closeCmd();go('ko')}},
+ {g:'研究',icon:'◇',cls:'ib-amber',t:'创建问题',k:'',act:()=>{closeCmd();toast('新建问题：连接后端后开放')}},
+ {g:'研究',icon:'◇',cls:'ib-amber',t:'开始研究',k:'R',act:()=>{closeCmd();go('research')}},
+ {g:'研究',icon:'⚠',cls:'ib-amber',t:'查看冲突中心',k:'',act:()=>{closeCmd();go('research');researchTab('conflicts',document.querySelectorAll('#rTabs button')[1])}},
+ {g:'审核',icon:'✓',cls:'ib-mint',t:'审核候选知识',k:'',act:()=>{closeCmd();go('ko');koTab('claims',document.querySelectorAll('#koTabs button')[1])}},
+ {g:'Agent',icon:'◌',cls:'ib-violet',t:'打开 Agent 工作台',k:'',act:()=>{closeCmd();go('agent')}},
+ {g:'Agent',icon:'✎',cls:'ib-violet',t:'编辑 Prompt',k:'P',act:()=>{closeCmd();go('agent');agentTab('prompt',document.querySelectorAll('#aTabs button')[1])}},
+ {g:'系统',icon:'⚙',cls:'ib-blue',t:'打开设置',k:'',act:()=>{closeCmd();go('settings')}},
+];
+function renderCmd(q){
+  q=(q||'').toLowerCase();
+  let html='',lastG='';
+  CMDS.filter(c=>c.t.toLowerCase().includes(q)).forEach((c,i)=>{
+    if(c.g!==lastG){html+=`<div class="cmdgroup">${c.g}</div>`;lastG=c.g}
+    html+=`<div class="cmditem" onclick="CMDS[${CMDS.indexOf(c)}].act()"><div class="ico-badge ${c.cls}">${c.icon}</div><span class="grow">${c.t}</span>${c.k?`<kbd class="k">⌘${c.k}</kbd>`:''}</div>`;
+  });
+  if(q&&!html)html=`<div class="cmditem" onclick="closeCmd();fillAsk('${q}')"><div class="ico-badge ib-violet">◎</div><span class="grow">直接提问：「${q}」</span></div>`;
+  document.getElementById('cmdList').innerHTML=html||'<div class="empty" style="margin:10px">没有匹配的命令</div>';
+}
+function openCmd(){document.getElementById('cmdk').classList.add('show');const i=document.getElementById('cmdInput');i.value='';renderCmd('');setTimeout(()=>i.focus(),40)}
+function closeCmd(){document.getElementById('cmdk').classList.remove('show')}
+function cmdFilter(v){renderCmd(v)}
+function cmdKey(e){if(e.key==='Escape')closeCmd();if(e.key==='Enter'){const f=document.querySelector('#cmdList .cmditem');if(f)f.click()}}
+document.addEventListener('keydown',e=>{
+  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openCmd()}
+  if(e.key==='Escape')closeCmd();
+});
+</script>
+</body>
+</html>
