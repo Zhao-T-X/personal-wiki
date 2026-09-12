@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import struct
+from urllib.parse import urlparse
 
 # fastembed pulls its models from HuggingFace, which is unreachable from some
 # networks; default to the community mirror unless explicitly overridden.
@@ -10,6 +11,12 @@ os.environ.setdefault('HF_ENDPOINT', 'https://hf-mirror.com')
 import numpy as np
 from .config import runtime
 from .db import connect, transaction
+
+# Providers that serve chat completions but expose no /embeddings route, whatever
+# the configured model name suggests. Pointing the app at one of these used to
+# send every embed request to a nonexistent endpoint, which is why vector search
+# silently stayed empty; such a config must fall back to the local model instead.
+_NO_EMBEDDING_HOSTS = ('deepseek.com',)
 
 _local_model = None
 
@@ -31,11 +38,18 @@ def _local_path() -> str:
 
 
 def _use_remote() -> bool:
-    """Use the OpenAI-compatible embeddings endpoint only when the configured
-    model name is an OpenAI-style embedding model — providers like DeepSeek
-    have no embeddings API at all."""
+    """Use the OpenAI-compatible embeddings endpoint only when it can succeed.
+
+    Two conditions matter: the model name must look like an OpenAI embedding model,
+    and the endpoint must actually serve embeddings. Checking the name alone sent
+    requests to DeepSeek's /embeddings, which does not exist — vectors then stayed
+    empty while every search quietly degraded to keyword-only.
+    """
     cfg = runtime()
-    return bool(cfg['openai_api_key']) and cfg['openai_embedding_model'].startswith('text-embedding')
+    if not cfg['openai_api_key'] or not cfg['openai_embedding_model'].startswith('text-embedding'):
+        return False
+    host = urlparse(cfg['openai_base_url']).netloc.lower()
+    return not any(p in host for p in _NO_EMBEDDING_HOSTS)
 
 
 def _get_local():

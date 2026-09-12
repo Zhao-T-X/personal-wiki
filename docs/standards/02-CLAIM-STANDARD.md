@@ -58,6 +58,13 @@ Words such as may, might, can, likely and could are expressed through modality r
 
 A Claim is source-faithful and may remain Claim-only even when its Predicate appears meaningful. A Relation is a normalized graph edge created only after deterministic validation.
 
+Two relationship dimensions must not be conflated:
+
+- **Claim → Relation** (Entity → Entity): derives graph edges within a single extraction, per `05-CLAIM-RELATION-NORMALIZATION.md`.
+- **Claim → Claim**: records how a newly extracted Claim relates to what the knowledge base already believed (`duplicate` / `coexists` / `supersedes` / `contradicts`), per `14-CLAIM-EVOLUTION-STANDARD.md`. These are not graph edges and never enter the knowledge graph.
+
+A Claim's content is never rewritten to express an update: a new Claim is created, and the relationship between the two is recorded instead.
+
 ## 8. Examples
 
 Source:

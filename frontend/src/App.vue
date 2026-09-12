@@ -5,6 +5,7 @@ import { api } from './api/client'
 import { useAppStore } from './stores/app'
 import AppToast from './components/AppToast.vue'
 import CommandPalette from './components/CommandPalette.vue'
+import RunProgress from './components/RunProgress.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -23,13 +24,14 @@ const items = [
   { id: '/', icon: '⌂', text: '首页' },
   { id: '/knowledge', icon: '✦', text: '知识' },
   { id: '/qa', icon: '◎', text: '问答' },
+  { id: '/review', icon: '✓', text: '审核' },
   { id: '/research', icon: '◇', text: '研究' },
   { id: '/agent', icon: '◌', text: 'Agent 工作台' },
   { id: '/settings', icon: '⚙', text: '设置' },
 ]
 
 const CRUMBS: Record<string, string> = {
-  '/': '首页', '/knowledge': '知识', '/qa': '问答', '/research': '研究',
+  '/': '首页', '/knowledge': '知识', '/qa': '问答', '/review': '审核', '/research': '研究',
   '/agent': 'Agent 工作台', '/settings': '设置', '/settings/database': '设置 / Database',
 }
 const crumb = computed(() => {
@@ -65,7 +67,7 @@ const MOBILE_ITEMS = [
       <div class="navlbl">空间</div>
       <div v-for="it in items" :key="it.id" class="nav" :class="{ active: route.path === it.id || (it.id !== '/' && route.path.startsWith(it.id)) }" @click="router.push(it.id)">
         <span class="nico">{{ it.icon }}</span><span>{{ it.text }}</span>
-        <span v-if="it.id === '/research' && pendingReview" class="npill" :title="`${pendingReview} 条待审候选`">{{ pendingReview }}</span>
+        <span v-if="it.id === '/review' && pendingReview" class="npill" :title="`${pendingReview} 条待审候选`">{{ pendingReview }}</span>
       </div>
       <div class="spacer"></div>
       <div v-if="store.health" class="healthcard">
@@ -98,6 +100,7 @@ const MOBILE_ITEMS = [
       </button>
       <button @click="cmdOpen = true"><span>⌘</span><small>命令</small></button>
     </nav>
+    <RunProgress />
     <AppToast />
   </div>
 </template>

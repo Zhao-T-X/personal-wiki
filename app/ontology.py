@@ -27,7 +27,7 @@ NORMALIZATION_RULES = _load_registry('relation-normalization-rules.json')
 
 RELATION_TYPES = {x['predicate'] for x in RELATION_REGISTRY['relation_predicates']}
 CLAIM_PREDICATES = set(CLAIM_REGISTRY['claim_predicates'])
-KNOWLEDGE_STATUSES = {'draft','candidate','verified','rejected','archived'}
+KNOWLEDGE_STATUSES = {'draft','candidate','verified','rejected','archived','superseded'}
 IDEA_STATUSES = {'candidate','accepted','implemented','rejected','archived'}
 QUESTION_STATUSES = {'open','answered','partially_answered','resolved','rejected','archived'}
 CLAIM_TYPES = {'factual','definitional','causal','comparative','evaluative','predictive','normative','hypothetical'}

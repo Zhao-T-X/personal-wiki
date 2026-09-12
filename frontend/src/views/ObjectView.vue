@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import cytoscape from 'cytoscape'
 import { api, patchJson, post } from '../api/client'
 import type { Claim, Entity, EventRow, IdeaRow, QuestionRow } from '../api/types'
 import PageHead from '../components/PageHead.vue'
@@ -10,6 +11,7 @@ import EmptyState from '../components/EmptyState.vue'
 import AppModal from '../components/AppModal.vue'
 import { useAppStore } from '../stores/app'
 import { fmtDateTime } from '../utils/time'
+import { TYPE_COLORS, DEFAULT_NODE_COLOR, edgeEndpoints } from '../utils/graph'
 
 const route = useRoute()
 const router = useRouter()
@@ -76,6 +78,9 @@ const questions = ref<QuestionRow[]>([])
 const typeDecision = ref<{ type: string; reason: string; ok: boolean }[]>([])
 
 const loadError = ref('')
+/** Evidence shows document titles, not ids — resolve the distinct ones once per load. */
+const docLabels = ref<Record<string, string>>({})
+
 async function load() {
   const id = route.params.id as string
   loadError.value = ''
@@ -85,7 +90,27 @@ async function load() {
     claims.value = d.claims; relations.value = d.relations; evidence.value = d.evidence
     events.value = d.events; ideas.value = d.ideas; questions.value = d.questions
     typeDecision.value = d.type_decision
+    await loadDocLabels()
+    if (tab.value === 'Graph') drawLocalGraph()
   } catch (e: any) { entity.value = null; loadError.value = e.message }
+}
+
+async function loadDocLabels() {
+  const ids = [...new Set(evidence.value.map((e: any) => e.source_document_id).filter(Boolean))] as string[]
+  const pairs = await Promise.all(ids.map(async id => {
+    try { return [id, (await api<{ title: string }>('/api/documents/' + id)).title] as const }
+    catch { return [id, ''] as const }
+  }))
+  docLabels.value = Object.fromEntries(pairs.filter(([, title]) => title))
+}
+
+/** Evidence must lead back to the raw source, with the originating chunk highlighted. */
+function openEvidenceSource(c: any) {
+  if (!c.source_document_id) return
+  router.push({
+    path: '/knowledge',
+    query: { doc: c.source_document_id, ...(c.source_chunk_id ? { chunk: c.source_chunk_id } : {}) },
+  })
 }
 onMounted(load)
 watch(() => route.params.id, () => { if (route.path.startsWith('/knowledge/object/')) load() })
@@ -94,6 +119,97 @@ function askAbout() {
   if (!entity.value) return
   router.push({ path: '/qa', query: { q: `${entity.value.name} 是什么？它和哪些东西有关？` } })
 }
+/* ---------- local graph（从当前对象出发的一跳关系） ---------- */
+const graphBox = ref<HTMLElement | null>(null)
+let cy: cytoscape.Core | null = null
+const graphLoading = ref(false)
+const graphEmpty = ref(false)
+interface EdgeDetail {
+  predicate: string; source: string; target: string
+  confidence?: number | null; status?: string
+  documentId?: string | null; chunkId?: string | null
+}
+const selectedEdge = ref<EdgeDetail | null>(null)
+
+/**
+ * Draw only the neighbourhood around this object instead of the whole graph —
+ * a 120-node force layout answers no question the user actually has.
+ */
+async function drawLocalGraph() {
+  if (!entity.value) return
+  graphLoading.value = true
+  selectedEdge.value = null
+  await nextTick()
+  if (!graphBox.value) { graphLoading.value = false; return }
+  try {
+    const g = await api<any>(`/api/entities/${entity.value.id}/graph?depth=1&limit=100`)
+    const nodes: any[] = g.nodes || []
+    const nodeIds = new Set(nodes.map(n => n.id))
+    // Claims whose object is free text have no node to attach to; drop those edges.
+    const edges = (g.edges || []).filter((e: any) => {
+      const { source, target } = edgeEndpoints(e)
+      return source && target && nodeIds.has(source) && nodeIds.has(target)
+    })
+    const rootId = entity.value.id
+    const elements = [
+      ...nodes.map(n => ({
+        data: {
+          id: n.id, label: n.name,
+          color: TYPE_COLORS[n.type] || DEFAULT_NODE_COLOR,
+          verified: n.status === 'verified',
+          root: n.id === rootId,
+        },
+      })),
+      ...edges.map((e: any) => {
+        const { source, target } = edgeEndpoints(e)
+        return { data: { id: e.id, source, target, label: e.predicate } }
+      }),
+    ]
+    cy?.destroy()
+    cy = cytoscape({
+      container: graphBox.value, elements,
+      layout: { name: 'cose', animate: false, padding: 40 },
+      style: [
+        { selector: 'node', style: { 'background-color': 'data(color)', label: 'data(label)', color: '#fff', 'font-size': 9, width: 30, height: 30, 'text-valign': 'center', 'text-halign': 'center', opacity: 0.75 } },
+        { selector: 'node[?verified]', style: { opacity: 1 } },
+        { selector: 'node[?root]', style: { opacity: 1, width: 46, height: 46, 'border-width': 3, 'border-color': '#16203a', 'font-size': 11 } },
+        { selector: 'edge', style: { width: 1.5, 'line-color': '#c2cde3', 'target-arrow-color': '#c2cde3', 'target-arrow-shape': 'triangle', label: 'data(label)', 'font-size': 7, color: '#8595b0', 'curve-style': 'bezier' } },
+      ],
+    })
+    cy.on('tap', 'node', evt => {
+      const id = evt.target.id()
+      if (id !== rootId) router.push('/knowledge/object/' + id)
+    })
+    cy.on('tap', 'edge', evt => {
+      const edge = edges.find((e: any) => e.id === evt.target.id())
+      if (!edge) return
+      selectedEdge.value = {
+        predicate: edge.predicate,
+        source: edge.source_name || edge.subject_name || '—',
+        target: edge.target_name || edge.object_name || edge.object_text || '—',
+        confidence: edge.confidence,
+        status: edge.status,
+        documentId: edge.source_document_id,
+        chunkId: edge.source_chunk_id,
+      }
+    })
+    cy.fit(undefined, 40)
+    graphEmpty.value = nodes.length <= 1
+  } catch (e: any) { store.toast(e.message) } finally { graphLoading.value = false }
+}
+
+/** A relation is only trustworthy if it leads back to the text that produced it. */
+function openEdgeSource() {
+  const e = selectedEdge.value
+  if (!e?.documentId) return
+  router.push({
+    path: '/knowledge',
+    query: { doc: e.documentId, ...(e.chunkId ? { chunk: e.chunkId } : {}) },
+  })
+}
+
+watch(tab, t => { if (t === 'Graph') drawLocalGraph() })
+
 const objLabel = (c: Claim) => c.object_name || c.object_text || '—'
 </script>
 
@@ -102,7 +218,7 @@ const objLabel = (c: Claim) => c.object_name || c.object_text || '—'
     <PageHead :title="entity.name" :subtitle="undefined">
       <template #actions>
         <button class="btn" @click="openEdit">编辑</button>
-        <button class="btn" @click="router.push({ path: '/research', query: { tab: 'review' } })">审核</button>
+        <button class="btn" @click="router.push('/review')">审核</button>
         <button class="btn" @click="router.push('/research')">研究</button>
         <button class="btn primary" @click="askAbout">就此提问</button>
       </template>
@@ -123,7 +239,7 @@ const objLabel = (c: Claim) => c.object_name || c.object_text || '—'
     </div>
 
     <div class="seg" style="margin:16px 0 14px">
-      <button v-for="t in ['Overview', 'Claims', 'Relations', 'Events', 'Evidence', 'Questions', 'Ideas']" :key="t"
+      <button v-for="t in ['Overview', 'Claims', 'Relations', 'Graph', 'Events', 'Evidence', 'Questions', 'Ideas']" :key="t"
               :class="{ active: tab === t }" @click="tab = t">{{ t }}</button>
     </div>
 
@@ -131,7 +247,7 @@ const objLabel = (c: Claim) => c.object_name || c.object_text || '—'
     <div v-if="tab === 'Overview'" class="grid g2">
       <div>
         <div class="sechead"><h3>What is it?</h3></div>
-        <div class="panel pad" style="font-size:10.5px;line-height:1.8;color:#3c4b66">{{ entity.description || '暂无描述——可在研究页补充。' }}</div>
+        <div class="panel pad" style="font-size:10.5px;line-height:1.8;color:#3c4b66">{{ entity.description || '暂无描述——点右上角「编辑」补充。' }}</div>
         <div class="sechead"><h3>Type Decision <span class="faint" style="font-size:9px;font-weight:400">· 为什么是这个类型</span></h3></div>
         <div class="panel" style="padding:6px"><TypeDecision :decisions="typeDecision" /></div>
       </div>
@@ -178,6 +294,35 @@ const objLabel = (c: Claim) => c.object_name || c.object_text || '—'
       <div class="notice violet" style="margin-top:12px">为什么有的 Claim 没有变成 Relation？Normalization 规则：modality = possible / probable 的因果 Claim 仅保留为 Claim，需要更高确定性才进入图谱。</div>
     </div>
 
+    <!-- Graph：局部一跳关系（不是全库力导向图） -->
+    <div v-if="tab === 'Graph'">
+      <div class="row" style="margin-bottom:12px">
+        <span class="faint" style="font-size:9px">从「{{ entity.name }}」出发的一跳关系 · 点击节点进入对象 · 点击连线查看关系来源</span>
+        <div class="grow"></div>
+        <button class="btn sm" @click="drawLocalGraph">重新布局</button>
+      </div>
+      <div v-if="graphLoading" class="empty" style="margin-bottom:12px">正在构建知识地图…</div>
+      <div ref="graphBox" class="gcanvas"></div>
+      <div v-if="selectedEdge" class="panel pad" style="margin-top:12px">
+        <div style="font-size:12.5px">
+          <b>{{ selectedEdge.source }}</b>
+          <span class="tag blue" style="margin:0 6px">{{ selectedEdge.predicate }}</span>
+          <b>{{ selectedEdge.target }}</b>
+        </div>
+        <div class="row" style="margin-top:10px;gap:8px;flex-wrap:wrap">
+          <span v-if="selectedEdge.confidence != null" class="tag">confidence {{ selectedEdge.confidence }}</span>
+          <StatusTag v-if="selectedEdge.status" :status="selectedEdge.status" />
+          <button v-if="selectedEdge.documentId" class="btn sm" @click="openEdgeSource">打开原文并定位 →</button>
+          <button class="btn sm ghost" @click="selectedEdge = null">关闭</button>
+        </div>
+      </div>
+      <EmptyState
+        v-else-if="graphEmpty && !graphLoading"
+        title="还没有关系"
+        text="这个对象尚未与其它实体建立关系——关系由高确定性断言派生，确认候选后会出现。"
+      />
+    </div>
+
     <!-- Events -->
     <div v-if="tab === 'Events'" class="panel pad">
       <div class="notice" style="margin-bottom:10px;background:var(--surface2)">以下事件来自与该对象共享来源文档的记录（事件本身不直接关联实体）。</div>
@@ -198,9 +343,19 @@ const objLabel = (c: Claim) => c.object_name || c.object_text || '—'
     <div v-if="tab === 'Evidence'">
       <div v-for="c in evidence" :key="c.id" class="evidence" style="margin-bottom:12px">
         “{{ c.source_quote }}”
-        <div class="src">{{ c.source_document_id?.slice(0, 8) }} · chunk {{ c.source_chunk_id?.slice(0, 8) }} · offset [{{ c.source_start_offset }}, {{ c.source_end_offset }})</div>
+        <div class="src">
+          <span>{{ docLabels[c.source_document_id] || '来源文档' }}</span>
+          <span v-if="c.source_start_offset != null">offset [{{ c.source_start_offset }}, {{ c.source_end_offset }})</span>
+        </div>
+        <button class="btn sm" style="margin-top:9px" @click="openEvidenceSource(c)">打开原文并定位 →</button>
       </div>
-      <EmptyState v-if="!evidence.length" text="暂无 Evidence" />
+      <EmptyState
+        v-if="!evidence.length"
+        title="还没有可展示的证据"
+        text="证据来自抽取时定位到的原文片段——先为这个对象关联的文档运行抽取。"
+      >
+        <template #action><button class="btn" @click="router.push('/knowledge')">去知识库</button></template>
+      </EmptyState>
     </div>
 
     <!-- Questions -->
@@ -242,7 +397,7 @@ const objLabel = (c: Claim) => c.object_name || c.object_text || '—'
       </div>
     </AppModal>
 
-    <AppModal :open="showIdea" title="记录想法" subtitle="手工记录的观点默认为 candidate，可在研究 → 审核中确认。" @close="showIdea = false">
+    <AppModal :open="showIdea" title="记录想法" subtitle="手工记录的观点默认为 candidate，可在「审核」中确认。" @close="showIdea = false">
       <textarea v-model="ideaText" class="field" style="width:100%;height:100px" placeholder="来自来源的想法、方案或研究方向…"></textarea>
       <div style="display:flex;justify-content:flex-end;gap:7px;margin-top:12px">
         <button class="btn" @click="showIdea = false">取消</button>

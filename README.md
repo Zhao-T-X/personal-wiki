@@ -34,6 +34,7 @@
 
 - **原始层（Raw）**：原样保留 Markdown / TXT / HTML 文档及其精确 chunk 偏移量，结构化输出永不替换原文。
 - **知识层（Knowledge）**：从 chunk 批量抽取候选实体、断言（claim）、关系、事件、想法、问题，并携带来源溯源（source document / chunk / offset / quote）。
+- **演化层（Evolution）**：新知识永不覆盖旧知识。新 Claim 与已有 Claim 的关系（`duplicate` / `coexists` / `supersedes` / `contradicts`）显式建模；"当前知识"由 Claim 状态与关系派生得出，历史与证据永久保留。判定确定性优先，LLM 仅在用户主动请求时给出建议。见 `docs/standards/14-CLAIM-EVOLUTION-STANDARD.md`。
 - **检索层（Retrieval）**：SQLite **FTS5** 全文检索 + 可选 OpenAI embedding（NumPy 余弦相似度回退）。混合排序使用 **倒数排名融合（RRF）**。
 - **推理层（Reasoning）**：证据溯源的问答，回答带文档 / chunk 引用与证据等级（Evidence Escalation L1–L5）。
 - **图谱层（Graph）**：实体邻域（可设深度）与全局知识图谱 API。
@@ -299,6 +300,10 @@ AgentScope 2.x 作为执行层。内置 Agent 不直连 SQLite，而是调用 LL
 - `GET /api/entities`（`?status&type&q`）、`GET /api/entities/{id}`、`GET /api/entities/{id}/object`、`GET /api/entities/{id}/graph?depth=`
 - `POST /api/entities`、`PATCH /api/entities/{id}`
 - `GET /api/claims`、`GET /api/claims/{id}`
+- `GET /api/claims/{id}/relations` — 该 Claim 的演化关系（双向）
+- `GET /api/claim-relations`（`?status=candidate`）— 待确认的知识变化
+- `PATCH /api/claim-relations/{id}` — 确认 / 忽略 / 撤销；`relationship=supersedes` 是唯一让旧 Claim 停止当前状态的路径
+- `POST /api/claim-relations/{id}/analyze` — 按需让 LLM 给出语义判断建议（不自动调用）
 - `GET /api/relations`、`GET /api/ideas`、`POST /api/ideas`、`GET /api/questions`、`POST /api/questions`、`GET /api/events`、`POST /api/events`
 - `GET /api/graph`、`GET /api/conflicts`、`GET /api/knowledge/health`、`GET /api/review`
 - `PATCH /api/knowledge/{kind}/{id}/status` — `kind ∈ entity|claim|relation|idea|question`
@@ -340,7 +345,8 @@ AgentScope 2.x 作为执行层。内置 Agent 不直连 SQLite，而是调用 LL
 - `chunks` — 精确偏移分块；`documents_fts` FTS5 虚拟表（unicode61）+ 触发器同步
 - `entities` / `entity_aliases` — 实体与别名（归一化索引）
 - `claims` — 断言（subject / predicate / object，含 polarity / modality / claim_type / 溯源偏移 / 引用）
-- `relations` — 关系（source / predicate / target，含溯源）
+- `relations` — 知识图谱关系（entity → entity，source / predicate / target，含溯源）
+- `claim_relations` — Claim → Claim 的演化关系（`duplicate` / `coexists` / `supersedes` / `contradicts`），两端 `ON DELETE CASCADE`；`target_previous_status` 支持精确撤销
 - `ideas` / `questions` / `events` — 想法 / 问题 / 事件
 - `research_tasks` — 研究任务
 - `agent_prompt_profiles` / `agent_prompt_versions` — Agent 提示词 Profile 与版本历史
@@ -379,6 +385,7 @@ chunk batch
 - `11-NORMALIZATION-ENGINE-STANDARD` — 确定性归一化 / 实体解析 / Claim→Relation
 - `12-IMPLEMENTATION-MAP` — 标准 → 运行时模块映射
 - `13-AGENT-PROMPT-SKILL-STANDARD` — Agent 提示词与 Skill 标准
+- `14-CLAIM-EVOLUTION-STANDARD` — Claim 演化与冲突处理：永不覆盖、关系建模（duplicate / coexists / supersedes / contradicts）、Current Knowledge 派生、与现有架构的对照
 
 registry 与 normalization 规则 **不进 prompt**，仅做程序校验（Deterministic logic first, LLM reasoning second）。
 

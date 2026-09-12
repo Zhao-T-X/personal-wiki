@@ -36,3 +36,7 @@ No object may be verified without source evidence. The model must not add genera
 ## 6. Lifecycle
 
 Extracted knowledge initially enters a candidate state. Verification is a separate operation. Uncertain or contradictory source statements remain representable without being promoted to unconditional graph facts.
+
+Statuses: `draft`, `candidate`, `verified`, `rejected`, `archived`, plus `superseded` for Claims.
+
+`superseded` is deliberately distinct from `rejected`: it marks knowledge that *was* accepted but no longer describes the current state. Updating knowledge never deletes history — a new Claim is created and its relationship to the older one is modelled explicitly. See [14-CLAIM-EVOLUTION-STANDARD.md](./14-CLAIM-EVOLUTION-STANDARD.md).

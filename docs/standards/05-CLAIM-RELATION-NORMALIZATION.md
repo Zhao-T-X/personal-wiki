@@ -116,3 +116,9 @@ The acquisition should be represented primarily as an Event with time. A normali
 ## 9. Deterministic implementation
 
 Claim-to-Relation conversion should be performed by application code after Entity Resolution and registry validation. The LLM should not decide final Graph persistence.
+
+## 10. Scope boundary
+
+This standard covers **Entity → Entity** graph edges derived within a single extraction. It says nothing about how a newly extracted Claim relates to Claims already stored from earlier documents — that is Claim → Claim evolution (`duplicate` / `coexists` / `supersedes` / `contradicts`), defined in [14-CLAIM-EVOLUTION-STANDARD.md](./14-CLAIM-EVOLUTION-STANDARD.md).
+
+The two are independent: a Claim can be `CLAIM_ONLY` here (not graph-worthy) and still `supersede` an earlier Claim — the older Claim simply stops being current.

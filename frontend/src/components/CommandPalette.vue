@@ -13,7 +13,7 @@ const hot = ref(0)
 const entities = ref<{ id: string; name: string; type: string }[]>([])
 const inputEl = ref<HTMLInputElement | null>(null)
 
-interface Cmd { group: string; icon: string; cls: string; title: string; run: () => void }
+interface Cmd { group: string; icon: string; cls: string; title: string; sub?: string; run: () => void }
 
 const baseCommands: Cmd[] = [
   { group: '提问与搜索', icon: '◎', cls: 'ib-violet', title: '提问知识库（知识库问答）', run: () => done({ path: '/qa' }) },
@@ -23,7 +23,7 @@ const baseCommands: Cmd[] = [
   { group: '知识', icon: '⌘', cls: 'ib-blue', title: '关系图谱', run: () => done({ path: '/knowledge', query: { tab: 'graph' } }) },
   { group: '知识', icon: '◈', cls: 'ib-blue', title: '时间线', run: () => done({ path: '/knowledge', query: { tab: 'timeline' } }) },
   { group: '研究', icon: '◇', cls: 'ib-amber', title: '研究空间', run: () => done({ path: '/research' }) },
-  { group: '研究', icon: '✓', cls: 'ib-mint', title: '审核候选知识', run: () => done({ path: '/research', query: { tab: 'review' } }) },
+  { group: '研究', icon: '✓', cls: 'ib-mint', title: '审核候选知识', run: () => done({ path: '/review' }) },
   { group: '研究', icon: '⚠', cls: 'ib-amber', title: '冲突中心', run: () => done({ path: '/research', query: { tab: 'conflicts' } }) },
   { group: '研究', icon: '♥', cls: 'ib-mint', title: '知识健康', run: () => done({ path: '/research', query: { tab: 'health' } }) },
   { group: 'Agent', icon: '◌', cls: 'ib-violet', title: 'Agent 工作台', run: () => done({ path: '/agent' }) },
@@ -44,23 +44,52 @@ const filtered = computed(() => {
   return all.filter(c => c.title.toLowerCase().includes(s))
 })
 
+/* Knowledge hits: ⌘K must search the wiki itself, not just command titles. */
+const hits = ref<any[]>([])
+let searchTimer: number | undefined
+/** Monotonic guard so a slow response can never overwrite a newer query's hits. */
+let searchSeq = 0
+
+watch(q, () => {
+  hot.value = 0
+  window.clearTimeout(searchTimer)
+  const s = q.value.trim()
+  if (s.length < 2) { hits.value = []; return }
+  const seq = ++searchSeq
+  searchTimer = window.setTimeout(async () => {
+    try {
+      const r = await api<any[]>(`/api/search?q=${encodeURIComponent(s)}&limit=6&semantic=true`)
+      if (seq === searchSeq) hits.value = r
+    } catch { if (seq === searchSeq) hits.value = [] }
+  }, 220)
+})
+
+const hitCommands = computed<Cmd[]>(() => hits.value.map(h => ({
+  group: '知识命中', icon: '⌕', cls: 'ib-blue',
+  title: h.title || '未命名文档',
+  sub: (h.content || '').slice(0, 90),
+  run: () => done({ path: '/knowledge', query: { doc: h.document_id, chunk: h.id } }),
+})))
+
+/** Everything the keyboard walks: knowledge hits first, then commands. */
+const entries = computed(() => [...hitCommands.value, ...filtered.value])
+
 watch(() => props.open, async (v) => {
   if (!v) return
-  q.value = ''; hot.value = 0
+  q.value = ''; hot.value = 0; hits.value = []
   await nextTick(); inputEl.value?.focus()
   try {
     const list = await api<any[]>('/api/entities?limit=30')
     entities.value = list.map(e => ({ id: e.id, name: e.name, type: e.type }))
   } catch { entities.value = [] }
 })
-watch(q, () => { hot.value = 0 })
 
 function move(delta: number) {
-  if (!filtered.value.length) return
-  hot.value = (hot.value + delta + filtered.value.length) % filtered.value.length
+  if (!entries.value.length) return
+  hot.value = (hot.value + delta + entries.value.length) % entries.value.length
 }
 function activate() {
-  const c = filtered.value[hot.value]
+  const c = entries.value[hot.value]
   if (c) c.run()
   else if (q.value.trim()) ask(q.value.trim())
 }
@@ -78,13 +107,16 @@ function search(text: string) { emit('close'); router.push({ path: '/knowledge',
 <template>
   <div v-if="open" class="cmdk" @click.self="emit('close')">
     <div class="cmdbox">
-      <input ref="inputEl" v-model="q" placeholder="输入命令、实体名，或直接输入问题…" @keydown="onKey" />
+      <input ref="inputEl" v-model="q" placeholder="搜索知识、实体，或直接提问…" @keydown="onKey" />
       <div class="cmdlist">
-        <template v-for="(c, i) in filtered" :key="c.title + i">
-          <div v-if="i === 0 || filtered[i - 1].group !== c.group" class="cmdgroup">{{ c.group }}</div>
+        <template v-for="(c, i) in entries" :key="c.title + i">
+          <div v-if="i === 0 || entries[i - 1].group !== c.group" class="cmdgroup">{{ c.group }}</div>
           <div class="cmditem" :class="{ hot: i === hot }" @mouseenter="hot = i" @click="c.run()">
             <div class="ico-badge" :class="c.cls">{{ c.icon }}</div>
-            <span class="grow">{{ c.title }}</span>
+            <div class="grow">
+              <span>{{ c.title }}</span>
+              <small v-if="c.sub" class="cmdsub">{{ c.sub }}</small>
+            </div>
           </div>
         </template>
         <template v-if="q.trim()">
@@ -92,7 +124,7 @@ function search(text: string) { emit('close'); router.push({ path: '/knowledge',
           <div class="cmditem" @click="ask(q.trim())"><div class="ico-badge ib-violet">◎</div><span class="grow">提问：「{{ q.trim() }}」（知识库问答）</span></div>
           <div class="cmditem" @click="search(q.trim())"><div class="ico-badge ib-blue">⌕</div><span class="grow">搜索：「{{ q.trim() }}」</span></div>
         </template>
-        <div v-if="!filtered.length && !q.trim()" class="empty" style="margin:10px">没有匹配的命令</div>
+        <div v-if="!entries.length && !q.trim()" class="empty" style="margin:10px">没有匹配的命令</div>
       </div>
       <div class="cmdgroup" style="padding:6px 14px 10px;color:var(--faint)">↑↓ 选择 · Enter 执行 · Esc 关闭</div>
     </div>
@@ -101,4 +133,5 @@ function search(text: string) { emit('close'); router.push({ path: '/knowledge',
 
 <style scoped>
 .cmditem.hot{background:var(--tint-blue)}
+.cmdsub{display:block;color:var(--faint);font-size:9px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:440px}
 </style>

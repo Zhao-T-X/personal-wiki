@@ -14,6 +14,7 @@ This document maps the normative standards to runtime code.
 | Evidence & Provenance | `app/knowledge.py`, `app/db.py` |
 | Extraction v2.0 | `schemas/extraction.schema.json`, `app/llm.py`, `app/extraction.py` |
 | Normalization Engine | `app/normalization.py`, `app/resolution.py`, `app/knowledge.py` |
+| Claim Evolution & Conflict Handling | `app/claim_relations.py`, `app/service.py`, `app/retrieval.py`, `app/db.py` |
 
 ## Runtime boundary
 

@@ -51,3 +51,7 @@ Extraction runs should record at least document, model, prompt/schema versions, 
 ## 9. Source deletion
 
 Deleting a source should not silently fabricate or detach knowledge. Prefer archiving/unavailable states when historical provenance matters.
+
+## 10. Evolution is not deletion
+
+When a Claim stops describing the current state (`superseded`), its Evidence, provenance and offsets are retained permanently. A question about the past must remain answerable from the original source, so an update is never implemented by deleting or rewriting the older Claim's evidence. See [14-CLAIM-EVOLUTION-STANDARD.md](./14-CLAIM-EVOLUTION-STANDARD.md).

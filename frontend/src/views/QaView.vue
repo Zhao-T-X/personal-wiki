@@ -68,15 +68,27 @@ const trace = computed(() => {
   return Object.entries(byMethod)
 })
 
+/** What the evidence actually supports — the point is honesty about the gaps. */
 const boundary = computed(() => {
   const ev = result.value?.evidence || []
   const items: { level: 'ok' | 'cond' | 'open'; text: string }[] = []
-  if (ev.length) items.push({ level: 'ok', text: `直接证据支持：回答基于 ${ev.length} 条证据` })
+  if (ev.length >= 3) items.push({ level: 'ok', text: `有 ${ev.length} 条证据直接支持这个回答` })
+  else if (ev.length) items.push({ level: 'cond', text: `只有 ${ev.length} 条证据，回答可能不完整` })
+  else items.push({ level: 'open', text: '没有找到直接支持这个回答的片段' })
   items.push({ level: 'cond', text: '回答不因证据不足而自动补全——条件性结论已在正文中标注' })
   const kw = question.value.trim().slice(0, 6)
   const related = openQuestions.value.filter(q => kw && (q.content as string).includes(kw)).length
   items.push({ level: 'open', text: related ? `${related} 个开放问题与本主题相关，可继续研究` : '没有匹配的开放问题' })
   return items
+})
+
+/** Evidence strength, not a binary badge — an answer with zero hits must not read as "Grounded". */
+const evidenceLevel = computed(() => {
+  if (!result.value) return null
+  const n = result.value.evidence?.length || 0
+  if (n === 0) return { label: '无证据支持', cls: 'red' }
+  if (n < 3) return { label: '证据有限', cls: 'amber' }
+  return { label: '有据可依', cls: 'green' }
 })
 
 async function send() {
@@ -180,10 +192,16 @@ const columns = [
 
       <!-- Knowledge answer -->
       <div class="panel pad" v-if="mode === 'knowledge'">
-        <div class="row"><h3 style="font-size:13px">回答</h3><span v-if="result" class="tag green">Grounded</span></div>
-        <div v-if="loading" class="faint" style="font-size:10px;margin-top:10px">Retrieval → Ranking → Grounded Generation…</div>
+        <div class="row">
+          <h3 style="font-size:13px">回答</h3>
+          <span v-if="evidenceLevel" class="tag" :class="evidenceLevel.cls">{{ evidenceLevel.label }}</span>
+        </div>
+        <div v-if="loading" class="faint" style="font-size:10px;margin-top:10px">正在检索你的知识并整理证据…</div>
         <MarkdownView v-else-if="result" :content="result.answer" style="margin-top:10px" />
         <div v-else class="empty">输入问题开始提问</div>
+        <div v-if="result && !result.evidence.length" class="notice violet" style="margin-top:12px">
+          知识库里没有找到支持这个回答的片段。答案可能来自模型的通用知识，请谨慎采信，或先导入相关文档。
+        </div>
       </div>
 
       <div class="grid g2" style="margin-top:16px" v-if="result && mode === 'knowledge'">
@@ -192,12 +210,20 @@ const columns = [
           <div class="panel pad" style="padding:6px">
             <div v-for="(e, i) in result.evidence" :key="i" class="item" style="cursor:pointer" title="打开来源文档并定位到该片段" @click="openEvidence(e)">
               <span class="tag blue" style="flex:none">{{ i + 1 }}</span>
-              <div class="grow"><b>{{ e.title }}</b><p>{{ (e.content || '').slice(0, 80) }}</p>
-                <span class="tag">doc:{{ (e.document_id || '').slice(0, 8) }}</span><span class="tag">chunk:{{ (e.id || '').slice(0, 8) }}</span>
-                <span class="tag blue">打开来源 →</span>
+              <div class="grow">
+                <b>{{ e.title }}</b>
+                <p>{{ (e.content || '').slice(0, 100) }}</p>
+                <div style="margin-top:4px">
+                  <span class="tag">{{ e.source_type || 'Document' }}</span>
+                  <span class="tag blue">打开来源 →</span>
+                </div>
               </div>
             </div>
-            <EmptyState v-if="!result.evidence.length" text="知识库中没有匹配的证据，回答可能不受支持。" />
+            <EmptyState
+              v-if="!result.evidence.length"
+              title="没有匹配的证据"
+              text="检索没有找到支持这个回答的片段——回答目前不受你的知识库支撑。"
+            />
           </div>
           <div class="sechead"><h3>知识边界</h3></div>
           <div class="panel pad"><BoundaryList :items="boundary" /></div>

@@ -4,9 +4,9 @@ This directory contains the normative standards for knowledge extraction and nor
 
 ## Status
 
-The documents in this directory describe the intended v1.0 ontology and extraction contract. They are the semantic source of truth for future implementation work.
+The documents in this directory describe the intended v1.0 ontology and extraction contract. They are the semantic source of truth for implementation work.
 
-Current runtime code in older project versions still uses a legacy ontology. Migration to these standards should be explicit rather than performed by silent coercion.
+Runtime behaviour and these standards may still diverge in places. Where they do, the standard wins: the code is brought in line explicitly rather than by silent coercion.
 
 ## Standards map
 
@@ -23,6 +23,7 @@ Current runtime code in older project versions still uses a legacy ontology. Mig
 - [10-EXTRACTION-V2-STANDARD.md](./10-EXTRACTION-V2-STANDARD.md) — LLM extraction contract and separation of responsibilities
 - [11-NORMALIZATION-ENGINE-STANDARD.md](./11-NORMALIZATION-ENGINE-STANDARD.md) — deterministic normalization, Entity Resolution and Claim → Relation rules
 - [12-IMPLEMENTATION-MAP.md](./12-IMPLEMENTATION-MAP.md) — mapping from standards to runtime modules and schemas
+- [14-CLAIM-EVOLUTION-STANDARD.md](./14-CLAIM-EVOLUTION-STANDARD.md) — claim evolution, conflict handling and derived current knowledge
 
 ## Normative hierarchy
 

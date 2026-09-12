@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api, post, patchJson } from '../api/client'
 import type { Claim, QuestionRow } from '../api/types'
@@ -8,7 +8,6 @@ import StatusTag from '../components/StatusTag.vue'
 import KpiStrip from '../components/KpiStrip.vue'
 import FlowSteps from '../components/FlowSteps.vue'
 import EmptyState from '../components/EmptyState.vue'
-import ReviewQueue from '../components/ReviewQueue.vue'
 import MarkdownView from '../components/MarkdownView.vue'
 import { useAppStore } from '../stores/app'
 import { fmtDateTime } from '../utils/time'
@@ -17,11 +16,12 @@ const route = useRoute()
 const router = useRouter()
 const store = useAppStore()
 
-const TABS = ['Questions', '研究任务', 'Conflicts', '审核', 'Health']
+const TABS = ['Questions', '研究任务', 'Conflicts', 'Health']
 const TAB_LABELS: Record<string, string> = { Questions: '问题', Conflicts: '冲突', Health: '知识健康' }
+/* 审核 is its own page now — keep old ?tab=review deep links working. */
+if (route.query.tab === 'review') router.replace('/review')
 const initialTab = route.query.tab === 'conflicts' ? 'Conflicts'
   : route.query.tab === 'health' ? 'Health'
-  : route.query.tab === 'review' ? '审核'
   : route.query.tab === 'tasks' ? '研究任务' : 'Questions'
 const tab = ref(initialTab as string)
 const questions = ref<QuestionRow[]>([])
@@ -35,18 +35,15 @@ const findings = ref('')
 const researching = ref(false)
 
 const researchTasks = ref<any[]>([])
-const pending = ref(0)
 
 async function load() {
-  const [qs, cf, cl, rt, rv] = await Promise.all([
+  const [qs, cf, cl, rt] = await Promise.all([
     api<QuestionRow[]>('/api/questions?limit=200'),
     api<any[]>('/api/conflicts'),
     api<Claim[]>('/api/claims?limit=200'),
     api<any[]>('/api/research'),
-    api<any>('/api/review?limit=200'),
   ])
   questions.value = qs; conflicts.value = cf; claims.value = cl; researchTasks.value = rt
-  pending.value = (rv.entities?.length || 0) + (rv.claims?.length || 0) + (rv.relations?.length || 0)
   health.value = await api('/api/knowledge/health')
 }
 onMounted(load)
@@ -79,9 +76,54 @@ async function openFlow(q: QuestionRow) {
     await load()
   } catch (e: any) { store.toast(e.message) }
 }
+/* ---------- 执行过程 ----------
+   研究流水线是两次 agent 调用（KnowledgeAgent 采集 → ResearchAgent 综合），
+   每次调用都记录一条 task_type='agent' 的 run。用它驱动真实阶段，
+   而不是展示永远不变的假进度。 */
+const PHASES = [
+  { role: 'KnowledgeAgent', label: '检索知识库里已知的内容' },
+  { role: 'ResearchAgent', label: '对比来源并综合出结论' },
+]
+const researchRuns = ref<any[]>([])
+let researchPoll: number | undefined
+let researchBaseline = ''
+
+function phaseState(role: string): 'pending' | 'active' | 'done' | 'failed' {
+  const run = researchRuns.value.find(r => r.agent_role === role)
+  if (!run) return 'pending'
+  if (run.status === 'started') return 'active'
+  if (run.status === 'success') return 'done'
+  return 'failed'
+}
+
+async function refreshResearchRuns() {
+  try {
+    const runs = await api<any[]>('/api/runs?task_type=agent&limit=10')
+    // 只认本次研究开始之后产生的 run（created_at 是 UTC 字符串，字典序即时间序）
+    researchRuns.value = researchBaseline
+      ? runs.filter(r => r.created_at > researchBaseline)
+      : runs
+  } catch { /* 一次轮询失败就清空进度会更糟，保留上一次视图 */ }
+}
+
+function stopResearchPolling() {
+  window.clearInterval(researchPoll)
+  researchPoll = undefined
+}
+onBeforeUnmount(stopResearchPolling)
+
+async function beginResearch() {
+  stopResearchPolling()
+  researchRuns.value = []
+  const latest = await api<any[]>('/api/runs?task_type=agent&limit=1').catch(() => [])
+  researchBaseline = latest[0]?.created_at || ''
+  researchPoll = window.setInterval(refreshResearchRuns, 1500)
+}
+
 async function continueResearch() {
   if (!flowQuestion.value) return
   researching.value = true; findings.value = ''
+  await beginResearch()
   try {
     if (!activeTaskId.value) {
       const created = await post<any>('/api/research', { question_text: flowQuestion.value.content, question_id: flowQuestion.value.id })
@@ -91,7 +133,11 @@ async function continueResearch() {
     findings.value = r.findings || '(无返回)'
     store.toast('研究完成，Findings 已落库')
     await load()
-  } catch (e: any) { store.toast(e.message); await load() } finally { researching.value = false }
+  } catch (e: any) { store.toast(e.message); await load() } finally {
+    researching.value = false
+    stopResearchPolling()
+    await refreshResearchRuns()  // 最后一次刷新，让阶段定格在完成态
+  }
 }
 
 async function keepBoth(cf: any) {
@@ -132,11 +178,9 @@ async function resolveQuestion(q: QuestionRow) {
     <div class="seg" style="margin:16px 0 14px">
       <button v-for="t in TABS" :key="t" :class="{ active: tab === t }" @click="tab = t">
         {{ TAB_LABELS[t] || t }}<span v-if="t === 'Conflicts' && conflicts.length" class="tag amber" style="margin-left:4px">{{ conflicts.length }}</span>
-        <span v-if="t === '审核' && pending" class="tag blue" style="margin-left:4px">{{ pending }}</span>
       </button>
     </div>
 
-    <ReviewQueue v-if="tab === '审核'" />
     <div v-if="tab === '研究任务'">
       <div class="sechead"><h3>研究任务</h3><span class="faint" style="font-size:9px">Question → Findings 的落库闭环</span></div>
       <div class="panel pad" style="padding:6px">
@@ -184,16 +228,22 @@ async function resolveQuestion(q: QuestionRow) {
             <hr class="hairline" />
             <FlowSteps :steps="[
               { title: 'Question', sub: flowQuestion.status },
-              { title: 'Known', sub: `${knownClaims.length} claims` },
-              { title: 'Unknown', sub: '待研究' },
-              { title: 'Plan', sub: 'ResearchAgent' },
-            ]" />
-            <FlowSteps :steps="[
-              { title: 'Sources', sub: `${knownClaims.length} 条` },
+              { title: 'Known', sub: `${knownClaims.length} 条相关断言` },
               { title: 'Findings', sub: researching ? '进行中' : findings ? '已返回' : '待执行' },
-              { title: 'Claims', sub: '待生成' },
               { title: 'Review', sub: '人工' },
             ]" />
+
+            <div class="sechead" style="margin:14px 0 10px"><h3>执行过程</h3></div>
+            <div class="rphases">
+              <div v-for="p in PHASES" :key="p.role" class="rphase" :class="phaseState(p.role)">
+                <span class="rphase-dot">{{ phaseState(p.role) === 'done' ? '✓' : phaseState(p.role) === 'failed' ? '×' : phaseState(p.role) === 'active' ? '◌' : '·' }}</span>
+                <span class="grow">{{ p.label }}</span>
+                <span class="tag">{{ p.role }}</span>
+              </div>
+              <p v-if="!researchRuns.length" class="muted" style="font-size:9px;margin:6px 0 0">
+                点「继续研究」后，这里会显示两个 Agent 的真实执行顺序与结果。
+              </p>
+            </div>
             <div class="sechead" style="margin:10px 0 10px"><h3>Known · 相关证据</h3></div>
             <div v-for="c in knownClaims" :key="c.id" class="item" style="cursor:default">
               <div class="grow"><b>{{ c.subject_name }} → {{ c.predicate }} → {{ c.object_name || c.object_text || '—' }}</b><p>{{ (c.source_quote || c.content || '').slice(0, 70) }}</p></div>
@@ -236,7 +286,7 @@ async function resolveQuestion(q: QuestionRow) {
           <button class="btn" @click="router.push('/knowledge/claim/' + cf.claims[0].id)">查看 Evidence</button>
           <button class="btn" @click="keepBoth(cf)">保留两者</button>
           <button class="btn primary" @click="createResearchFromConflict(cf)">创建研究</button>
-          <button class="btn ghost" @click="tab = '审核'">去审核</button>
+          <button class="btn ghost" @click="router.push('/review')">去审核</button>
         </div>
       </div>
       <EmptyState v-if="!conflicts.length" text="没有检测到冲突——同一主题下的 Claims 极性一致" />
@@ -247,7 +297,7 @@ async function resolveQuestion(q: QuestionRow) {
       <div class="kv" style="grid-template-columns:220px 1fr;gap:14px;font-size:10.5px">
         <span>已验证 Claims</span>
         <b>{{ health.verified_claims }}/{{ health.total_claims }}（{{ health.verified_claim_ratio }}%）
-          <span class="tag" :class="health.verified_claim_ratio > 50 ? 'green' : 'amber'" style="margin-left:6px">{{ health.verified_claim_ratio > 50 ? 'healthy' : '多数待在审核' }}</span></b>
+          <span class="tag" :class="health.verified_claim_ratio > 50 ? 'green' : 'amber'" style="margin-left:6px">{{ health.verified_claim_ratio > 50 ? '健康' : '多数待在审核' }}</span></b>
         <span>已验证实体</span>
         <b>{{ health.verified_entities }}/{{ health.total_entities }}（{{ health.verified_entity_ratio }}%）</b>
         <span>图谱关系</span><b>{{ health.relations }} 条（由 verified/高确定性 Claims 派生）</b>
@@ -259,3 +309,13 @@ async function resolveQuestion(q: QuestionRow) {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* 研究执行过程：真实 agent 阶段，替代写死的假进度 */
+.rphases{display:flex;flex-direction:column;gap:7px}
+.rphase{display:flex;align-items:center;gap:9px;padding:9px 12px;border-radius:11px;background:var(--surface2);font-size:10px;color:var(--sub)}
+.rphase.done{color:#1e8f6b;background:var(--tint-mint)}
+.rphase.active{color:#4a63e8;background:var(--tint-blue)}
+.rphase.failed{color:#c8565f;background:#fff0f1}
+.rphase-dot{font-size:10px;line-height:1;flex:none}
+</style>

@@ -101,3 +101,12 @@ worse_than
 ```
 
 The reason is not that these statements are unimportant. The reason is that they often require contextual conditions, metrics, experimental settings or role information that should not be erased by a binary Graph edge.
+
+## 5. Cardinality is not encoded
+
+The registry is a flat vocabulary: predicates are strings, with no metadata saying whether a subject holds one value or many for them. This has a direct consequence for evolution handling (see [14-CLAIM-EVOLUTION-STANDARD.md](./14-CLAIM-EVOLUTION-STANDARD.md)):
+
+- Two Claims sharing subject + predicate but differing in object can only be interpreted once that predicate's cardinality is known. Single-valued (`is`, `defined_as`, `classified_as`) means the knowledge changed; multi-valued means both facts stand side by side.
+- Because the registry cannot answer this, the deterministic conflict rules keep an explicit, deliberately small set of single-valued predicates in code. Anything outside it defaults to "both can be true", which never destroys information.
+
+Adding per-predicate metadata here — `cardinality: one | many` — is the natural way to retire that hard-coded list. It is not required for v1.0, but it is the intended extension point.

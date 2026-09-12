@@ -9,12 +9,13 @@ from .config import runtime, save_settings
 from .db import connect, init_db, loads, dumps
 from .models import (AskRequest, DocumentCreate, StatusUpdate, SearchRequest, EntityUpdate,
                      EntityCreate, IdeaCreate, QuestionCreate, EventCreate, ResearchCreate)
-from .service import create_document, index_document, embed_document
+from .service import create_document, index_document, embed_document, delete_document
 from .retrieval import evidence_pack, format_evidence, search, lexical_search
 from .llm import answer
 from .ontology import KNOWLEDGE_STATUSES, IDEA_STATUSES, QUESTION_STATUSES
 from .importer import SUPPORTED
 from .graph import neighborhood
+from .resolution import find_similar_entities
 from .prompt_profiles import list_profiles, get_profile, update_profile, reset_profile, restore_version
 
 app=FastAPI(title='LLM-Wiki', version=__version__)
@@ -215,6 +216,130 @@ def get_claim(claim_id:str):
         JOIN entities s ON s.id=c.subject_id LEFT JOIN entities o ON o.id=c.object_id WHERE c.id=?''',(claim_id,)).fetchone()
     if not row: conn.close(); raise HTTPException(404,'Claim not found')
     conn.close(); return dict(row)|{'context':loads(row['context_json'],{})}
+
+@app.get('/api/claims/{claim_id}/relations')
+def claim_relations_for(claim_id:str):
+    """How this claim relates to other claims (both directions).
+
+    Claims are never overwritten, so this is the only place knowledge evolution is
+    expressed — including whether a newer claim supersedes this one.
+    """
+    conn=connect()
+    rows=conn.execute('''SELECT r.id,r.relationship,r.confidence,r.reason,r.suggested_action,r.status,r.created_at,
+                                r.source_claim_id,r.target_claim_id,
+                                c.id other_id,c.predicate,c.content,c.object_text,
+                                c.confidence other_confidence,c.status other_status,c.created_at other_created_at,
+                                c.source_document_id,c.source_quote,
+                                s.name subject_name,o.name object_name,d.title document_title
+                         FROM claim_relations r
+                         JOIN claims c ON c.id = CASE WHEN r.source_claim_id=? THEN r.target_claim_id ELSE r.source_claim_id END
+                         JOIN entities s ON s.id=c.subject_id
+                         LEFT JOIN entities o ON o.id=c.object_id
+                         LEFT JOIN documents d ON d.id=c.source_document_id
+                         WHERE r.source_claim_id=? OR r.target_claim_id=?
+                         ORDER BY r.created_at DESC''',(claim_id,claim_id,claim_id)).fetchall()
+    conn.close()
+    return {'claim_id':claim_id,'relations':[dict(r) for r in rows]}
+
+@app.get('/api/claim-relations')
+def claim_relations_queue(status:str|None=None,limit:int=100):
+    """Claim-to-claim relationships awaiting a decision, newest first."""
+    limit=max(1,min(limit,500))
+    sql='''SELECT r.id,r.relationship,r.confidence,r.reason,r.suggested_action,r.status,r.created_by,r.created_at,
+                  ns.id new_id,ns.predicate new_predicate,ns.content new_content,ns.object_text new_object_text,
+                  ns.confidence new_confidence,ns.status new_status,ns.source_quote new_quote,
+                  ns.source_document_id new_document_id,nsu.name new_subject,nou.name new_object,
+                  nd.title new_document_title,
+                  os.id old_id,os.predicate old_predicate,os.content old_content,os.object_text old_object_text,
+                  os.confidence old_confidence,os.status old_status,os.source_quote old_quote,
+                  os.source_document_id old_document_id,osu.name old_subject,oou.name old_object,
+                  od.title old_document_title
+           FROM claim_relations r
+           JOIN claims ns ON ns.id=r.source_claim_id
+           JOIN entities nsu ON nsu.id=ns.subject_id
+           LEFT JOIN entities nou ON nou.id=ns.object_id
+           LEFT JOIN documents nd ON nd.id=ns.source_document_id
+           JOIN claims os ON os.id=r.target_claim_id
+           JOIN entities osu ON osu.id=os.subject_id
+           LEFT JOIN entities oou ON oou.id=os.object_id
+           LEFT JOIN documents od ON od.id=os.source_document_id'''
+    params=[]
+    if status: sql+=' WHERE r.status=?'; params.append(status)
+    sql+=' ORDER BY r.created_at DESC LIMIT ?'; params.append(limit)
+    conn=connect(); rows=conn.execute(sql,params).fetchall(); conn.close()
+    return [dict(r) for r in rows]
+
+@app.post('/api/claim-relations/{relation_id}/analyze')
+async def analyze_claim_relation(relation_id:str):
+    """Ask the model how two claims relate — a suggestion the user may accept.
+
+    Deterministic detection runs at import time. This is the on-demand escape hatch
+    for cases structure cannot read (differently-worded statements, evidence that
+    states a replacement). It writes nothing by itself.
+    """
+    conn=connect()
+    rel=conn.execute('SELECT * FROM claim_relations WHERE id=?',(relation_id,)).fetchone()
+    if not rel:
+        conn.close(); raise HTTPException(404,'Claim relation not found')
+    rel=dict(rel)
+
+    def _brief(claim_id):
+        row=conn.execute('''SELECT c.predicate,c.content,c.object_text,c.source_quote,
+                                   s.name subject_name,o.name object_name
+                            FROM claims c JOIN entities s ON s.id=c.subject_id
+                            LEFT JOIN entities o ON o.id=c.object_id WHERE c.id=?''',(claim_id,)).fetchone()
+        return dict(row) if row else {}
+    new_claim=_brief(rel['source_claim_id']); old_claim=_brief(rel['target_claim_id'])
+    conn.close()
+
+    from .claim_relations import analyze_relation
+    verdict=await analyze_relation(new_claim,old_claim)
+    if verdict is None:
+        raise HTTPException(503,'模型不可用或未配置，无法进行语义判断')
+    return verdict
+
+@app.patch('/api/claim-relations/{relation_id}')
+def update_claim_relation(relation_id:str,payload:dict):
+    """Resolve a suggested knowledge change.
+
+    `relationship='supersedes'` + `status='accepted'` is the only path that makes an
+    older claim stop being current. It moves that claim's *lifecycle status* — its
+    text, object, evidence and provenance are never rewritten — and records the
+    previous status so the decision can be undone exactly rather than guessed at.
+    """
+    from .claim_relations import RELATIONSHIPS
+    body=payload or {}
+    new_status=body.get('status')
+    if new_status not in ('accepted','rejected','candidate'):
+        raise HTTPException(422,'status must be accepted, rejected or candidate')
+    relationship=body.get('relationship')
+    if relationship is not None and relationship not in RELATIONSHIPS:
+        raise HTTPException(422,f'Unknown relationship: {relationship}')
+    conn=connect()
+    row=conn.execute('SELECT * FROM claim_relations WHERE id=?',(relation_id,)).fetchone()
+    if not row:
+        conn.close(); raise HTTPException(404,'Claim relation not found')
+    rel=dict(row)
+    try:
+        if relationship is not None:
+            conn.execute('UPDATE claim_relations SET status=?,relationship=? WHERE id=?',
+                         (new_status,relationship,relation_id))
+        else:
+            conn.execute('UPDATE claim_relations SET status=? WHERE id=?',(new_status,relation_id))
+
+        if relationship=='supersedes' and new_status=='accepted':
+            older=conn.execute('SELECT status FROM claims WHERE id=?',(rel['target_claim_id'],)).fetchone()
+            conn.execute('UPDATE claim_relations SET target_previous_status=? WHERE id=?',
+                         (older['status'] if older else None,relation_id))
+            conn.execute("UPDATE claims SET status='superseded' WHERE id=?",(rel['target_claim_id'],))
+        elif rel.get('target_previous_status'):
+            # Any retreat from a confirmed supersession restores the older claim.
+            conn.execute('UPDATE claims SET status=? WHERE id=? AND status=?',
+                         (rel['target_previous_status'],rel['target_claim_id'],'superseded'))
+        conn.commit()
+    finally:
+        conn.close()
+    return {'id':relation_id,'status':new_status,'relationship':relationship}
 
 @app.get('/api/entities/{entity_id}/object')
 def entity_object(entity_id:str):
@@ -491,6 +616,16 @@ def entity_graph(entity_id:str,depth:int=1,limit:int=100):
     if result is None: raise HTTPException(404,'Entity not found')
     return result
 
+@app.get('/api/entities/{entity_id}/duplicates')
+def entity_duplicates(entity_id:str,limit:int=5):
+    """Entities that look like the same thing but were never auto-merged."""
+    conn=connect()
+    try:
+        out=find_similar_entities(conn,entity_id,limit=max(1,min(limit,20)))
+    finally:
+        conn.close()
+    return {'entity_id':entity_id,'duplicates':out}
+
 @app.get('/api/claims')
 def claims(limit:int=100,status:str|None=None):
     conn=connect(); sql='''SELECT c.id,c.predicate,c.content,c.object_text,c.context_json,c.confidence,c.status,s.id subject_id,s.name subject_name,o.id object_id,o.name object_name,c.source_document_id,c.source_chunk_id,c.source_start_offset,c.source_end_offset,c.source_quote FROM claims c JOIN entities s ON s.id=c.subject_id LEFT JOIN entities o ON o.id=c.object_id'''; params=[]
@@ -511,7 +646,7 @@ def review(limit:int=100):
         "SELECT id,name,type,description,status,created_at FROM entities WHERE status='candidate' ORDER BY created_at DESC LIMIT ?",(limit,)).fetchall()]
     out['claims']=[dict(r) for r in conn.execute(
         '''SELECT c.id,c.predicate,c.content,c.object_text,c.confidence,c.status,c.polarity,c.modality,c.claim_type,
-                  c.source_document_id,c.source_quote,c.source_start_offset,c.source_end_offset,
+                  c.source_document_id,c.source_chunk_id,c.source_quote,c.source_start_offset,c.source_end_offset,
                   s.name subject_name,o.name object_name
            FROM claims c JOIN entities s ON s.id=c.subject_id LEFT JOIN entities o ON o.id=c.object_id
            WHERE c.status='candidate' ORDER BY c.created_at DESC LIMIT ?''',(limit,)).fetchall()]
@@ -677,8 +812,7 @@ def update_doc(doc_id: str, data: DocumentCreate):
 
 @app.delete('/api/documents/{doc_id}')
 def delete_doc(doc_id: str):
-    conn = connect(); cur = conn.execute('DELETE FROM documents WHERE id=?', (doc_id,)); conn.commit(); conn.close()
-    if not cur.rowcount:
+    if not delete_document(doc_id):
         raise HTTPException(404, 'Document not found')
     return {'id': doc_id, 'deleted': True}
 

@@ -44,3 +44,20 @@ export function fmtDate(value: TimeInput): string {
   const d = toDate(value)
   return d ? dateFmt.format(d).replace(/\//g, '-') : '—'
 }
+
+/**
+ * 相对时间："刚刚 / N 分钟前 / N 小时前 / N 天前"，超过 7 天回落到日期。
+ * 用于活动流——用户关心的是"多久之前"，不是精确到秒的时间戳。
+ */
+export function fmtRelative(value: TimeInput): string {
+  const d = toDate(value)
+  if (!d) return '—'
+  const minutes = Math.floor((Date.now() - d.getTime()) / 60000)
+  if (minutes < 1) return '刚刚'
+  if (minutes < 60) return `${minutes} 分钟前`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} 小时前`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days} 天前`
+  return fmtDate(d)
+}

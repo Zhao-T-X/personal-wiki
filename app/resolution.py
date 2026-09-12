@@ -1,9 +1,26 @@
 from __future__ import annotations
 
+import re
 import uuid
 from difflib import SequenceMatcher
 from .db import dumps, loads
 from .ontology import normalize_name, canonical_entity_type
+
+# Legal suffixes carry no identity: "Apple Inc." and "Apple" are the same entity.
+# normalize_name only folds whitespace and case, so without this "Apple Inc." vs
+# "Apple Computer" scores ~0.67 and slips past a similarity threshold.
+_COMPANY_SUFFIXES = {
+    'inc', 'incorporated', 'ltd', 'limited', 'llc', 'corp', 'corporation',
+    'co', 'gmbh', 'plc', 'sa', 'ag', 'bv', 'nv', 'pte', 'kk',
+}
+
+
+def _loose_name(value: str) -> str:
+    """normalize_name + punctuation removal + legal-suffix stripping."""
+    text = re.sub(r'[^\w\s]', ' ', normalize_name(value))
+    words = [w for w in text.split() if w and w not in _COMPANY_SUFFIXES]
+    # Never return empty: a name that is *only* a suffix is still a name.
+    return ' '.join(words) or normalize_name(value)
 
 
 def _same_type_score(name: str, candidate_name: str, requested_types: set[str], candidate_types: set[str]) -> float:
@@ -49,3 +66,42 @@ def resolve_or_create_entity(conn, *, name: str, entity_types: list[str] | None 
     for alias in merged_aliases:
         conn.execute('INSERT OR IGNORE INTO entity_aliases(entity_id,alias,alias_normalized) VALUES(?,?,?)', (entity_id, alias, normalize_name(alias)))
     return entity_id
+
+
+def find_similar_entities(conn, entity_id: str, *, limit: int = 5, threshold: float = 0.65) -> list[dict]:
+    """Near-duplicates that resolution deliberately left alone.
+
+    ``resolve_or_create_entity`` auto-merges at >=0.93 similarity. Anything below
+    that survives as a separate row, which is exactly the pair a human should
+    judge — the goal here is to surface candidates, not to decide for them. That
+    is why the threshold is loose and the caller shows a similarity percentage.
+    """
+    row = conn.execute('SELECT id,name,type,types_json FROM entities WHERE id=?', (entity_id,)).fetchone()
+    if not row:
+        return []
+    target = _loose_name(row['name'])
+    if not target:
+        return []
+    target_types = set(loads(row['types_json'], [])) or ({row['type']} if row['type'] else set())
+
+    out = []
+    for cand in conn.execute(
+            'SELECT id,name,type,types_json,status FROM entities WHERE id != ? ORDER BY updated_at DESC LIMIT 800',
+            (entity_id,)):
+        cand_types = set(loads(cand['types_json'], [])) or ({cand['type']} if cand['type'] else set())
+        if target_types and cand_types and not target_types.intersection(cand_types):
+            continue
+        name = _loose_name(cand['name'])
+        if not name:
+            continue
+        # Containment first: "apple" vs "apple computer" must not be missed just
+        # because the longer name drags the ratio down.
+        if target in name or name in target:
+            score = 1.0
+        else:
+            score = SequenceMatcher(None, target, name).ratio()
+        if score >= threshold:
+            out.append({'id': cand['id'], 'name': cand['name'], 'type': cand['type'],
+                        'status': cand['status'], 'similarity': round(score, 3)})
+    out.sort(key=lambda x: x['similarity'], reverse=True)
+    return out[:limit]

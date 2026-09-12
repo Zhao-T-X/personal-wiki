@@ -6,6 +6,7 @@ from .llm import extract
 from .config import runtime
 from .extraction import normalize_extraction
 from .knowledge import persist_extraction
+from .claim_relations import detect_claim_relations
 
 
 def create_document(*, title, content, source_type='note', source_uri=None, metadata=None):
@@ -32,10 +33,32 @@ def write_chunks(document_id: str, text: str):
     return rows
 
 
+# Tables that point at a document *without* ON DELETE CASCADE. Deleting the
+# document row while any of these still reference it fails the foreign-key check,
+# so they must be cleared first (chunks / embeddings / llm_runs cascade already).
+_DERIVED_TABLES = ('claims','relations','events','ideas','questions')
+
+
 def clear_derived(document_id: str):
     with transaction() as conn:
-        for table in ('claims','relations','events','ideas','questions'):
+        for table in _DERIVED_TABLES:
             conn.execute(f'DELETE FROM {table} WHERE source_document_id=?',(document_id,))
+
+
+def delete_document(document_id: str) -> bool:
+    """Delete a document and everything derived from it. False if it does not exist.
+
+    Runs in one transaction: a failure cannot leave the document half-removed, and
+    the connection is always closed, so it can never leak a write lock onto
+    unrelated requests (which surfaced as "database is locked").
+    """
+    with transaction() as conn:
+        if not conn.execute('SELECT 1 FROM documents WHERE id=?', (document_id,)).fetchone():
+            return False
+        for table in _DERIVED_TABLES:
+            conn.execute(f'DELETE FROM {table} WHERE source_document_id=?', (document_id,))
+        conn.execute('DELETE FROM documents WHERE id=?', (document_id,))
+    return True
 
 
 async def index_document(document_id: str, *, use_llm=True):
@@ -58,6 +81,9 @@ async def index_document(document_id: str, *, use_llm=True):
         result=normalize_extraction(await extract(chunks))
         with transaction() as conn:
             counts=persist_extraction(conn,document_id=document_id,extraction=result)
+            # Relationship detection shares this transaction so a claim can never be
+            # committed without the relation explaining how it fits what we knew.
+            counts['claim_relations']=detect_claim_relations(conn,document_id=document_id)
         run.summary={**counts,'chunks':len(chunks)}
         embedded=False
         if runtime()['auto_embed']:

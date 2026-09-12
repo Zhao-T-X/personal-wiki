@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS claims (
   polarity TEXT NOT NULL DEFAULT 'positive',
   modality TEXT NOT NULL DEFAULT 'asserted',
   confidence REAL CHECK(confidence IS NULL OR confidence BETWEEN 0 AND 1),
-  status TEXT NOT NULL DEFAULT 'candidate' CHECK(status IN ('draft','candidate','verified','rejected','archived')),
+  status TEXT NOT NULL DEFAULT 'candidate' CHECK(status IN ('draft','candidate','verified','rejected','archived','superseded')),
   created_by TEXT NOT NULL DEFAULT 'llm',
   source_document_id TEXT NOT NULL REFERENCES documents(id),
   source_chunk_id TEXT NOT NULL REFERENCES chunks(id),
@@ -216,6 +216,29 @@ CREATE TABLE IF NOT EXISTS llm_run_steps (
 );
 CREATE INDEX IF NOT EXISTS idx_llm_run_steps_run ON llm_run_steps(run_id, step_index);
 
+-- Claim-to-claim relationships (duplicate / coexists / supersedes / contradicts).
+-- New knowledge never overwrites an old claim; the relationship between them is
+-- what changes. Both sides CASCADE so removing a claim can never leave a
+-- dangling relation behind (or fail a foreign-key check).
+CREATE TABLE IF NOT EXISTS claim_relations (
+  id TEXT PRIMARY KEY,
+  source_claim_id TEXT NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
+  target_claim_id TEXT NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
+  relationship TEXT NOT NULL CHECK(relationship IN ('duplicate','coexists','supersedes','contradicts','unclear')),
+  confidence REAL CHECK(confidence IS NULL OR confidence BETWEEN 0 AND 1),
+  reason TEXT,
+  suggested_action TEXT,
+  status TEXT NOT NULL DEFAULT 'candidate' CHECK(status IN ('candidate','accepted','rejected')),
+  created_by TEXT NOT NULL DEFAULT 'system',
+  -- Status the older claim held before a human confirmed it was superseded, so
+  -- that decision can be undone exactly instead of guessed at.
+  target_previous_status TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(source_claim_id, target_claim_id, relationship)
+);
+CREATE INDEX IF NOT EXISTS idx_claim_rel_source ON claim_relations(source_claim_id);
+CREATE INDEX IF NOT EXISTS idx_claim_rel_target ON claim_relations(target_claim_id);
+
 CREATE TABLE IF NOT EXISTS context_runs (
   id TEXT PRIMARY KEY,
   run_id TEXT,
@@ -307,7 +330,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts USING fts5(
   content,
   content='documents',
   content_rowid='rowid',
-  tokenize='unicode61'
+  tokenize='trigram'
 );
 
 CREATE TRIGGER IF NOT EXISTS documents_ai AFTER INSERT ON documents BEGIN
@@ -439,6 +462,75 @@ def _ensure_token_columns(conn: sqlite3.Connection) -> None:
                 conn.execute(f'ALTER TABLE {table} ADD COLUMN {name} {ddl}')
 
 
+def _migrate_claim_statuses(conn: sqlite3.Connection) -> None:
+    """Allow 'superseded' as a claim status.
+
+    Superseded is history, not error, so it must be distinct from rejected — that
+    distinction is what lets retrieval prefer current knowledge while still being
+    able to answer historical questions. SQLite cannot alter a CHECK constraint,
+    so the table is rebuilt from its own stored DDL, which keeps the column order
+    (and therefore `INSERT ... SELECT *`) identical.
+
+    Foreign keys are switched off across the swap: claim_relations and friends
+    reference `claims` by name, and the DROP/RENAME would otherwise trip them.
+    """
+    import re
+    row = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='claims'").fetchone()
+    ddl = (row['sql'] if row else '') or ''
+    if not ddl or 'superseded' in ddl:
+        return  # fresh schema already allows it, or nothing to migrate
+    if "'rejected','archived'" not in ddl:
+        return  # unrecognised shape — leave it alone rather than guess
+    rebuilt = re.sub(r'CREATE TABLE\s+(IF NOT EXISTS\s+)?claims\b',
+                     'CREATE TABLE claims_migrated', ddl, count=1, flags=re.I)
+    rebuilt = rebuilt.replace("'rejected','archived'", "'rejected','archived','superseded'")
+
+    conn.commit()  # PRAGMA foreign_keys is a no-op inside a transaction
+    conn.execute('PRAGMA foreign_keys=OFF')
+    try:
+        conn.executescript(
+            f'{rebuilt};\n'
+            'INSERT INTO claims_migrated SELECT * FROM claims;\n'
+            'DROP TABLE claims;\n'
+            'ALTER TABLE claims_migrated RENAME TO claims;\n'
+            'CREATE INDEX IF NOT EXISTS idx_claims_subject ON claims(subject_id);\n'
+            'CREATE INDEX IF NOT EXISTS idx_claims_object ON claims(object_id);\n'
+            'CREATE INDEX IF NOT EXISTS idx_claims_document ON claims(source_document_id);\n')
+    finally:
+        conn.execute('PRAGMA foreign_keys=ON')
+
+
+def _ensure_claim_relation_columns(conn: sqlite3.Connection) -> None:
+    """Add columns introduced after claim_relations first shipped."""
+    existing = {row['name'] for row in conn.execute('PRAGMA table_info(claim_relations)')}
+    if existing and 'target_previous_status' not in existing:
+        conn.execute('ALTER TABLE claim_relations ADD COLUMN target_previous_status TEXT')
+
+
+def _migrate_fts_tokenizer(conn: sqlite3.Connection) -> None:
+    """Switch documents_fts to the trigram tokenizer.
+
+    unicode61 treats a whole run of CJK characters as a single token, so a Chinese
+    document could only be found by a query repeating it verbatim — searching
+    "苹果" returned nothing from a document titled "苹果的SEO是乔布斯". trigram
+    indexes overlapping three-character windows, which makes substring matching
+    work for Chinese as well as it does for English.
+
+    The index is external-content, so 'rebuild' refills it from `documents`
+    instead of re-inserting every row by hand.
+    """
+    row = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='documents_fts'").fetchone()
+    ddl = (row['sql'] if row else '') or ''
+    if not ddl or 'trigram' in ddl:
+        return
+    conn.executescript('''
+        DROP TABLE IF EXISTS documents_fts;
+        CREATE VIRTUAL TABLE documents_fts USING fts5(
+          title, content, content='documents', content_rowid='rowid', tokenize='trigram');
+    ''')
+    conn.execute("INSERT INTO documents_fts(documents_fts) VALUES('rebuild')")
+
+
 def init_db() -> None:
     conn = connect()
     # Fresh DBs use the current schema; old dev DBs are upgraded in-place when possible.
@@ -448,9 +540,13 @@ def init_db() -> None:
         _migrate_legacy_claims(conn)
         _migrate_nullable_sources(conn)
         _ensure_token_columns(conn)
+        _ensure_claim_relation_columns(conn)
+        _migrate_fts_tokenizer(conn)
         conn.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_entities_name_ci ON entities(lower(name))')
         conn.execute('CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(type)')
         conn.execute('CREATE INDEX IF NOT EXISTS idx_rel_key ON relations(source_id,predicate,target_id)')
+        # Runs last: it commits internally to toggle foreign keys safely.
+        _migrate_claim_statuses(conn)
     except Exception:
         # A partially initialized old database should not block fresh startup; the next run can retry.
         conn.rollback()
