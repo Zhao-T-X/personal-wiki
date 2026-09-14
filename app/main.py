@@ -659,8 +659,9 @@ _NO_EVIDENCE_REPLY = ('知识库中没有找到与该问题匹配的证据。请
 _DIRECT_REFUSALS = {
     'ambiguous_multiple_current_claims':
         '知识库中没有足够证据确定唯一答案（存在多条冲突记录），因此不作答。',
-    # The wording must contain a refusal marker (see app/evaluation/qa_eval.py):
-    # a refusal the evaluator does not recognise would be scored as a hallucination.
+    # The wording must satisfy the shared refusal semantics (app/domain/refusal.py):
+    # a safety stop the evaluator does not recognise would be scored as a
+    # hallucination, so the endpoint and the evaluator must agree (ADR-014).
     'no_current_claim':
         '知识库中没有当前有效值：关于该问题的记录已被取代或过时，因此不作答。',
 }

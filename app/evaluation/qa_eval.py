@@ -10,32 +10,29 @@ golden file records the answer, its ``citations`` and the cited chunk contents):
   validated with :func:`app.domain.citation_validation.validate_citations`
   **without an ``llm``**, so only locatability / coverage / currentness run and
   the semantic ``support`` dimension is honestly left as ``None`` — it is never
-  fabricated. A correct refusal makes no assertion, so it is fully grounded.
-
-Because :func:`validate_citations` also treats a *short* answer with no
-citations as a refusal (its heuristic), this module gates ``citation_coverage``
-and ``groundedness`` on the stricter contract below: an answer that offers no
-evidence and carries no explicit refusal signal is scored as ungrounded
-(``0.0``) rather than inheriting the module's lenient shortcut. The raw,
-unmodified module result is still exposed under ``dimensions``.
+  fabricated. A safety stop makes no assertion, so it is fully grounded.
 * ``answer_correctness`` — normalised (casefold + whitespace-collapsed) substring
   / exact match against ``expected_answer``.
-* ``refusal_correct``    — whether the answer refused exactly when it should.
+* ``refusal_kind``       — the answer's kind under the shared refusal semantics.
 
-The §23 ``NO_SUFFICIENT_EVIDENCE`` refusal contract
----------------------------------------------------
-An answer counts as a **refusal** (i.e. the system admits it has no sufficient
-evidence) if and only if *all* of the following hold:
+Refusal semantics (ADR-014)
+---------------------------
+This module no longer decides for itself what a refusal is. It consumes the one
+definition in :mod:`app.domain.refusal` through the **evaluation** detector, so a
+dataset label and a runtime judgement can never disagree about the same answer:
 
-1. ``citations`` is empty — no evidence is offered as support;
-2. it carries an explicit signal: it is empty, **or** it contains one of the
-   :data:`REFUSAL_MARKERS` (the same phrases the QA API returns, e.g.
-   ``知识库中没有找到与该问题匹配的证据``);
-3. it contains no inline citation marker (``[doc:.. chunk:..]``).
+* ``NON_REFUSAL``           — a substantive answer. **No citations is not a
+  refusal**; it is an answer that happens to be untraceable.
+* ``INSUFFICIENT_EVIDENCE`` — the answer says the knowledge base lacks evidence.
+  This is the behaviour §23 *wants*, so it counts as a correct safety stop (it is
+  deliberately not the same kind as a refusal).
+* ``REFUSAL``               — the answer declines to answer.
+* ``UNKNOWN``               — no signal (e.g. an empty answer).
 
-Conversely, any substantive answer that is *not* a refusal while the case has no
-sufficient evidence (``expected_refusal`` or an empty citation list) counts as an
-**unknown-answer hallucination**. The dataset reports that rate; it must be 0.0.
+``expected_refusal`` in the golden file means "expected no substantive answer", so
+either kind of safety stop satisfies it. A case that offered no evidence yet still
+asserted something (``NON_REFUSAL``) is an **unknown-answer hallucination**; an
+empty ``UNKNOWN`` answer asserts nothing and is therefore not one.
 
 Pure and offline (ADR-011): no FastAPI, no AgentScope, no sqlite3, no LLM.
 """
@@ -48,40 +45,21 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ..domain.citation_validation import validate_citations
+from ..domain.refusal import RefusalDecision, RefusalKind, classify_refusal
 
-# Phrases that signal an explicit "no sufficient evidence" refusal. They mirror
-# what the QA API returns when retrieval finds nothing, and the hints used by
-# ``domain.citation_validation``.
-REFUSAL_MARKERS: tuple[str, ...] = (
-    '知识库中没有',
-    '没有找到',
-    '无法回答',
-    'no sufficient evidence',
-    'no evidence',
-    'insufficient evidence',
-    'not found in the knowledge base',
-)
-
-_INLINE_CITATION = re.compile(r'\[doc:[^\]]*chunk:[^\]]*\]', re.IGNORECASE)
+# How this module consumes the shared semantics; recorded on every decision so a
+# disagreement is attributable to a detector rather than to the definition.
+DETECTOR = 'evaluation'
 
 
-# --- refusal contract --------------------------------------------------------
+def refusal_decision(answer: str, citations: list[dict] | None = None) -> RefusalDecision:
+    """Classify one answer with the shared semantics, as the evaluation detector."""
+    return classify_refusal(answer, citations=citations, detector=DETECTOR)
 
-def is_refusal(answer: str, citations: list[dict] | None) -> bool:
-    """Apply the §23 ``NO_SUFFICIENT_EVIDENCE`` refusal test (see module docstring).
 
-    Deterministic and side-effect free: the three conditions are checked in
-    order and a single ``False`` (evidence offered, inline markers present, or no
-    explicit signal) is enough to classify the answer as substantive.
-    """
-    if citations:
-        return False
-    if _INLINE_CITATION.search(answer or ''):
-        return False
-    text = (answer or '').strip()
-    if not text:
-        return True
-    return any(marker in text for marker in REFUSAL_MARKERS)
+def refusal_kind(answer: str, citations: list[dict] | None = None) -> str:
+    """The :class:`RefusalKind` value for one answer (a plain string)."""
+    return refusal_decision(answer, citations).kind.value
 
 
 # --- data model --------------------------------------------------------------
@@ -101,15 +79,17 @@ class QaCase:
 
 @dataclass
 class QaCaseResult:
-    """Per-case scores plus the deterministic citation report."""
+    """Per-case scores plus the deterministic citation and refusal verdicts."""
 
     id: str
     citation_coverage: float
     groundedness: float
     answer_correctness: float
     refusal_correct: bool
-    is_refusal: bool
+    refusal_kind: str
+    is_safety_stop: bool
     support: float | None
+    refusal: dict = field(default_factory=dict)
     flags: list[str] = field(default_factory=list)
     dimensions: dict = field(default_factory=dict)
 
@@ -120,8 +100,10 @@ class QaCaseResult:
             'groundedness': self.groundedness,
             'answer_correctness': self.answer_correctness,
             'refusal_correct': self.refusal_correct,
-            'is_refusal': self.is_refusal,
+            'refusal_kind': self.refusal_kind,
+            'is_safety_stop': self.is_safety_stop,
             'support': self.support,
+            'refusal': dict(self.refusal),
             'flags': list(self.flags),
             'dimensions': dict(self.dimensions),
         }
@@ -165,14 +147,15 @@ def _normalize_text(text: str) -> str:
     return re.sub(r'\s+', ' ', (text or '')).strip().casefold()
 
 
-def _answer_correctness(case: QaCase, refusal: bool) -> float:
+def _answer_correctness(case: QaCase, answered: bool) -> float:
     expected = _normalize_text(case.expected_answer)
     if expected:
         answer = _normalize_text(case.answer)
         return 1.0 if (expected == answer or expected in answer) else 0.0
-    # Nothing substantive is expected: correctness is decided by the refusal.
+    # Nothing substantive is expected: correctness is decided by whether the
+    # system stopped safely instead of answering.
     if case.expected_refusal:
-        return 1.0 if refusal else 0.0
+        return 1.0 if not answered else 0.0
     return 1.0
 
 
@@ -188,18 +171,20 @@ def evaluate_qa_case(case: QaCase, *,
     report = validator(case.question, case.answer, list(case.citations or []))
     dimensions = dict(report.dimensions)
 
-    refusal = is_refusal(case.answer, case.citations)
-    refusal_correct = refusal == bool(case.expected_refusal)
+    decision = refusal_decision(case.answer, case.citations)
+    safety_stop = decision.is_safety_stop
+    refusal_correct = safety_stop == bool(case.expected_refusal)
+    answered = decision.kind is RefusalKind.NON_REFUSAL
 
-    if case.expected_refusal and refusal:
-        # A correct refusal asserts nothing, so there is nothing that could be
+    if safety_stop:
+        # A safety stop asserts nothing, so there is nothing that could be
         # ungrounded: coverage and groundedness are perfect by construction.
         coverage = 1.0
         groundedness = 1.0
     elif not case.citations:
-        # Not a refusal, yet no evidence was offered at all. ``validate_citations``
-        # would score a short answer like this as a refusal; the stricter §23
-        # contract does not, so the answer is ungrounded and untraceable.
+        # An asserted answer with no evidence at all. ``validate_citations`` would
+        # score every citationless answer as untraceable (coverage 0.2); the
+        # evaluation contract is stricter still: nothing can be traced, so 0.0.
         coverage = 0.0
         groundedness = 0.0
     else:
@@ -210,17 +195,19 @@ def evaluate_qa_case(case: QaCase, *,
         id=case.id,
         citation_coverage=round(coverage, 4),
         groundedness=round(groundedness, 4),
-        answer_correctness=round(_answer_correctness(case, refusal), 4),
+        answer_correctness=round(_answer_correctness(case, answered), 4),
         refusal_correct=refusal_correct,
-        is_refusal=refusal,
+        refusal_kind=decision.kind.value,
+        is_safety_stop=safety_stop,
         support=dimensions.get('support'),  # None without an LLM — never faked
+        refusal=decision.to_dict(),
         flags=list(report.flags),
         dimensions=dimensions,
     )
 
 
-def _has_no_evidence(case: QaCase) -> bool:
-    """No case-declared sufficiency: it should refuse, or it has no citations."""
+def _expects_no_answer(case: QaCase) -> bool:
+    """The case declares (or shows) that no substantive answer was available."""
     return bool(case.expected_refusal) or not case.citations
 
 
@@ -230,8 +217,9 @@ def evaluate_qa_dataset(cases: list[QaCase], *,
 
     ``citation_coverage`` / ``groundedness`` / ``answer_correctness`` are means
     over cases. ``unknown_answer_hallucination_rate`` is the fraction of
-    no-sufficient-evidence cases that still produced a substantive (non-refusal)
-    answer, and is expected to be ``0.0``.
+    no-answer-expected cases that nonetheless **asserted** something, and is
+    expected to be ``0.0``. An ``UNKNOWN`` answer is not counted: asserting
+    nothing is not hallucinating.
     """
     results = [evaluate_qa_case(case, validator=validator) for case in cases]
     count = len(results)
@@ -243,7 +231,7 @@ def evaluate_qa_dataset(cases: list[QaCase], *,
 
     hallucinations = sum(
         1 for case, result in zip(cases, results)
-        if _has_no_evidence(case) and not result.is_refusal
+        if _expects_no_answer(case) and result.refusal_kind == RefusalKind.NON_REFUSAL.value
     )
 
     return {

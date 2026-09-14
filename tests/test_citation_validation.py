@@ -52,12 +52,31 @@ from app.domain.citation_validation import validate_citations
 # --------------------------------------------------------------------------- #
 # pure layer (no DB, no model)
 # --------------------------------------------------------------------------- #
-def test_refusal_answer_has_full_coverage_and_no_support():
+def test_insufficient_evidence_answer_is_fully_covered():
+    """ADR-014: "the knowledge base lacks evidence" is a safety stop, not a refusal."""
     r = validate_citations('OpenAI 是做什么的？', '知识库中没有找到与该问题匹配的证据。', [], llm=None)
     assert r.dimensions['coverage'] == 1.0
     assert r.dimensions['support'] is None
-    assert 'refusal' in r.flags
+    assert 'insufficient_evidence' in r.flags
+    assert 'refusal' not in r.flags                  # the two kinds are not synonyms
+    assert r.refusal['kind'] == 'insufficient_evidence'
     assert r.overall >= 0.4
+
+
+def test_an_explicit_refusal_is_flagged_as_such():
+    r = validate_citations('OpenAI 是做什么的？', '我无法回答这个问题。', [], llm=None)
+    assert r.flags.count('refusal') == 1
+    assert 'insufficient_evidence' not in r.flags
+    assert r.dimensions['coverage'] == 1.0
+
+
+def test_a_short_answer_without_citations_is_not_excused():
+    """Regression guard (ADR-014): "short" used to mean "refusal" and bought free
+    coverage, which let an untraceable answer score as fully covered."""
+    r = validate_citations('Apple 的 CEO 是谁？', 'John Ternus。', [], llm=None)
+    assert 'refusal' not in r.flags
+    assert r.dimensions['coverage'] == 0.2           # untraceable, not a refusal
+    assert 'no_citations' in r.flags
 
 
 def test_inline_citations_match_full_coverage():

@@ -20,7 +20,7 @@ RETRIEVAL_GOLDEN = ROOT / 'tests' / 'evaluation' / 'retrieval' / 'golden.json'
 QA_GOLDEN = ROOT / 'tests' / 'evaluation' / 'qa' / 'golden.json'
 
 from app.evaluation.qa_eval import (QaCase, evaluate_qa_case, evaluate_qa_dataset,
-                                    is_refusal, load_qa_cases)
+                                    load_qa_cases, refusal_kind)
 from app.evaluation.retrieval_eval import (evaluate_retrieval_case,
                                            evaluate_retrieval_dataset,
                                            load_retrieval_cases, precision_at_k,
@@ -124,22 +124,24 @@ def test_retrieval_aggregate_is_micro_average(retrieval_report):
         totals['hits_at_5'], totals['window_at_5'] - totals['hits_at_5'])
 
 
-# --- refusal contract ---------------------------------------------------------
+# --- refusal contract (ADR-014: the shared semantics, not a local bool) -------
 
-def test_refusal_contract_recognises_the_api_refusal():
+def test_refusal_contract_recognises_the_api_safety_stop():
     answer = '知识库中没有找到与该问题匹配的证据。请先导入相关文档并建立索引。'
-    assert is_refusal(answer, []) is True
+    assert refusal_kind(answer, []) == 'insufficient_evidence'
 
 
-def test_refusal_contract_rejects_substantive_answers():
+def test_refusal_contract_classifies_the_other_kinds():
     # Substantive answer with no citations is NOT a refusal.
-    assert is_refusal('The CEO lives at 12 Example Street.', []) is False
+    assert refusal_kind('The CEO lives at 12 Example Street.', []) == 'non_refusal'
     # Any citation means evidence was offered, so it is never a refusal.
-    assert is_refusal('知识库中没有找到证据', [{'chunk_id': 'x'}]) is False
-    # An inline marker disqualifies a refusal even without a citation list.
-    assert is_refusal('See [doc:d chunk:c]', []) is False
-    # Empty answer is a refusal (nothing was asserted).
-    assert is_refusal('', []) is True
+    assert refusal_kind('知识库中没有找到证据', [{'chunk_id': 'x'}]) == 'non_refusal'
+    # An inline marker means it is citing, so it is answering.
+    assert refusal_kind('See [doc:d chunk:c]', []) == 'non_refusal'
+    # An explicit decline is a refusal...
+    assert refusal_kind('我无法回答这个问题。', []) == 'refusal'
+    # ...while an empty answer is UNKNOWN: it neither refused nor answered.
+    assert refusal_kind('', []) == 'unknown'
 
 
 # --- QA golden set shape ------------------------------------------------------
@@ -205,7 +207,8 @@ def test_unknown_answer_hallucination_is_detected():
         expected_refusal=True,
     )
     result = evaluate_qa_case(case)
-    assert result.is_refusal is False
+    assert result.refusal_kind == 'non_refusal'
+    assert result.is_safety_stop is False
     assert result.refusal_correct is False
     assert result.answer_correctness == 0.0
     assert result.groundedness < 0.2  # no citations, nothing to ground on
@@ -224,7 +227,10 @@ def test_a_correct_refusal_is_rewarded():
         expected_refusal=True,
     )
     result = evaluate_qa_case(case)
-    assert result.is_refusal is True
+    # "The knowledge base lacks evidence" is INSUFFICIENT_EVIDENCE, not REFUSAL —
+    # it is the §23 behaviour we want, so it earns a correct safety stop.
+    assert result.refusal_kind == 'insufficient_evidence'
+    assert result.is_safety_stop is True
     assert result.refusal_correct is True
     assert result.citation_coverage == 1.0
     assert result.groundedness == 1.0

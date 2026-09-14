@@ -23,6 +23,8 @@ from .quality_gate import (ACCEPT, REJECT, REVIEW, QualityAssessment, QualitySig
                            evaluate as evaluate_quality)
 from .query_router import (EVIDENCE_SYNTHESIS, FACT_LOOKUP, RESEARCH, ROUTES,
                            STRUCTURED_REASONING, QueryPlan, QuerySignals, classify)
+from .refusal import (INSUFFICIENT_EVIDENCE, NON_REFUSAL, REFUSAL, UNKNOWN,
+                      RefusalDecision, RefusalKind, classify_refusal)
 
 __all__ = [
     'SUPERSEDED', 'current', 'history', 'is_current', 'resolve',
@@ -39,4 +41,6 @@ __all__ = [
     'evaluate_quality',
     'FACT_LOOKUP', 'STRUCTURED_REASONING', 'EVIDENCE_SYNTHESIS', 'RESEARCH', 'ROUTES',
     'QueryPlan', 'QuerySignals', 'classify',
+    'REFUSAL', 'NON_REFUSAL', 'INSUFFICIENT_EVIDENCE', 'UNKNOWN', 'RefusalDecision',
+    'RefusalKind', 'classify_refusal',
 ]

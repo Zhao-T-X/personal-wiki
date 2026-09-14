@@ -32,6 +32,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
+from .refusal import RefusalDecision, RefusalKind, classify_refusal
+
 DIMENSIONS = ('locatability', 'coverage', 'currentness', 'support')
 
 # Weights sum to 1.0. ``support`` is the LLM judgement and carries the most
@@ -45,7 +47,6 @@ _WEIGHTS: dict[str, float] = {
 
 _INLINE_CITATION = re.compile(r'\[doc:[^\]]*chunk:[^\]]*\]', re.IGNORECASE)
 _CHUNK_IN_MARKER = re.compile(r'chunk:\s*([^\]\s,]+)', re.IGNORECASE)
-_REFUSAL_HINTS = ('没有找到', 'no evidence', '无法回答', '知识库中没有')
 
 
 @dataclass
@@ -56,6 +57,9 @@ class CitationReport:
     flags: list[str]
     grounding: dict | None = None
     issues: list[str] = field(default_factory=list)
+    # The shared refusal semantics verdict (kind/confidence/reason/detector), so
+    # consumers never have to re-derive "was this a refusal?" from flags (ADR-014).
+    refusal: dict | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -65,6 +69,7 @@ class CitationReport:
             'flags': self.flags,
             'grounding': self.grounding,
             'issues': self.issues,
+            'refusal': self.refusal,
         }
 
 
@@ -81,13 +86,15 @@ def _referenced_ids(answer: str) -> set[str]:
     return out
 
 
-def _is_refusal(answer: str, citations: list[dict]) -> bool:
-    if citations:
-        return False
-    a = (answer or '').strip().lower()
-    if not a:
-        return False
-    return any(h.lower() in a for h in _REFUSAL_HINTS) or len(a) < 80
+def _refusal_decision(answer: str, citations: list[dict]) -> RefusalDecision:
+    """The shared refusal semantics, classified by the *runtime* detector.
+
+    This module used to decide for itself — and its shortcut ("no citations and
+    under 80 characters is a refusal") mislabelled ordinary short answers. The
+    definition now lives once, in ``domain/refusal`` (ADR-014); only the
+    ``detector`` label distinguishes runtime from evaluation consumption.
+    """
+    return classify_refusal(answer, citations=citations, detector='runtime')
 
 
 def _locatability_score(citations: list[dict], *, conn=None) -> float:
@@ -110,7 +117,10 @@ def _locatability_score(citations: list[dict], *, conn=None) -> float:
 
 def _coverage_score(answer: str, citations: list[dict], *, conn=None) -> float:
     cited = _cited_ids(citations)
-    if _is_refusal(answer, citations):
+    if _refusal_decision(answer, citations).is_safety_stop:
+        # A safety stop asserts nothing, so there is nothing to trace. Note this is
+        # now the *only* exemption: a short answer that simply forgot its citations
+        # is no longer excused (it is untraceable, not a refusal).
         return 1.0
     if not cited:
         return 0.2  # an answer with no citations cannot be traced
@@ -227,9 +237,15 @@ def validate_citations(question: str, answer: str, citations: list[dict],
     else:
         overall = sum(_WEIGHTS[k] * (dims[k] or 0.0) for k in DIMENSIONS)
 
+    refusal = _refusal_decision(answer, citations)
+
     flags: list[str] = []
-    if _is_refusal(answer, citations):
+    # The two kinds are reported separately: "the knowledge base lacks evidence" is
+    # a different (and better) outcome than "I refuse to answer" (ADR-014).
+    if refusal.kind is RefusalKind.REFUSAL:
         flags.append('refusal')
+    if refusal.kind is RefusalKind.INSUFFICIENT_EVIDENCE:
+        flags.append('insufficient_evidence')
     if not citations:
         flags.append('no_citations')
     if citations and not _referenced_ids(answer):
@@ -261,7 +277,8 @@ def validate_citations(question: str, answer: str, citations: list[dict],
 
     return CitationReport(dimensions=dims, overall=round(overall, 4),
                           grade=_grade(overall), flags=flags,
-                          grounding=grounding, issues=issues)
+                          grounding=grounding, issues=issues,
+                          refusal=refusal.to_dict())
 
 
 def _grounding_prompt(question: str, answer: str, citations: list[dict], *, conn=None) -> str:

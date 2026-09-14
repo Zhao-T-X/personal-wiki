@@ -125,12 +125,13 @@ def test_superseded_only_knowledge_is_refused_not_read_back(tmp_path):
 
 
 def _assert_obeys_refusal_contract(body: dict) -> None:
-    """The endpoint's refusal wording must satisfy the evaluator's refusal test.
+    """The endpoint's refusal wording must satisfy the shared refusal semantics.
 
-    Refusals are scored by ``app/evaluation/qa_eval.py``; a refusal it cannot
-    recognise would be counted as an unknown-answer hallucination, so the two
-    must agree on what a refusal looks like.
+    Refusals are scored by ``app/evaluation/qa_eval.py``; a safety stop it cannot
+    recognise would be counted as an unknown-answer hallucination, so the endpoint
+    and the evaluator must agree — which is exactly what ADR-014 unified.
     """
-    from app.evaluation.qa_eval import is_refusal
-    assert is_refusal(body['answer'], body['citations']), \
-        f'not recognised as a refusal: {body["answer"]!r}'
+    from app.domain.refusal import classify_refusal
+    decision = classify_refusal(body['answer'], citations=body['citations'])
+    assert decision.is_safety_stop, \
+        f'not recognised as a safety stop: {body["answer"]!r} -> {decision.kind.value}'

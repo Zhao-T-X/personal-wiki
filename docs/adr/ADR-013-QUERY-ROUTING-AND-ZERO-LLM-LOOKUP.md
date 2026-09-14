@@ -101,10 +101,8 @@ Question -> Query Router ┬ FACT_LOOKUP          0 LLM（唯一主语+唯一谓
   - STRUCTURED_REASONING 与 RESEARCH 目前仍走同一条检索+生成路径，尚未有各自的专用流程。
   - 谓语候选唯一性依赖 hint 匹配；需要用真实问题集扩充 hint 词表。
   - 多跳问题的图式查询（Claim Evolution / Graph）尚未落地。
-  - **「拒答」目前有两个判定**：`domain/citation_validation.py::_is_refusal`（宽松：
-    无 citations 且长度 <80 也算拒答）与 `evaluation/qa_eval.py::is_refusal`（严格：
-    必须带显式标记）。二者语义不同且各有用途，但应当收敛为**同一定义**，否则
-    `/api/qa/validate` 与评测会对同一条回答给出不同结论。
+  - ~~「拒答」有两个判定~~ → 已由 [ADR-014](./ADR-014-REFUSAL-SEMANTICS.md) 收敛为
+    唯一定义（`app/domain/refusal.py`），运行时与评测共用同一 `RefusalKind`。
 
 ## References
 
