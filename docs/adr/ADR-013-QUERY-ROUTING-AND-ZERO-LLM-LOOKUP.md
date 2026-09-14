@@ -97,10 +97,13 @@ Question -> Query Router ┬ FACT_LOOKUP          0 LLM（唯一主语+唯一谓
     `tests/evaluation/{retrieval,qa}/golden.json`（Recall@k、Citation Coverage、
     Groundedness、Unknown Answer Hallucination ≈ 0）。
   - `tests/test_ask_direct_api.py`：端点级证明「0 次模型调用」与「歧义拒答」。
+  - **过去时的问题同样是 0 LLM**（ADR-015）：`try_historical_answer` 从 superseded Claim
+    回答「之前的 CEO 是谁」，与当前值直查对称。
 - **TARGET**
-  - STRUCTURED_REASONING 与 RESEARCH 目前仍走同一条检索+生成路径，尚未有各自的专用流程。
+  - RESEARCH 仍走检索+生成路径；STRUCTURED_REASONING 目前只覆盖「过去时直查」这一支，
+    多跳仍需 LLM。
   - 谓语候选唯一性依赖 hint 匹配；需要用真实问题集扩充 hint 词表。
-  - 多跳问题的图式查询（Claim Evolution / Graph）尚未落地。
+  - 多跳问题的图式查询（Graph）尚未落地。
   - ~~「拒答」有两个判定~~ → 已由 [ADR-014](./ADR-014-REFUSAL-SEMANTICS.md) 收敛为
     唯一定义（`app/domain/refusal.py`），运行时与评测共用同一 `RefusalKind`。
 

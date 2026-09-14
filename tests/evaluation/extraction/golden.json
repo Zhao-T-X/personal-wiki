@@ -4,7 +4,7 @@
   "cases": [
     {
       "id": "apple-ceo-succession",
-      "note": "Permanent regression case from task §41: an invented predicate ('new_ceo') must never become knowledge.",
+      "note": "Permanent regression case from task §41: the model's invented predicate 'new_ceo' is a *candidate*. It must resolve to has_ceo + temporal_signal=new — the invented name itself must never be stored as a predicate.",
       "source_text": "苹果的新任首席执行官是约翰·特努斯。",
       "model_draft": {
         "entities": [
@@ -30,7 +30,9 @@
         {"name": "苹果", "types": ["Organization"]},
         {"name": "约翰·特努斯", "types": ["Person"]}
       ],
-      "expected_claims": []
+      "expected_claims": [
+        {"subject": "苹果", "predicate": "has_ceo", "object": "约翰·特努斯"}
+      ]
     },
     {
       "id": "alias-canonicalization",

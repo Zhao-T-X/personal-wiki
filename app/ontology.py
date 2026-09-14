@@ -133,12 +133,21 @@ def claim_predicate_allowed(predicate: str) -> bool:
 # second, editable-in-code copy of ontology knowledge.
 @dataclass(frozen=True)
 class PredicateSpec:
-    """Registry-declared semantics of one claim predicate."""
+    """Registry-declared semantics of one claim predicate.
+
+    Semantics are ontology data (ADR-011; task §31): whether a relation is
+    single-valued, whether it evolves over time, what it is called in prose, and
+    which entity types it may connect all live in the registry — never in Python.
+    """
 
     predicate: str
     functional: bool = False
     temporal: bool = False
     evolution: str | None = None
+    label: str | None = None
+    aliases: tuple[str, ...] = ()
+    domain: tuple[str, ...] = ()      # legal subject types (empty = unconstrained)
+    range: tuple[str, ...] = ()       # legal object types  (empty = unconstrained)
 
 
 def claim_predicate_spec(predicate: str) -> PredicateSpec | None:
@@ -156,7 +165,40 @@ def claim_predicate_spec(predicate: str) -> PredicateSpec | None:
         functional=bool(meta.get('functional')),
         temporal=bool(meta.get('temporal')),
         evolution=meta.get('evolution'),
+        label=meta.get('label'),
+        aliases=tuple(str(a) for a in (meta.get('aliases') or [])),
+        domain=tuple(str(t) for t in (meta.get('domain') or [])),
+        range=tuple(str(t) for t in (meta.get('range') or [])),
     )
+
+
+def claim_predicate_alias_index() -> dict[str, str]:
+    """``normalized alias -> registered predicate`` from the registry.
+
+    This is what lets ``"CEO"`` (or a temporal variant like ``"new_ceo"`` whose
+    base is ``"ceo"``) resolve to ``has_ceo`` without anyone inventing a
+    predicate. Aliases are declared at design time, exactly like predicates.
+    """
+    index: dict[str, str] = {}
+    for predicate in CLAIM_PREDICATES:
+        spec = claim_predicate_spec(predicate)
+        if spec is None:
+            continue
+        for alias in spec.aliases:
+            key = normalize_predicate(alias)
+            if key and key not in CLAIM_PREDICATES:
+                index.setdefault(key, predicate)
+    return index
+
+
+def resolve_claim_predicate(value: str) -> str | None:
+    """Resolve a value to a registered predicate via exact match or alias."""
+    normalized = normalize_predicate(value)
+    if not normalized:
+        return None
+    if normalized in CLAIM_PREDICATES:
+        return normalized
+    return claim_predicate_alias_index().get(normalized)
 
 
 def functional_claim_predicates() -> frozenset[str]:
@@ -164,6 +206,37 @@ def functional_claim_predicates() -> frozenset[str]:
     metadata = CLAIM_REGISTRY.get('predicate_metadata') or {}
     return frozenset(
         p for p in CLAIM_PREDICATES if bool((metadata.get(p) or {}).get('functional')))
+
+
+def claim_predicate_endpoint_allowed(types: list[str], predicate: str, *,
+                                     target: bool = False) -> bool:
+    """Whether one declared endpoint's types satisfy the predicate's domain/range.
+
+    Claim predicates carry their own ``domain``/``range`` (relation predicates use
+    ``source_types``/``target_types``). An empty declaration means unconstrained,
+    and an empty ``types`` means the endpoint's type is unknown — which is also
+    unconstrained, never a violation (ADR-011).
+    """
+    spec = claim_predicate_spec(predicate)
+    if spec is None:
+        return False
+    if not types:
+        return True
+    declared = spec.range if target else spec.domain
+    if not declared:
+        return True
+    return _types_allowed({canonical_entity_type(t) for t in types}, list(declared))
+
+
+def claim_registry_version() -> str:
+    """The registry's own semantic version (e.g. ``1.2``), stamped on claims.
+
+    Distinct from :func:`registry_version`, which is a content hash used for cache
+    invalidation. This one answers "which ontology was in force when this claim
+    was compiled?", so a claim that becomes unrecognisable after a registry
+    change can be explained rather than guessed at.
+    """
+    return str(CLAIM_REGISTRY.get('version') or '0')
 
 
 # Registry Subset matcher (Context Runtime P2c, spec §5): the full registry never
@@ -217,6 +290,9 @@ _PREDICATE_HINTS: dict[str, tuple[str, ...]] = {
     'used_for': ('used for', '用于', '用来'),
     'applied_to': ('applied', 'apply', '应用于', '应用在'),
     'addresses': ('address', 'solve', '解决', '应对'),
+    # Domain relations carry their own prose hints so the runtime vocabulary
+    # subset can actually offer them (§8). Registry aliases remain the authority.
+    'has_ceo': ('ceo', 'chief executive', '首席执行官', '首席执行长', '行政总裁', '总裁'),
 }
 
 

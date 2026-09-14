@@ -134,17 +134,18 @@ class ClaimRepository(Repository):
                content: str | None, context: dict, claim_type: str, polarity: str, modality: str,
                confidence: float | None, status: str, created_by: str, source_document_id: str,
                source_chunk_id: str, source_start_offset: int, source_end_offset: int,
-               source_quote: str | None) -> str:
+               source_quote: str | None, ontology_version: str | None = None) -> str:
         claim_id = str(uuid.uuid4())
         with self.write() as conn:
             conn.execute(
                 '''INSERT INTO claims(id,subject_id,predicate,object_id,object_text,content,context_json,claim_type,
                        polarity,modality,confidence,status,created_by,source_document_id,source_chunk_id,
-                       source_start_offset,source_end_offset,source_quote)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                       source_start_offset,source_end_offset,source_quote,ontology_version)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
                 (claim_id, subject_id, predicate, object_id, object_text, content, dumps(context or {}),
                  claim_type, polarity, modality, confidence, status, created_by, source_document_id,
-                 source_chunk_id, source_start_offset, source_end_offset, source_quote))
+                 source_chunk_id, source_start_offset, source_end_offset, source_quote,
+                 ontology_version))
         return claim_id
 
     def set_status(self, claim_id: str, status: str) -> int:

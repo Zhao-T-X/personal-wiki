@@ -35,9 +35,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ..domain.claim_state import resolve, select_current
-from ..domain.query_router import (FACT_LOOKUP, QueryPlan, QuerySignals,
-                                   classify, has_multi_hop_intent,
+from ..domain.claim_state import history, resolve, select_current
+from ..domain.query_router import (FACT_LOOKUP, STRUCTURED_REASONING, QueryPlan,
+                                   QuerySignals, classify, has_multi_hop_intent,
                                    has_temporal_intent)
 from ..ontology import match_claim_predicates
 from ..repositories import ClaimRepository, DocumentRepository, EntityRepository
@@ -240,6 +240,45 @@ def try_direct_answer(question: str) -> DirectAnswer | None:
     except Exception:
         # A lookup is an optimisation, never a dependency: any failure falls back
         # to the LLM path instead of surfacing as an error.
+        return None
+
+
+def try_historical_answer(question: str) -> DirectAnswer | None:
+    """Answer a *past-tense* question from superseded claims — still 0 LLM.
+
+    "Who was the CEO?" is stored knowledge, not inference: superseding moves a
+    claim's lifecycle status and **never deletes it** (ADR-005), so the old value
+    and its evidence are still there. That is precisely why history stays
+    answerable while the current value stays correct.
+
+    Returns ``None`` when this is not a past-tense question, or when it is not a
+    single-subject/single-predicate lookup and the model path should handle it.
+    """
+    try:
+        signals, plan = plan_question(question)
+        if plan.route != STRUCTURED_REASONING:
+            return None
+        if not (signals.temporal or has_temporal_intent(question)):
+            return None
+        if not signals.subject or len(signals.predicates) != 1:
+            return None
+        predicate = signals.predicates[0]
+        match = _resolve_subject(signals.question)
+        if not match:
+            return None
+        past = history(_related_claims(match['id'], predicate))
+        if not past:
+            return None
+        if len(past) > 1:
+            # Several past values: say so instead of picking the most convenient.
+            return DirectAnswer(status=NO_SUFFICIENT_EVIDENCE, route=plan.route,
+                                reason='ambiguous_multiple_historical_claims')
+        answered = _answered(plan, str(signals.subject), predicate, past[0])
+        if answered is None:
+            return DirectAnswer(status=NO_SUFFICIENT_EVIDENCE, route=plan.route,
+                                reason='no_object_value')
+        return answered
+    except Exception:
         return None
 
 

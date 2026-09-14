@@ -18,7 +18,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 GOLDEN = ROOT / 'tests' / 'evaluation' / 'extraction' / 'golden.json'
 
-from app.domain.compiler import COMPILED, UNRESOLVED
+from app.domain.compiler import COMPILED
 from app.evaluation.extraction_eval import (compile_draft, evaluate_dataset,
                                             load_cases)
 from app.evaluation.metrics import f1, precision, recall
@@ -91,22 +91,28 @@ def test_no_golden_case_silently_loses_an_expected_claim(report):
 
 # --- the invented predicate never becomes knowledge (§41) ---------------------
 
-def test_apple_case_never_compiles_an_invented_predicate(cases):
+def test_apple_case_resolves_the_invented_predicate_and_never_stores_it(cases):
+    """§41: ``new_ceo`` is a *candidate*, not knowledge.
+
+    It must resolve to ``has_ceo`` with ``temporal_signal=new``; the invented name
+    itself must never end up as a predicate on a compiled claim.
+    """
     case = _case(cases, 'apple-ceo-succession')
     draft = compile_draft(case)
 
     assert len(draft.results) == 1
     result = draft.results[0]
     assert result is not None
-    assert result.status == UNRESOLVED
-    assert result.status != COMPILED
-    assert result.claim is None
-    assert result.resolution.status == 'unresolved'
-    assert result.resolution.predicate is None
+    assert result.status == COMPILED
+    assert result.claim is not None
+    assert result.claim.predicate == 'has_ceo'
+    assert result.claim.temporal_signal == 'new'
+    assert result.resolution.predicate == 'has_ceo'
 
     compiled_predicates = [r.claim.predicate for r in draft.results
                            if r is not None and r.claim is not None]
     assert 'new_ceo' not in compiled_predicates
+    assert set(compiled_predicates) <= CLAIM_PREDICATES
 
 
 # --- alias canonicalisation ---------------------------------------------------

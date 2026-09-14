@@ -17,10 +17,12 @@ Three outcomes, none of them optional:
                    knowledge. It is never permission to invent a predicate.
 
 Resolution deliberately never invents a mapping. ``new`` + ``ceo`` splits into
-``temporal_signal=new`` and base ``ceo`` because the split is mechanical, and
-``optimises`` maps to ``improves`` because the registry lists it as an alias.
-Something like ``head_of_company`` -> ``has_ceo`` is *not* performed here: with
-no alias and no registered base it stays UNRESOLVED.
+``temporal_signal=new`` and base ``ceo``, and then ``ceo`` matches the registry
+alias of ``has_ceo`` — so the candidate compiles to
+``predicate=has_ceo, temporal_signal=new``. ``optimises`` maps to ``improves``
+because the registry lists it as an alias. Something like ``head_of_company`` ->
+``has_ceo`` is *not* performed here: with no alias and no registered base it
+stays UNRESOLVED.
 
 Pure logic: no database, no framework, no LLM (docs/adr/ADR-011).
 """
@@ -29,7 +31,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from ..ontology import CLAIM_PREDICATES, match_claim_predicates, normalize_predicate
+from ..ontology import (CLAIM_PREDICATES, match_claim_predicates, normalize_predicate,
+                        resolve_claim_predicate)
 
 RESOLVED = 'resolved'
 AMBIGUOUS = 'ambiguous'
@@ -139,15 +142,27 @@ def resolve_predicate(candidate: str | None, *, text: str = '', limit: int = 5) 
             confidence=1.0, temporal_signal=None, candidates=(normalized,),
             reason='registered_value')
 
-    # 2. Temporal signal split out, then exact match on the base.
+    # 1b. A registry-declared alias ("CEO" -> has_ceo). Aliases are ontology data
+    #     (design time), so this maps without inventing anything.
+    aliased = resolve_claim_predicate(normalized)
+    if aliased:
+        return PredicateResolution(
+            status=RESOLVED, candidate=raw, predicate=aliased, source='registry_alias',
+            confidence=0.95, temporal_signal=None, candidates=(aliased,),
+            reason='registry_alias_match')
+
+    # 2. Temporal signal split out, then exact/alias match on the base — this is
+    #    the "new_ceo -> has_ceo + temporal_signal=new" path.
     base, signal = split_temporal_signal(raw)
     base_normalized = normalize_predicate(base)
-    if base_normalized in CLAIM_PREDICATES:
+    base_registered = (base_normalized if base_normalized in CLAIM_PREDICATES
+                       else resolve_claim_predicate(base_normalized))
+    if base_registered:
         return PredicateResolution(
-            status=RESOLVED, candidate=raw, predicate=base_normalized,
+            status=RESOLVED, candidate=raw, predicate=base_registered,
             source='temporal_split' if signal else 'normalized',
             confidence=0.97 if signal else 0.95, temporal_signal=signal,
-            candidates=(base_normalized,),
+            candidates=(base_registered,),
             reason='temporal_signal_separated' if signal else 'normalized_value')
 
     # 3. Registry alias / synonym of the candidate itself (never of free text).

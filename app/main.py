@@ -664,6 +664,8 @@ _DIRECT_REFUSALS = {
     # hallucination, so the endpoint and the evaluator must agree (ADR-014).
     'no_current_claim':
         '知识库中没有当前有效值：关于该问题的记录已被取代或过时，因此不作答。',
+    'ambiguous_multiple_historical_claims':
+        '知识库中没有足够证据确定唯一的历史值（存在多条历史记录），因此不作答。',
 }
 
 
@@ -683,8 +685,9 @@ def ask(req:AskRequest):
     """
     from .runlog import record_run
     from .retrieval import entity_summaries, evidence_hits
-    from .domain.query_router import FACT_LOOKUP
-    from .workflows.ask_workflow import ANSWERED, plan_question, try_direct_answer
+    from .domain.query_router import FACT_LOOKUP, STRUCTURED_REASONING
+    from .workflows.ask_workflow import (ANSWERED, plan_question, try_direct_answer,
+                                         try_historical_answer)
     from .context import COMPILER, PLANNER
     from .context.providers import (EntitySummary, EvidenceHit, EvidenceProvider,
                                     KnowledgeProvider, ProviderRegistry, apply_escalation,
@@ -692,18 +695,26 @@ def ask(req:AskRequest):
     from .runtime import TaskContext, features_for
 
     _signals, route_plan = plan_question(req.question)
-    direct = try_direct_answer(req.question) if route_plan.route == FACT_LOOKUP else None
+    if route_plan.route == FACT_LOOKUP:
+        lookup, direct = 'claim', try_direct_answer(req.question)
+    elif route_plan.route == STRUCTURED_REASONING:
+        # Past-tense questions are stored knowledge too: superseding keeps the old
+        # claim (it is never deleted), so "who WAS the CEO" is answered from
+        # history with 0 LLM as well — and that is what proves evolution works.
+        lookup, direct = 'history', try_historical_answer(req.question)
+    else:
+        lookup, direct = '', None
     if direct is not None and (direct.status == ANSWERED or direct.reason in _DIRECT_REFUSALS):
         reply = direct.answer if direct.status == ANSWERED else _DIRECT_REFUSALS[direct.reason]
         with record_run('ask', agent_role='ask') as run:
             # No step is recorded: a direct lookup is not a model call, so the
             # run's step_count stays 0 and the LLM-call accounting stays honest.
             run.summary={'question':req.question[:200], 'route':direct.route,
-                         'answer_chars':len(reply or ''), 'evidence_count':len(direct.citations),
-                         'llm_calls':0}
+                         'lookup':lookup, 'answer_chars':len(reply or ''),
+                         'evidence_count':len(direct.citations), 'llm_calls':0}
         return {'question':req.question,'answer':reply,'citations':direct.citations,
                 'evidence':direct.evidence,'answer_value':direct.answer_value,
-                'route':direct.route,'status':direct.status,'direct':True,
+                'route':direct.route,'lookup':lookup,'status':direct.status,'direct':True,
                 'reason':direct.reason,'llm_expected':False}
 
     raw=evidence_hits(req.question,req.top_k)

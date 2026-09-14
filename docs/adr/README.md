@@ -41,6 +41,7 @@ ADR 是**追加式、不可改写**的：决策变了不修改旧 ADR，而是�
 | [ADR-012](./ADR-012-TWO-STAGE-EXTRACTION.md) | 两阶段抽取与降级 | CURRENT |
 | [ADR-013](./ADR-013-QUERY-ROUTING-AND-ZERO-LLM-LOOKUP.md) | 问答路由与 0-LLM 事实直查 | PARTIAL |
 | [ADR-014](./ADR-014-REFUSAL-SEMANTICS.md) | 拒答语义统一（定义唯一、检测分层） | CURRENT |
+| [ADR-015](./ADR-015-CORRECTION-FULL-LOOP.md) | Correction 闭环、Claim Evolution 与 Registry v2 | CURRENT |
 
 ---
 

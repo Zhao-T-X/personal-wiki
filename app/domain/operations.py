@@ -19,7 +19,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 
-from ..ontology import KNOWLEDGE_STATUSES
+from ..ontology import KNOWLEDGE_STATUSES, claim_registry_version
 from ..repositories import (ClaimRepository, DocumentRepository, EntityRepository,
                             OperationRepository, RelationRepository)
 from ..resolution import resolve_or_create_entity
@@ -120,7 +120,10 @@ def _new_claim(ctx: _Context) -> str:
         source_chunk_id=ctx.require('source_chunk_id'),
         source_start_offset=p.get('source_start_offset', 0),
         source_end_offset=p.get('source_end_offset', 0),
-        source_quote=p.get('source_quote'))
+        source_quote=p.get('source_quote'),
+        # Stamp the ontology that was in force, so a later registry change can be
+        # explained rather than guessed at (ADR-015).
+        ontology_version=claim_registry_version())
 
 
 def _link(ctx: _Context, *, new_id: str, old_id: str, relationship: str,

@@ -118,19 +118,37 @@ def test_temporal_candidate_keeps_predicate_and_captures_signal():
     assert resolution.temporal_signal == 'new'
 
 
-def test_unmappable_candidate_has_a_legal_failure_exit():
-    """``new_ceo`` must not become ``new_ceo``: it stays unresolved."""
+def test_temporal_alias_resolves_to_the_registered_domain_predicate():
+    """``new_ceo`` is not a predicate: it is ``has_ceo`` plus ``temporal_signal``.
+
+    This is the resolution the Phase 5 loop depends on — the LLM may propose
+    ``new_ceo`` and the registry still yields one canonical relation.
+    """
     from app.domain.predicate_resolver import resolve_predicate
 
-    resolution = resolve_predicate('new_ceo', text='苹果公司的新任 CEO 是约翰·特努斯。')
+    resolution = resolve_predicate('new_ceo')
+    assert resolution.resolved
+    assert resolution.predicate == 'has_ceo'
+    assert resolution.temporal_signal == 'new'
+    assert resolution.source == 'temporal_split'
+
+
+def test_unmappable_candidate_has_a_legal_failure_exit():
+    """``head_of_company`` must not be *guessed* into ``has_ceo``."""
+    from app.domain.predicate_resolver import resolve_predicate
+
+    resolution = resolve_predicate('head_of_company', text='苹果公司的负责人是谁。')
     assert resolution.status == 'unresolved'
     assert resolution.predicate is None
-    assert resolution.temporal_signal == 'new'     # the signal is not lost
-    assert 'new_ceo' not in (resolution.candidates or ())
+    assert 'head_of_company' not in (resolution.candidates or ())
 
-    invented = resolve_predicate('frobnicates')
+    # An unmappable candidate still keeps its temporal signal instead of losing it.
+    invented = resolve_predicate('new_head_of_company')
     assert invented.status == 'unresolved'
     assert invented.predicate is None
+    assert invented.temporal_signal == 'new'
+
+    assert resolve_predicate('random_relationship').status == 'unresolved'
 
 
 # --- Compiler: draft -> canonical, or refusal --------------------------------
@@ -139,7 +157,8 @@ def test_compiler_refuses_unresolved_candidate():
     from app.domain.compiler import KnowledgeCompiler, ClaimDraft, UNRESOLVED
 
     result = KnowledgeCompiler().compile_claim(
-        ClaimDraft(subject='Apple', predicate_candidate='new_ceo', object='John Ternus'))
+        ClaimDraft(subject='Apple', predicate_candidate='random_relationship',
+                   object='John Ternus'))
     assert result.status == UNRESOLVED
     assert result.claim is None
     assert result.reasons
@@ -222,7 +241,7 @@ def test_correction_apply_refuses_unregistered_predicate():
                                                    apply_correction)
 
     intent = CorrectionIntent(text='苹果公司的新任 CEO 是约翰·特努斯。', subject='苹果公司',
-                              predicate='new_ceo', object='约翰·特努斯')
+                              predicate='random_relationship', object='约翰·特努斯')
     plan = CorrectionPlan(text=intent.text, intent=intent, subject_entity_id=None,
                           relationship='new', related_claim_id=None, apply_supersede=False)
     with pytest.raises(OperationError):

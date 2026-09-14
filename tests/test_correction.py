@@ -132,17 +132,23 @@ def test_parse_intent_degrades_without_a_model(tmp_path):
     assert asyncio.run(parse_intent('Anything.')) is None
 
 
-def _seed_claim(tmp_path, *, subject: str, predicate: str, obj: str, content: str | None = None):
+def _seed_claim(tmp_path, *, subject: str, predicate: str, obj: str, content: str | None = None,
+                subject_types: tuple[str, ...] = ('Organization',)):
     _reload(tmp_path)
     from app.db import transaction
     from app.repositories.document_repo import DocumentRepository
     from app.domain.operations import OperationRequest, run
+    from app.resolution import resolve_or_create_entity
 
     content = content or f'{subject} {predicate} {obj}.'
     docs = DocumentRepository()
     doc_id = docs.create(title='D', content=content)
     chunk = docs.replace_chunks(doc_id, [(content, 0, 0, len(content))])[0]
     with transaction() as conn:
+        # Type the subject explicitly: the ontology's domain/range gate needs to be
+        # able to *check* the pairing, and an untyped entity could not be checked.
+        resolve_or_create_entity(conn, name=subject, entity_types=list(subject_types),
+                                 aliases=[], description=None, properties={})
         claim_id = run(OperationRequest(kind='CREATE', payload={
             'subject': subject, 'predicate': predicate, 'object': obj,
             'content': content, 'source_document_id': doc_id,

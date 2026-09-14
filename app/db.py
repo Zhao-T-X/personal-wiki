@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS claims (
   source_start_offset INTEGER NOT NULL,
   source_end_offset INTEGER NOT NULL,
   source_quote TEXT,
+  ontology_version TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_claims_subject ON claims(subject_id);
@@ -406,6 +407,10 @@ def _migrate_legacy_claims(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE claims ADD COLUMN polarity TEXT NOT NULL DEFAULT 'positive'")
     if 'modality' not in cols:
         conn.execute("ALTER TABLE claims ADD COLUMN modality TEXT NOT NULL DEFAULT 'asserted'")
+    if 'ontology_version' not in cols:
+        # Which ontology was in force when this claim was compiled (ADR-015), so a
+        # claim that later becomes unrecognisable can be explained, not guessed at.
+        conn.execute("ALTER TABLE claims ADD COLUMN ontology_version TEXT")
 
 def _table_ddl(table: str) -> str:
     """The CREATE TABLE statement for a table, taken from SCHEMA (without IF NOT EXISTS)."""

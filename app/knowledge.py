@@ -7,7 +7,7 @@ from typing import Any
 from .db import loads
 from .resolution import resolve_or_create_entity
 from .normalization import derive_relations
-from .ontology import relation_types_allowed, relation_spec
+from .ontology import claim_registry_version, relation_spec, relation_types_allowed
 from .repositories import (ClaimRepository, EntityRepository, EventRepository,
                            EvidenceRepository, IdeaRepository, QuestionRepository,
                            RelationRepository)
@@ -106,7 +106,8 @@ def persist_extraction(conn, *, document_id: str, extraction: dict[str, Any]) ->
                       polarity=c['polarity'], modality=c['modality'], confidence=c['confidence'],
                       status='candidate', created_by='llm', source_document_id=document_id,
                       source_chunk_id=c['source_chunk'], source_start_offset=start,
-                      source_end_offset=end, source_quote=quote)
+                      source_end_offset=end, source_quote=quote,
+                      ontology_version=claim_registry_version())
         counts['claims'] += 1
 
     for ev in extraction.get('events', []):

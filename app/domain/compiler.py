@@ -23,8 +23,8 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from ..ontology import (canonical_claim_type, canonical_modality, canonical_polarity,
-                        normalize_name, normalize_predicate, relation_endpoint_allowed,
-                        relation_spec)
+                        claim_predicate_endpoint_allowed, normalize_name,
+                        normalize_predicate, relation_endpoint_allowed, relation_spec)
 from .predicate_resolver import PredicateResolution, resolve_predicate
 from .quality_gate import (REJECT, REVIEW, QualityAssessment, QualitySignals,
                            evaluate as evaluate_quality)
@@ -147,14 +147,15 @@ class KnowledgeCompiler:
         # Domain/range: a registered predicate can still be used illegally
         # (e.g. an Organization value where a Person is required). Each declared
         # endpoint is checked on its own — a side we know nothing about is
-        # unconstrained, not a violation.
-        spec = relation_spec(resolution.predicate)
-        if spec and (draft.subject_types or draft.object_types):
+        # unconstrained, not a violation. Relation predicates declare
+        # source/target types; claim predicates declare domain/range.
+        if draft.subject_types or draft.object_types:
+            is_relation = relation_spec(resolution.predicate) is not None
+            endpoint = (relation_endpoint_allowed if is_relation
+                        else claim_predicate_endpoint_allowed)
             try:
-                source_ok = relation_endpoint_allowed(
-                    draft.subject_types, resolution.predicate)
-                target_ok = relation_endpoint_allowed(
-                    draft.object_types, resolution.predicate, target=True)
+                source_ok = endpoint(draft.subject_types, resolution.predicate)
+                target_ok = endpoint(draft.object_types, resolution.predicate, target=True)
             except ValueError as exc:
                 return CompileResult(status=REJECTED, claim=None, resolution=resolution,
                                      reasons=(str(exc),), quality=assessment)

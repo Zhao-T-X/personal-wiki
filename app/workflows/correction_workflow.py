@@ -19,7 +19,9 @@ from dataclasses import asdict, dataclass, field
 
 from ..chunking import chunk_text
 from ..claim_relations import compare_claim
-from ..db import transaction
+from ..db import loads, transaction
+from ..domain.claim_evolution import evolution_reason, supersede_recommended
+from ..domain.compiler import REJECTED, ClaimDraft, KnowledgeCompiler
 from ..domain.operations import OperationError, OperationRequest, run
 from ..domain.predicate_resolver import TEMPORAL_SIGNALS, resolve_predicate
 from ..ontology import match_claim_predicates
@@ -111,6 +113,52 @@ _VERIFY_SYSTEM = (
 )
 
 
+def _intent_from_data(text: str, data: dict) -> CorrectionIntent | None:
+    """Compile a model-shaped draft into an intent. The only place that does.
+
+    Accepts both key shapes — the candidate form the prompt asks for
+    (``subject_candidate`` / ``predicate_candidate`` / ``object_candidate``) and
+    the older ``subject`` / ``predicate`` / ``object`` — so a replayed draft and a
+    live model reply take exactly the same path through the resolver.
+    """
+    subject = str(data.get('subject') or data.get('subject_candidate') or '').strip()
+    candidate = data.get('predicate_candidate')
+    if candidate is None:
+        candidate = data.get('predicate')
+    candidate = str(candidate or '').strip()
+    obj = str(data.get('object') or data.get('object_candidate') or '').strip()
+    if not subject:
+        return None
+    # The LLM proposed a candidate; the compiler decides. An unresolved candidate
+    # is a legal outcome, not a reason to drop the whole intent.
+    resolution = resolve_predicate(candidate, text=text, limit=8)
+    llm_signal = str(data.get('temporal_signal') or '').strip() or None
+    signal = resolution.temporal_signal or (
+        llm_signal if llm_signal in TEMPORAL_SIGNALS else None)
+    polarity = str(data.get('polarity') or 'positive').strip().lower()
+    if polarity not in ('positive', 'negative'):
+        polarity = 'positive'
+    try:
+        raw = data.get('confidence')
+        confidence = float(raw) if raw is not None else None
+    except (TypeError, ValueError):
+        confidence = None
+    return CorrectionIntent(text=text, subject=subject,
+                            predicate=resolution.predicate or '',
+                            object=obj, polarity=polarity, confidence=confidence,
+                            predicate_candidate=candidate, temporal_signal=signal,
+                            predicate_resolution=resolution.to_dict())
+
+
+def intent_from_draft(text: str, draft: dict) -> CorrectionIntent | None:
+    """Compile a draft without a model — for tests, replay and offline evaluation.
+
+    Step 3→4 of the correction loop (LLM draft -> KnowledgeCompiler) is pure, so
+    it can be exercised end to end with a recorded draft instead of a live call.
+    """
+    return _intent_from_data(text, dict(draft or {}))
+
+
 async def parse_intent(text: str) -> CorrectionIntent | None:
     """LLM step: sentence -> structured intent. ``None`` when the model is
     unavailable, so the caller can degrade honestly instead of guessing."""
@@ -130,35 +178,38 @@ async def parse_intent(text: str) -> CorrectionIntent | None:
             data = json.loads(response.choices[0].message.content or '{}')
         except Exception:
             return None
-        subject = str(data.get('subject') or '').strip()
-        candidate = data.get('predicate_candidate')
-        if candidate is None:
-            candidate = data.get('predicate')      # tolerate the older prompt shape
-        candidate = str(candidate or '').strip()
-        obj = str(data.get('object') or '').strip()
-        if not subject:
-            return None
-        # The LLM proposed a candidate; the compiler decides. An unresolved
-        # candidate is a legal outcome, not a reason to drop the whole intent.
-        resolution = resolve_predicate(candidate, text=text, limit=8)
-        llm_signal = str(data.get('temporal_signal') or '').strip() or None
-        signal = resolution.temporal_signal or (
-            llm_signal if llm_signal in TEMPORAL_SIGNALS else None)
-        polarity = str(data.get('polarity') or 'positive').strip().lower()
-        if polarity not in ('positive', 'negative'):
-            polarity = 'positive'
-        try:
-            raw = data.get('confidence')
-            confidence = float(raw) if raw is not None else None
-        except (TypeError, ValueError):
-            confidence = None
-        return CorrectionIntent(text=text, subject=subject,
-                                predicate=resolution.predicate or '',
-                                object=obj, polarity=polarity, confidence=confidence,
-                                predicate_candidate=candidate, temporal_signal=signal,
-                                predicate_resolution=resolution.to_dict())
+        return _intent_from_data(text, data)
 
     return await asyncio.to_thread(_call)
+
+
+def _entity_types(name: str) -> list[str]:
+    """Declared entity types for a name (empty when unknown — unknown is not illegal)."""
+    if not name:
+        return []
+    row = EntityRepository().by_name(name)
+    if not row:
+        return []
+    return [str(t) for t in loads(row.get('types_json') or '[]', [])]
+
+
+def _domain_range_violation(intent: CorrectionIntent) -> str | None:
+    """Check the relation's domain/range before planning anything.
+
+    A predicate can resolve and still be used illegally — an Organization's CEO
+    must be a Person, not a Location. This is the same gate the compiler applies
+    (ADR-011), run here so a bad pairing is refused at plan time instead of being
+    discovered after the user confirms.
+    """
+    if not intent.predicate or not intent.object:
+        return None
+    result = KnowledgeCompiler().compile_claim(ClaimDraft(
+        subject=intent.subject, predicate_candidate=intent.predicate,
+        object=intent.object, subject_types=_entity_types(intent.subject),
+        object_types=_entity_types(intent.object)))
+    if result.status == REJECTED and 'domain_range_violation' in result.reasons:
+        return 'domain_range_violation'
+    return None
 
 
 def _pick(candidates: list[dict]) -> dict | None:
@@ -194,6 +245,18 @@ def build_plan(text: str, intent: CorrectionIntent) -> CorrectionPlan:
                      '为避免污染本体，系统不会创建新谓词，也不会写入这条知识。'
                      f'{hint}请改用已注册的谓词来表达。'))
 
+    # Domain/range gate: the ontology can forbid the pairing even when the predicate
+    # itself resolves.
+    violation = _domain_range_violation(intent)
+    if violation:
+        return CorrectionPlan(
+            text=text, intent=intent, subject_entity_id=subject_id,
+            relationship='rejected', related_claim_id=None, apply_supersede=False,
+            candidates=[], predicate_resolution=intent.predicate_resolution,
+            blocked=True,
+            summary=(f'该陈述违反「{intent.predicate}」的 domain/range 约束（{violation}），'
+                     '因此不会写入知识库。'))
+
     candidates: list[dict] = []
     if subject_id:
         existing = ClaimRepository().related(subject_id=subject_id, predicate=intent.predicate,
@@ -213,8 +276,21 @@ def build_plan(text: str, intent: CorrectionIntent) -> CorrectionPlan:
     best = _pick(candidates)
     relationship = best['relationship'] if best else 'new'
     related_id = best['related_claim_id'] if best else None
-    summary = (f'与已有断言「{best["content"]}」的关系：{relationship}'
-               if best else '未找到可关联的既有断言，将作为新知识创建')
+
+    # Claim Evolution (ADR-015): a single-valued, evolvable relation plus a stated
+    # change is enough to *recommend* superseding — decided from the registry, not
+    # guessed. Planning stays read-only; the user confirms before anything is written.
+    if best and supersede_recommended(relationship, predicate=intent.predicate,
+                                      temporal_signal=intent.temporal_signal):
+        relationship = 'supersedes'
+        summary = (f'检测到已有断言「{best["content"]}」。'
+                   + evolution_reason(predicate=intent.predicate,
+                                      temporal_signal=intent.temporal_signal))
+    elif best:
+        summary = f'与已有断言「{best["content"]}」的关系：{relationship}'
+    else:
+        summary = '未找到可关联的既有断言，将作为新知识创建'
+
     return CorrectionPlan(text=text, intent=intent, subject_entity_id=subject_id,
                           relationship=relationship, related_claim_id=related_id,
                           apply_supersede=relationship == 'supersedes',
