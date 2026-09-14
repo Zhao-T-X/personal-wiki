@@ -43,7 +43,6 @@ CREATE TABLE IF NOT EXISTS chunks (
   UNIQUE(document_id, chunk_index)
 );
 CREATE INDEX IF NOT EXISTS idx_chunks_document ON chunks(document_id);
-CREATE INDEX IF NOT EXISTS idx_chunks_content_hash ON chunks(content_hash);
 
 CREATE TABLE IF NOT EXISTS entities (
   id TEXT PRIMARY KEY,
@@ -457,6 +456,36 @@ def _ensure_chunk_columns(conn: sqlite3.Connection) -> None:
         conn.execute('ALTER TABLE chunks ADD COLUMN extraction_version TEXT')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_chunks_content_hash ON chunks(content_hash)')
 
+
+def _ensure_document_columns(conn: sqlite3.Connection) -> None:
+    """Backfill ``documents`` columns introduced in Phase 6 for older dev databases.
+
+    The current schema declares ``content_hash TEXT NOT NULL UNIQUE`` and
+    ``metadata_json TEXT NOT NULL DEFAULT '{}'``. ``CREATE TABLE IF NOT EXISTS``
+    leaves an already-existing ``documents`` table untouched, so databases created
+    before those columns shipped are missing them. We add the columns and backfill
+    ``content_hash`` from ``sha256(content)`` (matching ``document_repo._hash``) so
+    the ``NOT NULL UNIQUE`` contract holds for runtime inserts.
+    """
+    import hashlib
+
+    cols = {r['name'] for r in conn.execute('PRAGMA table_info(documents)').fetchall()}
+    if 'metadata_json' not in cols:
+        conn.execute("ALTER TABLE documents ADD COLUMN metadata_json TEXT NOT NULL DEFAULT '{}'")
+    if 'content_hash' not in cols:
+        conn.execute('ALTER TABLE documents ADD COLUMN content_hash TEXT')
+        seen: set[str] = set()
+        for row in conn.execute('SELECT id, content FROM documents').fetchall():
+            digest = hashlib.sha256((row['content'] or '').encode('utf-8')).hexdigest()
+            # Guarantee the UNIQUE constraint even if two documents share content.
+            if digest in seen:
+                digest = hashlib.sha256(
+                    f"{row['content']}|{row['id']}".encode('utf-8')).hexdigest()
+            seen.add(digest)
+            conn.execute('UPDATE documents SET content_hash=? WHERE id=?', (digest, row['id']))
+        conn.execute(
+            'CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_content_hash ON documents(content_hash)')
+
 def _table_ddl(table: str) -> str:
     """The CREATE TABLE statement for a table, taken from SCHEMA (without IF NOT EXISTS)."""
     marker = f'CREATE TABLE IF NOT EXISTS {table} ('
@@ -607,6 +636,7 @@ def init_db() -> None:
         _migrate_legacy_entities(conn)
         _migrate_legacy_claims(conn)
         _ensure_chunk_columns(conn)
+        _ensure_document_columns(conn)
         _migrate_nullable_sources(conn)
         _ensure_token_columns(conn)
         _ensure_claim_relation_columns(conn)
