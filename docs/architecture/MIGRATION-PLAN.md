@@ -14,11 +14,14 @@
 | 2026-09-14 | Phase 4（质量） | **KnowledgeQualityScore**：`app/domain/knowledge_quality.py`（七维确定性评分 + `score_claim_by_id` + `review_queue`）、端点 `/api/knowledge/claims/{id}/quality` 与 `/api/knowledge/quality/review`、`tests/test_knowledge_quality.py`（9 项）；**一句话纠正 UI**：`frontend/src/views/CorrectionView.vue` + 路由/导航，对接 `/api/knowledge/corrections`（预览，需模型）与 `/apply`（手动模式免模型）+ 审计历史；`ClaimView` 展示质量分（前端 vue-tsc + vite build 通过） | 全量 224 通过 |
 | 2026-09-14 | Phase 4（质量） | **Citation Validation**：`app/domain/citation_validation.py`（`locatability`/`coverage`/`currentness` 确定性三维 + `support` LLM 维度以 callable 注入，模型不可用时降为确定性三项并标 `llm_unavailable`）、`app/workflows/citation_validation_workflow.py`（注入 `openai_model` 调用）、`POST /api/qa/validate`、`tests/test_citation_validation.py`（7 项）；前端 `QaView` 加「校验引用」按钮 + 报告面板（维度条 / grounding 断言 / issues） | 全量 231 通过 |
 
-**架构已基本冻结（Phase 1–4 落地）**，质量工程主线全部完成。剩余非阻塞项：
+| 2026-09-14 | Phase 6 | **嵌入内容缓存 + 增量索引 + 数据 epoch 查询缓存**：`app/cache.py`（`EpochCache` 随数据 epoch 整体失效）、`app/embeddings.py`（`embedding_cache` 表 + 内容级向量复用）、`app/repositories/document_repo.py`（`sync_chunks`/`plan_chunks` 增量对账，未变 chunk 保留嵌入）、`app/service.py`（`index_document` 增量索引，文本/抽取/本体版本均未变时跳过 LLM）；测试 `test_embedding_cache`/`test_incremental_indexing`/`test_query_cache`/`test_data_epoch_cache` | 全量 372 通过 |
+| 2026-09-14 | Phase 7 | **Evaluation Dashboard + 架构/回归基建**：`app/evaluation/data/golden/*`（golden 单一来源，自 `tests/evaluation/*/golden.json` 迁入）、`app/evaluation/store.py`（`evaluation_runs` 持久化）、`app/evaluation/runners.py`（`run_evaluation` 调度）、`app/evaluation/baseline.py`（基线 CLI `python -m app.evaluation.baseline`）、`app/main.py` 5 个 `/api/eval/*` 端点；前端 `EvalDashboard.vue` + 路由 `/eval` + 导航；`tests/test_architecture.py` 加固（评测模块纯净红线）+ `tests/test_eval_regression.py`（基线回归 harness，`make eval-baseline`/`make test-arch`） | 全量 389 通过 |
+
+**架构已基本冻结（Phase 1–4 落地）**，质量工程主线全部完成；Phase 5–7 为评测/缓存/增量能力扩展。剩余非阻塞项：
 - `KnowledgeQualityScore` 与 Review 队列 —— **已实现**：`/api/knowledge/quality/review` 按质量分把低分/带关键标记的 Claim 送入审核（最弱优先），`ClaimView` 与纠正 UI均展示七维分
 - Knowledge QA 引用校验（Citation Validation）—— **已实现**：`POST /api/qa/validate` 对 `/api/ask` 的回答做 locatability/coverage/currentness 确定性校验 + support 语义校验（须 LLM，失败时降级），`QaView` 可一键校验并展示报告
 - 旧路径未收敛：`PATCH /api/knowledge/{kind}/{id}/status` 与 `PATCH /api/claim-relations/{id}` 仍未走 Operation
-- 基础设施仍含 SQL：`app/embeddings.py`、`app/tools/*`、`app/context/*`、`app/prompt_profiles.py`、`app/runlog.py`
+- 基础设施仍含 SQL：`app/embeddings.py`、`app/tools/*`、`app/context/*`、`app/prompt_profiles.py`、`app/runlog.py`；Phase 7 新增的 `app/evaluation/store.py`/`runners.py` 已列入持久层白名单（属允许的落地文件，不违反封口）
 
 
 ## 0. 迁移总策略
