@@ -16,6 +16,8 @@ const loadError = ref('')
 const docTitle = ref('')
 /** How this claim relates to other claims — claims are never overwritten. */
 const relations = ref<any[]>([])
+/** Deterministic quality score (no LLM) — see KnowledgeQualityScore. */
+const quality = ref<any>(null)
 
 const RELATION_LABEL: Record<string, string> = {
   duplicate: '重复', coexists: '并存', supersedes: '取代', contradicts: '矛盾', unclear: '待定',
@@ -25,6 +27,7 @@ async function load() {
   loadError.value = ''
   docTitle.value = ''
   relations.value = []
+  quality.value = null
   try {
     c.value = await api<Claim>('/api/claims/' + route.params.id)
     if (c.value?.source_document_id) {
@@ -37,6 +40,9 @@ async function load() {
       const r = await api<{ relations: any[] }>('/api/claims/' + c.value.id + '/relations')
       relations.value = r.relations || []
     } catch { relations.value = [] }
+    try {
+      quality.value = await api<any>('/api/knowledge/claims/' + c.value.id + '/quality')
+    } catch { quality.value = null }
   } catch (e: any) { c.value = null; loadError.value = e.message }
 }
 
@@ -90,6 +96,18 @@ const inGraph = () => !!c.value && c.value.modality === 'asserted'
         <div class="prop"><span>Polarity</span><b>{{ c.polarity }}</b></div>
         <div class="prop"><span>Modality</span><b>{{ c.modality }}</b></div>
         <div class="prop"><span>Condition</span><b>{{ c.content || c.context?.condition || '—' }}</b></div>
+      </div>
+
+      <div v-if="quality" class="sechead"><h3>质量评分</h3><span class="tag" :class="'g-' + quality.grade" style="margin:0">{{ quality.grade }} · {{ Math.round(quality.overall * 100) }}%</span></div>
+      <div v-if="quality" class="qbox">
+        <div v-for="(v, k) in quality.dimensions" :key="k" class="qbar">
+          <span class="qk">{{ k }}</span>
+          <span class="qt"><i :style="{ width: Math.round(v * 100) + '%' }" :class="{ low: v < 0.5 }"></i></span>
+          <span class="qv">{{ Math.round(v * 100) }}</span>
+        </div>
+        <div v-if="quality.flags?.length" class="qflags">
+          <span v-for="f in quality.flags" :key="f" class="qflag">{{ f }}</span>
+        </div>
       </div>
 
       <div class="sechead"><h3>Evidence</h3><span class="tag" :class="c.source_quote ? 'green' : 'red'" style="margin:0">{{ c.source_quote ? '1 source' : 'missing' }}</span></div>
@@ -149,3 +167,17 @@ const inGraph = () => !!c.value && c.value.modality === 'asserted'
     <div class="empty">找不到这条 Claim（{{ loadError }}）——它可能已被删除或合并。</div>
   </div>
 </template>
+
+<style scoped>
+.qbox{margin:10px 0 4px;padding:11px;border:1px solid var(--hair);border-radius:11px;background:#fff}
+.qbar{display:grid;grid-template-columns:96px 1fr 28px;align-items:center;gap:9px;font-size:10px;color:var(--sub);margin:4px 0}
+.qk{font-size:9.5px;text-transform:capitalize}
+.qt{height:7px;background:#eef1f7;border-radius:99px;overflow:hidden}
+.qt i{display:block;height:100%;background:linear-gradient(90deg,#5b7cff,#8b67f7)}
+.qt i.low{background:#d9695a}
+.qv{text-align:right;color:var(--faint)}
+.qflags{margin-top:9px;display:flex;flex-wrap:wrap;gap:5px}
+.qflag{font-size:9px;background:#fbeceb;color:#c0564b;border-radius:99px;padding:2px 8px}
+.g-A{background:#3aa76d;color:#fff}.g-B{background:#5b9bd5;color:#fff}
+.g-C{background:#e0a93b;color:#fff}.g-D{background:#d9695a;color:#fff}
+</style>

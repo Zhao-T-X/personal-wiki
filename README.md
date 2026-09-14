@@ -104,7 +104,7 @@ Hybrid Retrieval / Graph / RAG / Multi-agent
 │   └── src/{views,components,stores,api,router}
 ├── schemas/                  # 抽取 JSON Schema + registry（claim-predicate / relation-predicate / entity-type / normalization）
 ├── skills/                   # Agent 技能（knowledge-curation / knowledge-extraction）+ references
-├── docs/                     # 设计文档 / 知识标准 / superpowers 规格
+├── docs/                     # 架构规范 / 开发规范 / ADR / 知识标准 / 设计规格（见 docs/README.md）
 ├── scripts/                  # init_db / export_json / migrate_v01 / seed_demo / smoke_test / check_css
 ├── sql/                      # schema.v0.1.sql
 ├── tests/                    # pytest 套件（24 个文件）
@@ -308,6 +308,14 @@ AgentScope 2.x 作为执行层。内置 Agent 不直连 SQLite，而是调用 LL
 - `GET /api/graph`、`GET /api/conflicts`、`GET /api/knowledge/health`、`GET /api/review`
 - `PATCH /api/knowledge/{kind}/{id}/status` — `kind ∈ entity|claim|relation|idea|question`
 
+**知识操作 / 一句话纠正**
+
+- `GET /api/knowledge/operations/kinds` — 已注册的操作类型
+- `GET /api/knowledge/operations` — 操作审计（`?kind&limit`）
+- `POST /api/knowledge/operations` — 执行操作（`kind` + `payload`）：CREATE / DUPLICATE / CONTRADICT / SUPERSEDE / CORRECT / MERGE / ARCHIVE / RESTORE
+- `POST /api/knowledge/corrections` — 解析一句话纠正并**生成方案（不写入）**
+- `POST /api/knowledge/corrections/apply` — 确认后经 `CORRECT` 操作执行
+
 **检索 / 问答 / 研究**
 
 - `GET|POST /api/search`（`?q&limit&semantic`）
@@ -445,12 +453,26 @@ make export    # python scripts/export_json.py
 
 ## 文档索引
 
+文档总入口：[`docs/README.md`](docs/README.md)。
+
+**架构与治理（v0.2）**
+
+- [`docs/architecture/`](docs/architecture/README.md) — 架构规范：四层模型、模块边界、五个公共 Facade、领域模型、知识操作、扩展点、迁移计划
+- [`docs/development/`](docs/development/README.md) — 开发规范：编码总则（含 LLM 编程规范）、模块边界、API / 错误 / 日志 / 测试规范、新功能开发流程
+- [`docs/adr/`](docs/adr/README.md) — 架构决策记录 ADR-001~010（SQLite / 分层 / Facade / Domain-Repository 分离 / Claim Evolution / Evidence / AgentScope / Context Runtime / Operations / Deterministic First）
+- 迁移矩阵 `CURRENT → TARGET`：`docs/architecture/MIGRATION-PLAN.md`
+
+**知识标准**
+
+- [`docs/standards/`](docs/standards/README.md) — 知识标准（本体 / 断言 / 关系 / 事件 / 证据 / 抽取 / 归一化 / 实现映射等）
+
+**设计规格**
+
+- `docs/superpowers/specs/2026-09-11-context-runtime-design.md` — Context Runtime 设计规格（P1–P4 验收）
+- `docs/superpowers/specs/` — 其他设计规格（frontend-redesign / llm-run-records / pkos-redesign）
 - `docs/TECHNICAL-DESIGN.md` / `TECHNICAL-DESIGN.docx` — 技术设计
 - `docs/PROCESSING-PIPELINE.md` / `ORIGINAL-PROCESSING-FLOW.md` — 处理流水线
 - `docs/IMPLEMENTATION-PLAN.md` / `ORIGINAL-IMPLEMENTATION-PLAN.md` — 实现计划
 - `docs/API-EXAMPLES.md` — API 示例
 - `docs/README-IMPLEMENTATION.md` — 实现说明
-- `docs/standards/` — 知识标准（见上）
-- `docs/superpowers/specs/2026-09-11-context-runtime-design.md` — Context Runtime 设计规格（P1–P4 验收）
-- `docs/superpowers/specs/` — 其他设计规格（frontend-redesign / llm-run-records / pkos-redesign）
 - `frontend/README.md` — 前端脚手架说明

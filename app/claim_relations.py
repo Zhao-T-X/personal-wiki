@@ -18,7 +18,7 @@ honest question.
 """
 from __future__ import annotations
 
-import uuid
+from .repositories import ClaimRepository
 
 RELATIONSHIPS = ('duplicate', 'coexists', 'supersedes', 'contradicts', 'unclear')
 
@@ -32,18 +32,6 @@ FUNCTIONAL_PREDICATES = frozenset({'is', 'defined_as', 'classified_as'})
 
 # Ranking for "most interesting relationship first" in a review queue.
 _PRIORITY = {'duplicate': 0, 'supersedes': 1, 'contradicts': 2, 'coexists': 3, 'unclear': 4}
-
-_CLAIM_SELECT = '''
-SELECT c.id, c.subject_id, c.predicate, c.object_id, c.object_text, c.content,
-       c.claim_type, c.polarity, c.modality, c.confidence, c.status, c.created_at,
-       c.source_document_id, c.source_chunk_id, c.source_start_offset,
-       c.source_end_offset, c.source_quote,
-       s.name AS subject_name, o.name AS object_name
-FROM claims c
-JOIN entities s ON s.id = c.subject_id
-LEFT JOIN entities o ON o.id = c.object_id
-'''
-
 
 def _object_key(row: dict) -> str:
     """Normalised object identity: the resolved entity when there is one, else text.
@@ -133,15 +121,12 @@ def find_related_claims(conn, claim_id: str, *, limit: int = 10) -> list[dict]:
     and cheap. Semantic fallback is intentionally absent — it costs an embedding
     call per claim, and structural recall has to prove insufficient first.
     """
-    row = conn.execute(_CLAIM_SELECT + ' WHERE c.id=?', (claim_id,)).fetchone()
+    claims = ClaimRepository(conn)
+    row = claims.comparison_target(claim_id)
     if not row:
         return []
-    return [dict(r) for r in conn.execute(
-        _CLAIM_SELECT
-        + ' WHERE c.subject_id=? AND c.predicate=? AND c.id != ?'
-          " AND c.status NOT IN ('rejected','archived')"
-          ' ORDER BY c.created_at DESC LIMIT ?',
-        (row['subject_id'], row['predicate'], claim_id, max(1, min(limit, 50)))).fetchall()]
+    return claims.related(subject_id=row['subject_id'], predicate=row['predicate'],
+                          exclude_id=claim_id, limit=max(1, min(limit, 50)))
 
 
 def detect_claim_relations(conn, *, document_id: str) -> int:
@@ -154,8 +139,8 @@ def detect_claim_relations(conn, *, document_id: str) -> int:
 
     Returns the number of relationships written.
     """
-    new_claims = [dict(r) for r in conn.execute(
-        _CLAIM_SELECT + ' WHERE c.source_document_id=? ORDER BY c.created_at', (document_id,))]
+    claims = ClaimRepository(conn)
+    new_claims = claims.for_document_chronological(document_id)
     written = 0
     for claim in new_claims:
         try:
@@ -164,22 +149,17 @@ def detect_claim_relations(conn, *, document_id: str) -> int:
                     continue
                 # One row per pair: whichever direction was detected first wins,
                 # so a duplicate is not reported twice from both sides.
-                if conn.execute(
-                        'SELECT 1 FROM claim_relations WHERE source_claim_id=? AND target_claim_id=?',
-                        (verdict['related_claim_id'], claim['id'])).fetchone():
+                if claims.relation_exists(verdict['related_claim_id'], claim['id']):
                     continue
                 # Linking a duplicate and recording two facts side by side are both
                 # safe to automate — neither changes what the wiki asserts. Anything
                 # that could change it (a contradiction) waits for a human.
                 status = 'accepted' if verdict['suggested_action'] in ('link_evidence', 'keep_both') else 'candidate'
-                cur = conn.execute(
-                    'INSERT OR IGNORE INTO claim_relations(id,source_claim_id,target_claim_id,'
-                    'relationship,confidence,reason,suggested_action,status,created_by)'
-                    ' VALUES(?,?,?,?,?,?,?,?,?)',
-                    (str(uuid.uuid4()), claim['id'], verdict['related_claim_id'],
-                     verdict['relationship'], verdict['confidence'], verdict['reason'],
-                     verdict['suggested_action'], status, 'system'))
-                written += cur.rowcount or 0
+                written += 1 if claims.insert_relation(
+                    source_claim_id=claim['id'], target_claim_id=verdict['related_claim_id'],
+                    relationship=verdict['relationship'], confidence=verdict['confidence'],
+                    reason=verdict['reason'], suggested_action=verdict['suggested_action'],
+                    status=status, created_by='system') else 0
         except Exception:  # noqa: BLE001 - never lose the claim over a relationship
             continue
     return written

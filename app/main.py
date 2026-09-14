@@ -6,17 +6,22 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from . import __version__
 from .config import runtime, save_settings
-from .db import connect, init_db, loads, dumps
+from .db import init_db, loads, dumps, transaction
 from .models import (AskRequest, DocumentCreate, StatusUpdate, SearchRequest, EntityUpdate,
-                     EntityCreate, IdeaCreate, QuestionCreate, EventCreate, ResearchCreate)
+                     EntityCreate, IdeaCreate, QuestionCreate, EventCreate, ResearchCreate,
+                     CorrectionRequest, CorrectionApplyRequest, CitationValidateRequest)
 from .service import create_document, index_document, embed_document, delete_document
 from .retrieval import evidence_pack, format_evidence, search, lexical_search
 from .llm import answer
-from .ontology import KNOWLEDGE_STATUSES, IDEA_STATUSES, QUESTION_STATUSES
+from .ontology import (KNOWLEDGE_STATUSES, IDEA_STATUSES, QUESTION_STATUSES,
+                       canonical_entity_type, normalize_name)
 from .importer import SUPPORTED
 from .graph import neighborhood
 from .resolution import find_similar_entities
 from .prompt_profiles import list_profiles, get_profile, update_profile, reset_profile, restore_version
+from .repositories import (CatalogRepository, ClaimRepository, DocumentRepository, EntityRepository,
+                           EventRepository, IdeaRepository, OperationRepository, QuestionRepository,
+                           RelationRepository, ResearchRepository, RunRepository)
 
 app=FastAPI(title='LLM-Wiki', version=__version__)
 
@@ -155,67 +160,34 @@ async def import_file(file: UploadFile=File(...)):
 @app.get('/api/documents')
 def list_docs(limit:int=100):
     limit=max(1,min(limit,500))
-    conn=connect()
-    rows=conn.execute('''SELECT d.id,d.title,d.source_type,d.source_uri,d.created_at,d.updated_at,
-        (SELECT COUNT(*) FROM chunks c WHERE c.document_id=d.id) chunk_count,
-        (SELECT status FROM llm_runs r WHERE r.document_id=d.id ORDER BY r.created_at DESC LIMIT 1) last_run_status,
-        (SELECT created_at FROM llm_runs r WHERE r.document_id=d.id ORDER BY r.created_at DESC LIMIT 1) last_run_at
-        FROM documents d ORDER BY d.updated_at DESC LIMIT ?''',(limit,)).fetchall()
-    total=conn.execute('SELECT COUNT(*) c FROM documents').fetchone()['c']; conn.close()
-    return [dict(r)|{'total':total} for r in rows]
+    items,total=DocumentRepository().list(limit)
+    return [item|{'total':total} for item in items]
 
 @app.get('/api/events')
 def events_list(limit:int=100,offset:int=0,status:str|None=None):
-    sql='SELECT id,event_type,description,participants_json,time_json,location,status,confidence,source_document_id,source_quote,created_at FROM events'; params=[]
-    if status: sql+=' WHERE status=?'; params.append(status)
-    sql+=' ORDER BY created_at DESC LIMIT ? OFFSET ?'; params.extend([max(1,min(limit,200)),max(0,offset)])
-    conn=connect(); rows=conn.execute(sql,params).fetchall(); conn.close()
-    return [dict(r)|{'participants':loads(r['participants_json'],[]),'time':loads(r['time_json'],{})} for r in rows]
+    return EventRepository().list(max(1,min(limit,200)),max(0,offset),status)
 
 @app.get('/api/ideas')
 def ideas_list(limit:int=100,offset:int=0,status:str|None=None):
-    sql='SELECT id,content,status,confidence,source_document_id,source_quote,created_at FROM ideas'; params=[]
-    if status: sql+=' WHERE status=?'; params.append(status)
-    sql+=' ORDER BY created_at DESC LIMIT ? OFFSET ?'; params.extend([max(1,min(limit,200)),max(0,offset)])
-    conn=connect(); rows=conn.execute(sql,params).fetchall(); conn.close(); return [dict(r) for r in rows]
+    return IdeaRepository().list(max(1,min(limit,200)),max(0,offset),status)
 
 @app.get('/api/questions')
 def questions_list(limit:int=100,offset:int=0,status:str|None=None):
-    sql='SELECT id,content,status,source_document_id,source_quote,created_at FROM questions'; params=[]
-    if status: sql+=' WHERE status=?'; params.append(status)
-    sql+=' ORDER BY created_at DESC LIMIT ? OFFSET ?'; params.extend([max(1,min(limit,200)),max(0,offset)])
-    conn=connect(); rows=conn.execute(sql,params).fetchall(); conn.close(); return [dict(r) for r in rows]
+    return QuestionRepository().list(max(1,min(limit,200)),max(0,offset),status)
 
 @app.get('/api/stats/timeseries')
 def stats_timeseries(days:int=14):
-    days=max(1,min(days,90))
-    conn=connect()
-    def series(table):
-        rows=conn.execute(f"SELECT date(created_at) d,COUNT(*) c FROM {table} WHERE created_at>=date('now',?) GROUP BY date(created_at)",(f'-{days} days',)).fetchall()
-        return {r['d']:r['c'] for r in rows}
-    docs,ents,clms=series('documents'),series('entities'),series('claims'); conn.close()
-    out=[]; from datetime import date,timedelta
-    for i in range(days-1,-1,-1):
-        d=str(date.today()-timedelta(days=i))
-        out.append({'date':d,'documents':docs.get(d,0),'entities':ents.get(d,0),'claims':clms.get(d,0)})
-    return out
+    return CatalogRepository().timeseries(max(1,min(days,90)))
 
 @app.get('/api/database/integrity')
 def database_integrity():
-    conn=connect()
-    integrity=conn.execute('PRAGMA integrity_check').fetchone()[0]
-    page_count=conn.execute('PRAGMA page_count').fetchone()[0]
-    page_size=conn.execute('PRAGMA page_size').fetchone()[0]
-    conn.close()
-    return {'integrity':integrity,'page_count':page_count,'size_mb':round(page_count*page_size/1048576,1)}
+    return CatalogRepository().integrity()
 
 @app.get('/api/claims/{claim_id}')
 def get_claim(claim_id:str):
-    conn=connect()
-    row=conn.execute('''SELECT c.*,s.name subject_name,o.name object_name FROM claims c
-        JOIN entities s ON s.id=c.subject_id LEFT JOIN entities o ON o.id=c.object_id WHERE c.id=?''',(claim_id,)).fetchone()
-    if not row: conn.close(); raise HTTPException(404,'Claim not found')
-    conn.close(); return dict(row)|{'context':loads(row['context_json'],{})}
+    item=ClaimRepository().get(claim_id)
+    if not item: raise HTTPException(404,'Claim not found')
+    return item
 
 @app.get('/api/claims/{claim_id}/relations')
 def claim_relations_for(claim_id:str):
@@ -224,50 +196,12 @@ def claim_relations_for(claim_id:str):
     Claims are never overwritten, so this is the only place knowledge evolution is
     expressed — including whether a newer claim supersedes this one.
     """
-    conn=connect()
-    rows=conn.execute('''SELECT r.id,r.relationship,r.confidence,r.reason,r.suggested_action,r.status,r.created_at,
-                                r.source_claim_id,r.target_claim_id,
-                                c.id other_id,c.predicate,c.content,c.object_text,
-                                c.confidence other_confidence,c.status other_status,c.created_at other_created_at,
-                                c.source_document_id,c.source_quote,
-                                s.name subject_name,o.name object_name,d.title document_title
-                         FROM claim_relations r
-                         JOIN claims c ON c.id = CASE WHEN r.source_claim_id=? THEN r.target_claim_id ELSE r.source_claim_id END
-                         JOIN entities s ON s.id=c.subject_id
-                         LEFT JOIN entities o ON o.id=c.object_id
-                         LEFT JOIN documents d ON d.id=c.source_document_id
-                         WHERE r.source_claim_id=? OR r.target_claim_id=?
-                         ORDER BY r.created_at DESC''',(claim_id,claim_id,claim_id)).fetchall()
-    conn.close()
-    return {'claim_id':claim_id,'relations':[dict(r) for r in rows]}
+    return {'claim_id':claim_id,'relations':ClaimRepository().relations_for_claim(claim_id)}
 
 @app.get('/api/claim-relations')
 def claim_relations_queue(status:str|None=None,limit:int=100):
     """Claim-to-claim relationships awaiting a decision, newest first."""
-    limit=max(1,min(limit,500))
-    sql='''SELECT r.id,r.relationship,r.confidence,r.reason,r.suggested_action,r.status,r.created_by,r.created_at,
-                  ns.id new_id,ns.predicate new_predicate,ns.content new_content,ns.object_text new_object_text,
-                  ns.confidence new_confidence,ns.status new_status,ns.source_quote new_quote,
-                  ns.source_document_id new_document_id,nsu.name new_subject,nou.name new_object,
-                  nd.title new_document_title,
-                  os.id old_id,os.predicate old_predicate,os.content old_content,os.object_text old_object_text,
-                  os.confidence old_confidence,os.status old_status,os.source_quote old_quote,
-                  os.source_document_id old_document_id,osu.name old_subject,oou.name old_object,
-                  od.title old_document_title
-           FROM claim_relations r
-           JOIN claims ns ON ns.id=r.source_claim_id
-           JOIN entities nsu ON nsu.id=ns.subject_id
-           LEFT JOIN entities nou ON nou.id=ns.object_id
-           LEFT JOIN documents nd ON nd.id=ns.source_document_id
-           JOIN claims os ON os.id=r.target_claim_id
-           JOIN entities osu ON osu.id=os.subject_id
-           LEFT JOIN entities oou ON oou.id=os.object_id
-           LEFT JOIN documents od ON od.id=os.source_document_id'''
-    params=[]
-    if status: sql+=' WHERE r.status=?'; params.append(status)
-    sql+=' ORDER BY r.created_at DESC LIMIT ?'; params.append(limit)
-    conn=connect(); rows=conn.execute(sql,params).fetchall(); conn.close()
-    return [dict(r) for r in rows]
+    return ClaimRepository().relation_queue(status,max(1,min(limit,500)))
 
 @app.post('/api/claim-relations/{relation_id}/analyze')
 async def analyze_claim_relation(relation_id:str):
@@ -277,20 +211,11 @@ async def analyze_claim_relation(relation_id:str):
     for cases structure cannot read (differently-worded statements, evidence that
     states a replacement). It writes nothing by itself.
     """
-    conn=connect()
-    rel=conn.execute('SELECT * FROM claim_relations WHERE id=?',(relation_id,)).fetchone()
+    claims=ClaimRepository()
+    rel=claims.relation(relation_id)
     if not rel:
-        conn.close(); raise HTTPException(404,'Claim relation not found')
-    rel=dict(rel)
-
-    def _brief(claim_id):
-        row=conn.execute('''SELECT c.predicate,c.content,c.object_text,c.source_quote,
-                                   s.name subject_name,o.name object_name
-                            FROM claims c JOIN entities s ON s.id=c.subject_id
-                            LEFT JOIN entities o ON o.id=c.object_id WHERE c.id=?''',(claim_id,)).fetchone()
-        return dict(row) if row else {}
-    new_claim=_brief(rel['source_claim_id']); old_claim=_brief(rel['target_claim_id'])
-    conn.close()
+        raise HTTPException(404,'Claim relation not found')
+    new_claim=claims.brief(rel['source_claim_id']); old_claim=claims.brief(rel['target_claim_id'])
 
     from .claim_relations import analyze_relation
     verdict=await analyze_relation(new_claim,old_claim)
@@ -315,51 +240,112 @@ def update_claim_relation(relation_id:str,payload:dict):
     relationship=body.get('relationship')
     if relationship is not None and relationship not in RELATIONSHIPS:
         raise HTTPException(422,f'Unknown relationship: {relationship}')
-    conn=connect()
-    row=conn.execute('SELECT * FROM claim_relations WHERE id=?',(relation_id,)).fetchone()
-    if not row:
-        conn.close(); raise HTTPException(404,'Claim relation not found')
-    rel=dict(row)
-    try:
-        if relationship is not None:
-            conn.execute('UPDATE claim_relations SET status=?,relationship=? WHERE id=?',
-                         (new_status,relationship,relation_id))
-        else:
-            conn.execute('UPDATE claim_relations SET status=? WHERE id=?',(new_status,relation_id))
-
+    with transaction() as conn:
+        claims=ClaimRepository(conn)
+        rel=claims.relation(relation_id)
+        if not rel:
+            raise HTTPException(404,'Claim relation not found')
+        claims.update_relation(relation_id,status=new_status,relationship=relationship)
         if relationship=='supersedes' and new_status=='accepted':
-            older=conn.execute('SELECT status FROM claims WHERE id=?',(rel['target_claim_id'],)).fetchone()
-            conn.execute('UPDATE claim_relations SET target_previous_status=? WHERE id=?',
-                         (older['status'] if older else None,relation_id))
-            conn.execute("UPDATE claims SET status='superseded' WHERE id=?",(rel['target_claim_id'],))
+            older=claims.status_of(rel['target_claim_id'])
+            claims.set_relation_previous_status(relation_id,older)
+            claims.set_status(rel['target_claim_id'],'superseded')
         elif rel.get('target_previous_status'):
             # Any retreat from a confirmed supersession restores the older claim.
-            conn.execute('UPDATE claims SET status=? WHERE id=? AND status=?',
-                         (rel['target_previous_status'],rel['target_claim_id'],'superseded'))
-        conn.commit()
-    finally:
-        conn.close()
+            claims.restore_status(rel['target_claim_id'],rel['target_previous_status'],only_if='superseded')
     return {'id':relation_id,'status':new_status,'relationship':relationship}
+
+@app.post('/api/knowledge/corrections')
+async def correction_plan(payload: CorrectionRequest):
+    """Plan a one-sentence correction. Writes nothing.
+
+    The model parses the sentence and judges its relationship to existing claims;
+    when no exact match is found, a second model pass verifies the new statement
+    against the existing knowledge base. The user then confirms through ``/apply``.
+    """
+    from .workflows.correction_workflow import build_plan, parse_intent, verify_new_claim
+    intent = await parse_intent(payload.text)
+    if intent is None:
+        raise HTTPException(503, '模型不可用或未配置，无法解析纠正语句')
+    plan = build_plan(payload.text, intent)
+    if plan.relationship == 'new':
+        plan = await verify_new_claim(plan)
+    return plan.to_dict()
+
+@app.post('/api/knowledge/corrections/apply')
+def correction_apply(payload: CorrectionApplyRequest):
+    """Execute a confirmed correction through the CORRECT operation."""
+    from .domain.operations import OperationError
+    from .workflows.correction_workflow import CorrectionIntent, apply_correction, build_plan
+    intent = CorrectionIntent(text=payload.text, subject=payload.subject,
+                              predicate=payload.predicate, object=payload.object,
+                              polarity=payload.polarity, confidence=payload.confidence)
+    plan = build_plan(payload.text, intent)
+    try:
+        return apply_correction(plan, relationship=payload.relationship,
+                                related_claim_id=payload.related_claim_id,
+                                apply_supersede=payload.apply_supersede or None)
+    except OperationError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+@app.get('/api/knowledge/claims/{claim_id}/quality')
+def claim_quality(claim_id:str):
+    """Deterministic seven-dimension quality score for one claim (no LLM)."""
+    from .domain.knowledge_quality import score_claim_by_id
+    q = score_claim_by_id(claim_id)
+    if q is None:
+        raise HTTPException(404, 'Claim not found')
+    return q.to_dict()
+
+
+@app.get('/api/knowledge/quality/review')
+def quality_review(limit:int=50, threshold:float=0.70):
+    """Claims the quality scorer recommends for human review, weakest first."""
+    from .domain.knowledge_quality import review_queue
+    return review_queue(limit=max(1, min(limit, 200)), threshold=threshold)
+
+
+@app.get('/api/knowledge/operations')
+def knowledge_operations(kind:str|None=None, limit:int=50):
+    """Audit trail: every knowledge mutation, newest first."""
+    return OperationRepository().list(max(1,min(limit,200)), kind)
+
+@app.get('/api/knowledge/operations/kinds')
+def knowledge_operation_kinds():
+    from .domain.operations import registered_operations
+    return {'kinds': sorted(registered_operations())}
+
+@app.post('/api/knowledge/operations')
+def knowledge_operation(payload: dict):
+    """Execute a knowledge operation (CREATE / SUPERSEDE / MERGE / ARCHIVE / ...).
+
+    The only sanctioned way to change knowledge: it validates, mutates lifecycle
+    and relationships (never content), and is recorded in the audit trail.
+    """
+    from .domain.operations import OperationError, OperationRequest, run
+    body = payload or {}
+    kind = body.get('kind')
+    if not kind: raise HTTPException(422, 'kind is required')
+    try:
+        with transaction() as conn:
+            result = run(OperationRequest(kind=kind, payload=body.get('payload') or {},
+                                          actor=body.get('actor', 'user'),
+                                          reason=body.get('reason', '')), conn)
+    except OperationError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {'operation_id': result.operation_id, 'kind': result.kind, 'affected': result.affected}
 
 @app.get('/api/entities/{entity_id}/object')
 def entity_object(entity_id:str):
-    conn=connect()
-    e=conn.execute('SELECT * FROM entities WHERE id=?',(entity_id,)).fetchone()
-    if not e: conn.close(); raise HTTPException(404,'Entity not found')
-    claims=[dict(r) for r in conn.execute('''SELECT c.*,s.name subject_name,o.name object_name FROM claims c
-        JOIN entities s ON s.id=c.subject_id LEFT JOIN entities o ON o.id=c.object_id
-        WHERE c.subject_id=? OR c.object_id=? ORDER BY c.created_at DESC''',(entity_id,entity_id)).fetchall()]
-    relations=[dict(r) for r in conn.execute('''SELECT r.*,a.name source_name,b.name target_name FROM relations r
-        JOIN entities a ON a.id=r.source_id JOIN entities b ON b.id=r.target_id
-        WHERE r.source_id=? OR r.target_id=? ORDER BY r.created_at DESC''',(entity_id,entity_id)).fetchall()]
+    entities=EntityRepository()
+    e=entities.get_full(entity_id)
+    if not e: raise HTTPException(404,'Entity not found')
+    claims=ClaimRepository().for_entity(entity_id)
+    relations=RelationRepository().for_entity(entity_id)
     docs=list({c['source_document_id'] for c in claims})
-    events,ideas,questions=[],[],[]
-    if docs:
-        q=','.join('?'*len(docs)); args=tuple(docs)
-        events=[dict(r) for r in conn.execute(f'SELECT * FROM events WHERE source_document_id IN ({q}) ORDER BY created_at DESC LIMIT 50',args).fetchall()]
-        ideas=[dict(r) for r in conn.execute(f'SELECT * FROM ideas WHERE source_document_id IN ({q}) ORDER BY created_at DESC LIMIT 50',args).fetchall()]
-        questions=[dict(r) for r in conn.execute(f'SELECT id,content,status,source_document_id,source_quote,created_at FROM questions WHERE source_document_id IN ({q}) ORDER BY created_at DESC LIMIT 50',args).fetchall()]
-    conn.close()
+    events=EventRepository().for_documents(docs,50) if docs else []
+    ideas=IdeaRepository().for_documents(docs,50) if docs else []
+    questions=QuestionRepository().for_documents(docs,50) if docs else []
     evidence=[c for c in claims if c['source_quote']]
     type_decision=[]
     for c in claims:
@@ -367,17 +353,12 @@ def entity_object(entity_id:str):
             type_decision.append({'type':c['object_text'][:60],'reason':f"来源明确定义：{(c['source_quote'] or '')[:90]}",'ok':c['polarity']=='positive'})
     counts={'claims':len(claims),'relations':len(relations),'events':len(events),'ideas':len(ideas),
             'questions':len(questions),'evidence':len(evidence),'documents':len(docs)}
-    return {'entity':dict(e)|{'aliases':loads(e['aliases_json'],[]),'properties':loads(e['properties_json'],{})},
-            'counts':counts,'claims':claims,'relations':relations,'evidence':evidence,
+    return {'entity':e,'counts':counts,'claims':claims,'relations':relations,'evidence':evidence,
             'events':events,'ideas':ideas,'questions':questions,'type_decision':type_decision}
 
 @app.get('/api/conflicts')
 def conflicts_list(limit:int=50):
-    conn=connect()
-    rows=conn.execute('''SELECT c.id,s.name subject_name,c.predicate,c.polarity,c.content,c.object_text,c.status,
-        c.source_document_id,c.source_quote,c.modality,c.confidence,c.created_at
-        FROM claims c JOIN entities s ON s.id=c.subject_id ORDER BY c.subject_id,c.predicate''').fetchall()
-    conn.close()
+    rows=ClaimRepository().conflicts_rows()
     groups={}
     for r in rows:
         groups.setdefault((r['subject_name'],r['predicate']),[]).append(dict(r))
@@ -390,23 +371,16 @@ def conflicts_list(limit:int=50):
 
 @app.get('/api/knowledge/health')
 def knowledge_health():
-    conn=connect()
-    def count(sql, *args): return conn.execute(sql, args).fetchone()['c']
-    total_claims=count('SELECT COUNT(*) c FROM claims')
-    verified_claims=count("SELECT COUNT(*) c FROM claims WHERE status='verified'")
-    total_entities=count('SELECT COUNT(*) c FROM entities')
-    verified_entities=count("SELECT COUNT(*) c FROM entities WHERE status='verified'")
-    object_text_claims=count('SELECT COUNT(*) c FROM claims WHERE object_id IS NULL')
-    relations=count('SELECT COUNT(*) c FROM relations')
-    open_q=count("SELECT COUNT(*) c FROM questions WHERE status='open'")
-    stale=count("SELECT COUNT(*) c FROM entities WHERE status='candidate' AND updated_at<datetime('now','-90 days')")
-    conn.close()
-    return {'total_claims':total_claims,'verified_claims':verified_claims,
-            'verified_claim_ratio':round(verified_claims/max(1,total_claims)*100,1),
-            'total_entities':total_entities,'verified_entities':verified_entities,
-            'verified_entity_ratio':round(verified_entities/max(1,total_entities)*100,1),
-            'object_text_claims':object_text_claims,'relations':relations,
-            'open_questions':open_q,'stale_candidates':stale}
+    entities=EntityRepository().health_counts()
+    claims=ClaimRepository().health_counts()
+    relations=RelationRepository().count()
+    open_q=QuestionRepository().open_count()
+    return {'total_claims':claims['total'],'verified_claims':claims['verified'],
+            'verified_claim_ratio':round(claims['verified']/max(1,claims['total'])*100,1),
+            'total_entities':entities['total'],'verified_entities':entities['verified'],
+            'verified_entity_ratio':round(entities['verified']/max(1,entities['total'])*100,1),
+            'object_text_claims':claims['object_text'],'relations':relations,
+            'open_questions':open_q,'stale_candidates':entities['stale']}
 
 @app.get('/api/skills')
 def skills_list():
@@ -429,9 +403,9 @@ def skill_detail(name:str):
 
 @app.get('/api/documents/{doc_id}')
 def get_doc(doc_id:str):
-    conn=connect(); row=conn.execute('SELECT * FROM documents WHERE id=?',(doc_id,)).fetchone(); conn.close()
-    if not row: raise HTTPException(404,'Document not found')
-    item=dict(row); item['metadata']=loads(item.pop('metadata_json'),{}); return item
+    item=DocumentRepository().get(doc_id)
+    if not item: raise HTTPException(404,'Document not found')
+    item['metadata']=loads(item.pop('metadata_json','{}'),{}); return item
 
 @app.post('/api/documents/{doc_id}/index')
 async def index_doc(doc_id:str):
@@ -467,146 +441,117 @@ def post_search(req:SearchRequest): return search(req.query,req.limit,req.semant
 
 @app.get('/api/documents/{doc_id}/chunks')
 def document_chunks(doc_id: str):
-    conn=connect(); rows=conn.execute('SELECT id,document_id,content,chunk_index,start_offset,end_offset,created_at FROM chunks WHERE document_id=? ORDER BY chunk_index',(doc_id,)).fetchall(); conn.close()
-    if not rows:
+    documents=DocumentRepository()
+    rows=documents.chunks(doc_id)
+    if not rows and not documents.exists(doc_id):
         # Distinguish a valid empty/unindexed doc from missing doc.
-        conn=connect(); exists=conn.execute('SELECT 1 FROM documents WHERE id=?',(doc_id,)).fetchone(); conn.close()
-        if not exists: raise HTTPException(404,'Document not found')
-    return [dict(r) for r in rows]
+        raise HTTPException(404,'Document not found')
+    return rows
 
 @app.get('/api/entities')
 def entities(limit:int=100,offset:int=0,status:str|None=None,type:str|None=None,q:str|None=None):
-    conn=connect(); sql='SELECT id,type,name,description,properties_json,status,created_at,updated_at FROM entities'; params=[]; cond=[]
-    if status: cond.append('status=?'); params.append(status)
-    if type: cond.append('type=?'); params.append(type)
-    if q: cond.append('(lower(name) LIKE ? OR lower(IFNULL(description,\'\')) LIKE ?)'); params.extend([f'%{q.lower()}%',f'%{q.lower()}%'])
-    if cond: sql+=' WHERE '+' AND '.join(cond)
-    total=conn.execute('SELECT COUNT(*) c FROM entities'+((' WHERE '+' AND '.join(c for c in cond)) if cond else ''),params).fetchone()['c']
-    sql+=' ORDER BY updated_at DESC LIMIT ? OFFSET ?'; params.extend([max(1,min(limit,500)),max(0,offset)])
-    rows=conn.execute(sql,params).fetchall(); conn.close()
-    return [dict(r)|{'properties':loads(r['properties_json'],{}),'total':total} for r in rows]
+    items,total=EntityRepository().list(limit=max(1,min(limit,500)),offset=max(0,offset),
+                                        status=status,type=type,q=q)
+    return [item|{'total':total} for item in items]
 
 @app.get('/api/entities/{entity_id}')
 def entity(entity_id:str):
-    conn=connect(); e=conn.execute('SELECT * FROM entities WHERE id=?',(entity_id,)).fetchone()
-    if not e: conn.close(); raise HTTPException(404,'Entity not found')
-    claims=conn.execute('''SELECT c.*,d.title FROM claims c JOIN documents d ON d.id=c.source_document_id WHERE c.subject_id=? OR c.object_id=? ORDER BY c.created_at DESC LIMIT 100''',(entity_id,entity_id)).fetchall()
-    conn.close(); item=dict(e); item['aliases']=loads(item.pop('aliases_json'),[]); item['properties']=loads(item.pop('properties_json'),{}); item['claims']=[dict(x) for x in claims]; return item
+    entities=EntityRepository()
+    item=entities.get(entity_id)
+    if not item: raise HTTPException(404,'Entity not found')
+    item['claims']=entities.count_claims_for(entity_id)
+    return item
 
 @app.patch('/api/entities/{entity_id}')
 def update_entity(entity_id:str,payload:EntityUpdate):
-    fields=[]; params=[]
-    if payload.description is not None: fields.append('description=?'); params.append(payload.description)
+    changes={}
+    if payload.description is not None: changes['description']=payload.description
     if payload.name is not None:
-        fields.append('name=?'); params.append(payload.name.strip())
-        fields.append('aliases_json=?'); params.append(dumps(sorted({payload.name.strip(), *(payload.aliases or [])})))
+        changes['name']=payload.name.strip()
+        changes['aliases_json']=dumps(sorted({payload.name.strip(), *(payload.aliases or [])}))
     elif payload.aliases is not None:
-        fields.append('aliases_json=?'); params.append(dumps(payload.aliases))
+        changes['aliases_json']=dumps(payload.aliases)
     if payload.type is not None:
-        from .ontology import canonical_entity_type
         try: et=canonical_entity_type(payload.type)
         except ValueError as exc: raise HTTPException(422,str(exc)) from exc
-        fields.append('type=?'); params.append(et)
-        fields.append('types_json=?'); params.append(dumps([et]))
-    if payload.properties: fields.append('properties_json=?'); params.append(dumps(payload.properties))
-    if not fields:
-        conn=connect(); exists=conn.execute('SELECT 1 FROM entities WHERE id=?',(entity_id,)).fetchone(); conn.close()
-        if not exists: raise HTTPException(404,'Entity not found')
+        changes['type']=et
+        changes['types_json']=dumps([et])
+    if payload.properties: changes['properties_json']=dumps(payload.properties)
+    entities=EntityRepository()
+    if not changes:
+        if not entities.exists(entity_id): raise HTTPException(404,'Entity not found')
         return {'id':entity_id,'updated':False}
-    conn=connect()
+    aliases=loads(changes['aliases_json'],[]) if 'aliases_json' in changes else None
     try:
-        cur=conn.execute(f'UPDATE entities SET {",".join(fields)},updated_at=CURRENT_TIMESTAMP WHERE id=?',(*params,entity_id))
-        row=conn.execute('SELECT name,aliases_json FROM entities WHERE id=?',(entity_id,)).fetchone()
-        if row:
-            from .ontology import normalize_name
-            conn.execute('DELETE FROM entity_aliases WHERE entity_id=?',(entity_id,))
-            for alias in loads(row['aliases_json'],[]):
-                conn.execute('INSERT OR IGNORE INTO entity_aliases(entity_id,alias,alias_normalized) VALUES(?,?,?)',(entity_id,alias,normalize_name(alias)))
-        conn.commit()
+        rowcount=entities.update(entity_id,changes,aliases=aliases,normalize=normalize_name)
     except sqlite3.IntegrityError as exc:
-        conn.rollback(); conn.close(); raise HTTPException(409,'Another entity already uses this name') from exc
-    conn.close()
-    if not cur.rowcount: raise HTTPException(404,'Entity not found')
+        raise HTTPException(409,'Another entity already uses this name') from exc
+    if not rowcount: raise HTTPException(404,'Entity not found')
     return {'id':entity_id,'updated':True}
 
 @app.post('/api/entities')
 def create_entity(payload:EntityCreate):
     import uuid
-    from .ontology import canonical_entity_type, normalize_name
     try: et=canonical_entity_type(payload.type)
     except ValueError as exc: raise HTTPException(422,str(exc)) from exc
     eid=str(uuid.uuid4()); name=payload.name.strip()
     aliases=sorted({name, *[a.strip() for a in payload.aliases if a.strip()]})
-    conn=connect()
     try:
-        conn.execute('INSERT INTO entities(id,type,types_json,name,aliases_json,description,properties_json,status) VALUES(?,?,?,?,?,?,?,?)',
-                     (eid,et,dumps([et]),name,dumps(aliases),payload.description,dumps(payload.properties),'candidate'))
-        for alias in aliases:
-            conn.execute('INSERT OR IGNORE INTO entity_aliases(entity_id,alias,alias_normalized) VALUES(?,?,?)',(eid,alias,normalize_name(alias)))
-        conn.commit()
+        EntityRepository().insert(eid,type=et,types=[et],name=name,aliases=aliases,
+                                  description=payload.description,properties=payload.properties,
+                                  normalize=normalize_name)
     except sqlite3.IntegrityError as exc:
-        conn.rollback(); conn.close(); raise HTTPException(409,'An entity with this name already exists') from exc
-    conn.close(); return {'id':eid,'name':name,'status':'candidate'}
+        raise HTTPException(409,'An entity with this name already exists') from exc
+    return {'id':eid,'name':name,'status':'candidate'}
 
 @app.post('/api/ideas')
 def create_idea(payload:IdeaCreate):
-    import uuid
-    iid=str(uuid.uuid4())
-    conn=connect(); conn.execute('INSERT INTO ideas(id,content,status,source_document_id) VALUES(?,?,?,?)',(iid,payload.content,payload.status,payload.source_document_id)); conn.commit(); conn.close()
+    iid=IdeaRepository().insert(content=payload.content,status=payload.status,source_document_id=payload.source_document_id)
     return {'id':iid,'status':payload.status}
 
 @app.post('/api/questions')
 def create_question(payload:QuestionCreate):
-    import uuid
-    qid=str(uuid.uuid4())
-    conn=connect(); conn.execute('INSERT INTO questions(id,content,status,source_document_id) VALUES(?,?,?,?)',(qid,payload.content,payload.status,payload.source_document_id)); conn.commit(); conn.close()
+    qid=QuestionRepository().insert(content=payload.content,status=payload.status,source_document_id=payload.source_document_id)
     return {'id':qid,'status':payload.status}
 
 @app.post('/api/events')
 def create_event(payload:EventCreate):
-    import uuid
-    eid=str(uuid.uuid4())
-    conn=connect()
-    conn.execute('''INSERT INTO events(id,event_type,description,participants_json,time_json,location,status,source_document_id)
-                    VALUES(?,?,?,?,?,?,?,?)''',
-                 (eid,payload.event_type,payload.description,dumps(payload.participants),dumps(payload.time),payload.location,payload.status,payload.source_document_id))
-    conn.commit(); conn.close(); return {'id':eid,'status':payload.status}
+    eid=EventRepository().insert(event_type=payload.event_type,description=payload.description,
+                                 participants=payload.participants,time=payload.time,location=payload.location,
+                                 status=payload.status,source_document_id=payload.source_document_id)
+    return {'id':eid,'status':payload.status}
 
 @app.get('/api/research')
 def research_list(limit:int=50):
-    conn=connect(); rows=conn.execute('SELECT * FROM research_tasks ORDER BY created_at DESC LIMIT ?',(max(1,min(limit,200)),)).fetchall(); conn.close(); return [dict(r) for r in rows]
+    return ResearchRepository().list(max(1,min(limit,200)))
 
 @app.post('/api/research')
 def research_create(payload:ResearchCreate):
-    import uuid
-    rid=str(uuid.uuid4())
-    conn=connect()
-    conn.execute('INSERT INTO research_tasks(id,question_id,question_text,status) VALUES(?,?,?,?)',(rid,payload.question_id,payload.question_text,'open'))
-    conn.commit(); conn.close(); return {'id':rid,'status':'open'}
+    rid=ResearchRepository().create(question_id=payload.question_id,question_text=payload.question_text)
+    return {'id':rid,'status':'open'}
 
 @app.post('/api/research/{task_id}/run')
 async def research_run(task_id:str):
-    conn=connect(); task=conn.execute('SELECT * FROM research_tasks WHERE id=?',(task_id,)).fetchone()
-    if not task: conn.close(); raise HTTPException(404,'Research task not found')
-    conn.execute("UPDATE research_tasks SET status='running',updated_at=CURRENT_TIMESTAMP WHERE id=?",(task_id,)); conn.commit(); conn.close()
+    research=ResearchRepository()
+    task=research.get(task_id)
+    if not task: raise HTTPException(404,'Research task not found')
+    research.set_status(task_id,'running')
     try:
         from .workflows.agent_workflow import run_research_pipeline
         result=await run_research_pipeline(task['question_text'])
-        conn=connect()
-        conn.execute("UPDATE research_tasks SET status='completed',findings=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",(result['answer'],task_id))
-        conn.commit(); conn.close()
+        research.set_status(task_id,'completed',result['answer'])
         return {'id':task_id,'status':'completed','findings':result['answer'],'agent':result['agent'],
                 'packet_id':result.get('packet_id')}
     except Exception as exc:
-        conn=connect(); conn.execute("UPDATE research_tasks SET status='failed',findings=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",(f'{type(exc).__name__}: {exc}',task_id)); conn.commit(); conn.close()
+        research.set_status(task_id,'failed',f'{type(exc).__name__}: {exc}')
         raise HTTPException(502,f'Research failed: {exc}') from exc
 
 @app.post('/api/runs/{run_id}/cancel')
 def cancel_run(run_id:str):
     from .runlog import request_cancel
-    conn=connect(); row=conn.execute('SELECT status FROM llm_runs WHERE id=?',(run_id,)).fetchone(); conn.close()
-    if not row: raise HTTPException(404,'Run not found')
-    if row['status']!='started': raise HTTPException(409,'Run already finished')
+    status=RunRepository().status(run_id)
+    if status is None: raise HTTPException(404,'Run not found')
+    if status!='started': raise HTTPException(409,'Run already finished')
     request_cancel(run_id)
     return {'id':run_id,'cancelling':True}
 
@@ -619,78 +564,53 @@ def entity_graph(entity_id:str,depth:int=1,limit:int=100):
 @app.get('/api/entities/{entity_id}/duplicates')
 def entity_duplicates(entity_id:str,limit:int=5):
     """Entities that look like the same thing but were never auto-merged."""
-    conn=connect()
-    try:
+    entities=EntityRepository()
+    with entities.read() as conn:
         out=find_similar_entities(conn,entity_id,limit=max(1,min(limit,20)))
-    finally:
-        conn.close()
     return {'entity_id':entity_id,'duplicates':out}
 
 @app.get('/api/claims')
 def claims(limit:int=100,status:str|None=None):
-    conn=connect(); sql='''SELECT c.id,c.predicate,c.content,c.object_text,c.context_json,c.confidence,c.status,s.id subject_id,s.name subject_name,o.id object_id,o.name object_name,c.source_document_id,c.source_chunk_id,c.source_start_offset,c.source_end_offset,c.source_quote FROM claims c JOIN entities s ON s.id=c.subject_id LEFT JOIN entities o ON o.id=c.object_id'''; params=[]
-    if status: sql+=' WHERE c.status=?'; params.append(status)
-    sql+=' ORDER BY c.created_at DESC LIMIT ?'; params.append(max(1,min(limit,500))); rows=conn.execute(sql,params).fetchall(); conn.close(); return [dict(r)|{'context':loads(r['context_json'],{})} for r in rows]
+    return ClaimRepository().list(max(1,min(limit,500)),status)
 
 @app.get('/api/relations')
 def relations(limit:int=100,status:str|None=None):
-    conn=connect(); sql='''SELECT r.*,a.name source_name,b.name target_name FROM relations r JOIN entities a ON a.id=r.source_id JOIN entities b ON b.id=r.target_id'''; params=[]
-    if status: sql+=' WHERE r.status=?'; params.append(status)
-    sql+=' ORDER BY r.created_at DESC LIMIT ?'; params.append(max(1,min(limit,500))); rows=conn.execute(sql,params).fetchall(); conn.close(); return [dict(r)|{'context':loads(r['context_json'],{})} for r in rows]
+    return RelationRepository().list(max(1,min(limit,500)),status)
 
 @app.get('/api/review')
 def review(limit:int=100):
-    limit=max(1,min(limit,500)); conn=connect()
-    out={}
-    out['entities']=[dict(r) for r in conn.execute(
-        "SELECT id,name,type,description,status,created_at FROM entities WHERE status='candidate' ORDER BY created_at DESC LIMIT ?",(limit,)).fetchall()]
-    out['claims']=[dict(r) for r in conn.execute(
-        '''SELECT c.id,c.predicate,c.content,c.object_text,c.confidence,c.status,c.polarity,c.modality,c.claim_type,
-                  c.source_document_id,c.source_chunk_id,c.source_quote,c.source_start_offset,c.source_end_offset,
-                  s.name subject_name,o.name object_name
-           FROM claims c JOIN entities s ON s.id=c.subject_id LEFT JOIN entities o ON o.id=c.object_id
-           WHERE c.status='candidate' ORDER BY c.created_at DESC LIMIT ?''',(limit,)).fetchall()]
-    out['relations']=[dict(r) for r in conn.execute(
-        '''SELECT r.id,r.predicate,r.confidence,r.status,r.source_document_id,
-                  a.name source_name,b.name target_name
-           FROM relations r JOIN entities a ON a.id=r.source_id JOIN entities b ON b.id=r.target_id
-           WHERE r.status='candidate' ORDER BY r.created_at DESC LIMIT ?''',(limit,)).fetchall()]
-    conn.close(); return out
+    limit=max(1,min(limit,500))
+    return {'entities':EntityRepository().candidates(limit),
+            'claims':ClaimRepository().candidates(limit),
+            'relations':RelationRepository().candidates(limit)}
 
 @app.patch('/api/knowledge/{kind}/{item_id}/status')
 def update_status(kind:str,item_id:str,payload:StatusUpdate):
     allowed=KNOWLEDGE_STATUSES if kind in {'entity','claim','relation'} else IDEA_STATUSES if kind=='idea' else QUESTION_STATUSES if kind=='question' else set()
     if payload.status not in allowed: raise HTTPException(422,'Invalid status')
-    table={'entity':'entities','claim':'claims','relation':'relations','idea':'ideas','question':'questions'}.get(kind)
-    if not table: raise HTTPException(400,'Unsupported knowledge kind')
-    conn=connect(); cur=conn.execute(f'UPDATE {table} SET status=? WHERE id=?',(payload.status,item_id)); conn.commit(); conn.close()
-    if not cur.rowcount: raise HTTPException(404,'Knowledge object not found')
+    if kind=='entity':
+        rowcount=EntityRepository().update(item_id,{'status':payload.status})
+    elif kind=='claim':
+        rowcount=ClaimRepository().set_status(item_id,payload.status)
+    elif kind=='relation':
+        rowcount=RelationRepository().set_status(item_id,payload.status)
+    elif kind=='idea':
+        rowcount=IdeaRepository().set_status(item_id,payload.status)
+    elif kind=='question':
+        rowcount=QuestionRepository().set_status(item_id,payload.status)
+    else:
+        raise HTTPException(400,'Unsupported knowledge kind')
+    if not rowcount: raise HTTPException(404,'Knowledge object not found')
     return {'id':item_id,'status':payload.status}
 
 @app.get('/api/runs')
 def list_runs(limit:int=50, task_type:str|None=None, status:str|None=None):
-    limit=max(1,min(limit,200))
-    sql='SELECT r.*,d.title document_title FROM llm_runs r LEFT JOIN documents d ON d.id=r.document_id'
-    params=[]
-    cond=[]
-    if task_type: cond.append('r.task_type=?'); params.append(task_type)
-    if status: cond.append('r.status=?'); params.append(status)
-    if cond: sql+=' WHERE '+' AND '.join(cond)
-    sql+=' ORDER BY r.created_at DESC LIMIT ?'; params.append(limit)
-    conn=connect(); rows=conn.execute(sql,params).fetchall(); conn.close()
-    out=[]
-    for r in rows:
-        item=dict(r); item['summary']=loads(item.pop('summary_json'),{}); out.append(item)
-    return out
+    return RunRepository().list(max(1,min(limit,200)),task_type,status)
 
 @app.get('/api/runs/{run_id}')
 def get_run(run_id:str):
-    conn=connect()
-    run=conn.execute('SELECT r.*,d.title document_title FROM llm_runs r LEFT JOIN documents d ON d.id=r.document_id WHERE r.id=?',(run_id,)).fetchone()
-    if not run: conn.close(); raise HTTPException(404,'Run not found')
-    steps=conn.execute('SELECT * FROM llm_run_steps WHERE run_id=? ORDER BY step_index',(run_id,)).fetchall()
-    conn.close()
-    item=dict(run); item['summary']=loads(item.pop('summary_json'),{}); item['steps']=[dict(s) for s in steps]
+    item=RunRepository().get(run_id)
+    if not item: raise HTTPException(404,'Run not found')
     return item
 
 @app.get('/api/context/cache')
@@ -720,35 +640,7 @@ def context_budgets():
 @app.get('/api/context/metrics')
 def context_metrics(days:int=14):
     """Token accounting: planned context per agent + provider-reported usage per task."""
-    days=max(1,min(days,90)); window=f'-{days} days'
-    conn=connect()
-    agents=[dict(r) for r in conn.execute('''
-        SELECT agent_name, COUNT(*) calls,
-               CAST(AVG(actual_tokens) AS INT) avg_context_tokens,
-               COALESCE(SUM(actual_tokens),0) context_tokens,
-               COALESCE(SUM(trimmed_tokens),0) trimmed_tokens,
-               COALESCE(SUM(over_budget),0) over_budget_calls,
-               ROUND(AVG(efficiency),4) avg_efficiency
-        FROM context_runs WHERE created_at>=datetime('now',?)
-        GROUP BY agent_name ORDER BY calls DESC''',(window,)).fetchall()]
-    tasks=[dict(r) for r in conn.execute('''
-        SELECT r.task_type, COUNT(DISTINCT r.id) runs, COUNT(s.id) steps,
-               COALESCE(SUM(s.prompt_tokens),0) prompt_tokens,
-               COALESCE(SUM(s.completion_tokens),0) completion_tokens,
-               COALESCE(SUM(CASE WHEN s.usage_source='provider' THEN 1 ELSE 0 END),0) provider_steps
-        FROM llm_runs r LEFT JOIN llm_run_steps s ON s.run_id=r.id
-        WHERE r.created_at>=datetime('now',?)
-        GROUP BY r.task_type ORDER BY runs DESC''',(window,)).fetchall()]
-    conn.close()
-    for t in tasks:
-        total=t['prompt_tokens']+t['completion_tokens']
-        t['total_tokens']=total
-        t['tokens_per_run']=round(total/t['runs']) if t['runs'] else 0
-    return {'window_days':days,'agents':agents,'by_task_type':tasks,
-            'totals':{'prompt_tokens':sum(t['prompt_tokens'] for t in tasks),
-                      'completion_tokens':sum(t['completion_tokens'] for t in tasks),
-                      'context_calls':sum(a['calls'] for a in agents),
-                      'context_tokens':sum(a['context_tokens'] for a in agents)}}
+    return CatalogRepository().context_metrics(max(1,min(days,90)))
 
 @app.post('/api/ask')
 def ask(req:AskRequest):
@@ -795,18 +687,29 @@ def ask(req:AskRequest):
                        'levels':[h.level for h in hits]}}
 
 
+@app.post('/api/qa/validate')
+def qa_validate(req: CitationValidateRequest):
+    """Citation Validation: is the answer grounded in its citations?
+
+    Deterministic dimensions (locatability / coverage / currentness) always run.
+    The semantic ``support`` dimension calls the configured model; if the model
+    is unavailable the report degrades to the three deterministic dimensions with
+    a ``llm_unavailable`` flag rather than failing.
+    """
+    from .workflows.citation_validation_workflow import validate_citations_sync
+    report = validate_citations_sync(req.question, req.answer, req.citations)
+    return report.to_dict()
+
+
 @app.put('/api/documents/{doc_id}')
 def update_doc(doc_id: str, data: DocumentCreate):
-    import hashlib
-    content_hash = hashlib.sha256(data.content.encode('utf-8')).hexdigest()
-    conn = connect()
     try:
-        cur = conn.execute("UPDATE documents SET title=?,content=?,source_type=?,source_uri=?,content_hash=?,metadata_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", (data.title, data.content, data.source_type, data.source_uri, content_hash, dumps(data.metadata), doc_id))
-        conn.commit()
+        rowcount=DocumentRepository().update(doc_id,title=data.title,content=data.content,
+                                             source_type=data.source_type,source_uri=data.source_uri,
+                                             metadata=data.metadata)
     except sqlite3.IntegrityError as exc:
-        conn.rollback(); conn.close(); raise HTTPException(409, 'Another document already has the same content') from exc
-    conn.close()
-    if not cur.rowcount:
+        raise HTTPException(409, 'Another document already has the same content') from exc
+    if not rowcount:
         raise HTTPException(404, 'Document not found')
     return {'id': doc_id, 'updated': True}
 
@@ -818,28 +721,19 @@ def delete_doc(doc_id: str):
 
 @app.get('/api/graph')
 def global_graph(limit: int = 500):
-    limit = max(1, min(limit, 2000)); conn = connect()
-    nodes = [dict(r) for r in conn.execute('SELECT id,type,name,description,status FROM entities ORDER BY updated_at DESC LIMIT ?', (limit,)).fetchall()]
-    edges = [dict(r) for r in conn.execute("SELECT r.id,r.source_id,r.target_id,r.predicate,r.confidence,r.status,r.source_document_id,r.source_chunk_id,a.name source_name,b.name target_name FROM relations r JOIN entities a ON a.id=r.source_id JOIN entities b ON b.id=r.target_id ORDER BY r.created_at DESC LIMIT ?", (limit,)).fetchall()]
-    claims = [dict(r) for r in conn.execute("SELECT c.id,c.subject_id,c.object_id,c.object_text,c.predicate,c.confidence,c.status,c.source_document_id,c.source_chunk_id,s.name subject_name,o.name object_name FROM claims c JOIN entities s ON s.id=c.subject_id LEFT JOIN entities o ON o.id=c.object_id ORDER BY c.created_at DESC LIMIT ?", (limit,)).fetchall()]
-    conn.close(); return {'nodes': nodes, 'edges': edges, 'claims': claims}
+    limit = max(1, min(limit, 2000))
+    catalog = CatalogRepository()
+    return {'nodes': catalog.graph_nodes(limit),
+            'edges': RelationRepository().global_edges(limit),
+            'claims': catalog.graph_claims(limit)}
 
 @app.get('/api/stats')
 def stats():
-    conn = connect(); tables = ['documents','chunks','entities','claims','relations','ideas','questions','events','chunk_embeddings','llm_runs','llm_run_steps','context_runs','context_sections']
-    out = {t: conn.execute(f'SELECT COUNT(*) c FROM {t}').fetchone()['c'] for t in tables}; conn.close(); return out
+    return CatalogRepository().stats()
 
 @app.get('/api/export')
 def export_all():
-    conn = connect(); out = {}
-    configs = {
-      'documents':'SELECT * FROM documents ORDER BY created_at', 'chunks':'SELECT * FROM chunks ORDER BY document_id,chunk_index',
-      'entities':'SELECT * FROM entities ORDER BY created_at', 'entity_aliases':'SELECT * FROM entity_aliases ORDER BY entity_id',
-      'claims':'SELECT * FROM claims ORDER BY created_at', 'relations':'SELECT * FROM relations ORDER BY created_at',
-      'ideas':'SELECT * FROM ideas ORDER BY created_at', 'questions':'SELECT * FROM questions ORDER BY created_at', 'events':'SELECT * FROM events ORDER BY created_at'
-    }
-    for table, sql in configs.items(): out[table] = [dict(r) for r in conn.execute(sql).fetchall()]
-    conn.close(); return out
+    return CatalogRepository().export_all()
 
 from pathlib import Path as _Path
 _DIST = _Path('web/dist')

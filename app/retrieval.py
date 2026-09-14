@@ -1,9 +1,8 @@
 from __future__ import annotations
-import json
 import re
 
-from .db import connect
 from .config import runtime
+from .repositories import ClaimRepository, DocumentRepository, EntityRepository
 
 # FTS5's trigram tokenizer indexes overlapping 3-character windows, so a query
 # shorter than that has no token to match and needs a different strategy.
@@ -28,61 +27,34 @@ def _fts_query(q: str) -> str:
     return ' OR '.join(f'"{g}"' for g in grams[:32])
 
 
-def _like_search(conn, q: str, cap: int) -> list[dict]:
+def _like_search(q: str, cap: int) -> list[dict]:
     """Substring fallback for queries the trigram index cannot serve.
 
     A personal wiki holds hundreds of documents, not millions, so a LIKE scan is
     cheap — and unlike FTS it still works for a two-character Chinese query.
     """
-    terms = _terms(q)
-    if not terms:
-        return []
-    clause = ' OR '.join(['d.title LIKE ? OR d.content LIKE ?'] * len(terms))
-    params: list = []
-    for term in terms:
-        params += [f'%{term}%', f'%{term}%']
-    return [dict(r) for r in conn.execute(
-        f'''SELECT d.id AS document_id, d.title, d.source_type, d.content, 0.0 AS score
-            FROM documents d WHERE {clause} LIMIT ?''', (*params, cap)).fetchall()]
+    return DocumentRepository().search_like(_terms(q), cap)
 
 
 def lexical_search(q: str, limit: int = 10) -> list[dict]:
-    conn = connect()
     cap = min(limit, runtime()['max_search_results'])
-    rows = []
-    match = _fts_query(q)
-    if match:
-        try:
-            rows = conn.execute('''
-              SELECT d.id AS document_id, d.title, d.source_type, d.content,
-                     bm25(documents_fts) AS score
-              FROM documents_fts f
-              JOIN documents d ON d.rowid=f.rowid
-              WHERE documents_fts MATCH ?
-              ORDER BY score
-              LIMIT ?
-            ''', (match, cap)).fetchall()
-        except Exception:
-            rows = []
+    documents = DocumentRepository()
+    rows = documents.search_fts(_fts_query(q), cap)
     if not rows:
-        rows = _like_search(conn, q, cap)
-    conn.close()
-    return [dict(r) | {'method':'lexical'} for r in rows]
+        rows = documents.search_like(_terms(q), cap)
+    return [r | {'method': 'lexical'} for r in rows]
 
 
 def _chunk_results_from_documents(doc_results: list[dict], cap: int, terms: list[str]) -> list[dict]:
     """Expand matched documents into chunks, but only keep the chunks that
     actually contain the query terms (best-first, max 3 per document) — pulling
     every chunk of a matched document injects noise into the evidence pack."""
-    conn = connect()
+    documents = DocumentRepository()
     picked: list[tuple[float, dict]] = []
     seen = set()
     lowered = [t.lower() for t in terms if t.strip()]
     for doc in doc_results:
-        rows = conn.execute('''SELECT c.id,c.document_id,c.content,c.chunk_index,c.start_offset,c.end_offset,
-                                      d.title,d.source_type
-                               FROM chunks c JOIN documents d ON d.id=c.document_id
-                               WHERE c.document_id=? ORDER BY c.chunk_index''', (doc['document_id'],)).fetchall()
+        rows = documents.chunk_rows(doc['document_id'])
         scored = []
         for r in rows:
             if r['id'] in seen:
@@ -99,7 +71,6 @@ def _chunk_results_from_documents(doc_results: list[dict], cap: int, terms: list
         for hits, item in keep:
             seen.add(item['id'])
             picked.append((hits, item | {'score': doc.get('score', 0), 'method': 'lexical'}))
-    conn.close()
     picked.sort(key=lambda x: x[0], reverse=True)
     return [item for _, item in picked[:cap]]
 
@@ -177,27 +148,14 @@ def _claim_relevance(claim: dict, terms: list[str]) -> int:
 
 
 def _current_claims(claims: list[dict]) -> list[dict]:
-    """Resolve claim lifecycle for retrieval (design §21: prefer current knowledge).
+    """Resolve claim lifecycle for retrieval.
 
-    A superseded claim is history, not an error:
-    - when something current covers the same subject+predicate it is dropped, so
-      "who is the CEO" can never be answered from a statement that was replaced;
-    - when nothing current covers it, it is kept and flagged `lifecycle`, so
-      "who *was* the CEO" still has evidence to answer from.
+    The decision itself lives in ``app.domain.claim_state`` — the single
+    definition of current knowledge shared by Search / Graph / QA / Review /
+    Correction. This shim exists only for callers that predate the Domain module.
     """
-    if not claims:
-        return claims
-    covered = {(c.get('subject_name'), c.get('predicate'))
-               for c in claims if c.get('status') != 'superseded'}
-    out = []
-    for claim in claims:
-        if claim.get('status') == 'superseded':
-            if (claim.get('subject_name'), claim.get('predicate')) in covered:
-                continue
-            out.append({**claim, 'lifecycle': 'superseded'})
-        else:
-            out.append(claim)
-    return out
+    from .domain.claim_state import resolve
+    return resolve(claims)
 
 
 def evidence_pack(question: str, limit: int = 8) -> list[dict]:
@@ -205,55 +163,29 @@ def evidence_pack(question: str, limit: int = 8) -> list[dict]:
     if not chunks:
         return []
     terms = _terms(question)
-    conn = connect()
+    documents = DocumentRepository()
+    claims_repo = ClaimRepository()
     enriched = []
     for x in chunks:
-        row = conn.execute('''SELECT c.id,c.document_id,c.content,c.chunk_index,c.start_offset,c.end_offset,d.title,d.source_type
-                              FROM chunks c JOIN documents d ON d.id=c.document_id WHERE c.id=?''', (x['id'],)).fetchone()
+        row = documents.chunk(x['id'])
         if row:
             item = dict(row); item['score'] = x.get('score'); item['method'] = x.get('method')
-            claim_rows = [dict(c) for c in conn.execute('''SELECT c.content,c.source_quote,c.predicate,c.object_text,c.confidence,c.status,s.name subject_name,o.name object_name
-                                          FROM claims c JOIN entities s ON s.id=c.subject_id LEFT JOIN entities o ON o.id=c.object_id
-                                          WHERE c.source_document_id=? AND c.status != 'rejected' ORDER BY c.created_at DESC LIMIT 40''',(row['document_id'],)).fetchall()]
+            claim_rows = claims_repo.for_document_pack(row['document_id'], 40)
             # Only keep claims that overlap the question; unrelated claims in the
             # same document only dilute the grounding context.
             scored = sorted(claim_rows, key=lambda c: (_claim_relevance(c, terms), c.get('confidence') or 0), reverse=True)
             relevant = [c for c in scored if _claim_relevance(c, terms) > 0][:6]
             item['claims'] = _current_claims(relevant if relevant else scored[:3])
             enriched.append(item)
-    conn.close()
     return enriched
 
 
-_CLAIM_COLUMNS = '''c.content,c.source_quote,c.predicate,c.polarity,c.modality,c.confidence,c.status,
-                    c.context_json,s.name subject_name,o.name object_name,c.object_text'''
+def _chunk_claims(chunk_id: str, limit: int) -> list[dict]:
+    return _current_claims(ClaimRepository().for_chunk(chunk_id, limit))
 
 
-def _to_claim(row) -> dict:
-    claim = dict(row)
-    try:
-        claim['context'] = json.loads(claim.pop('context_json', '{}') or '{}')
-    except Exception:
-        claim['context'] = {}
-    return claim
-
-
-def _chunk_claims(conn, chunk_id: str, limit: int) -> list[dict]:
-    rows = conn.execute(f'''SELECT {_CLAIM_COLUMNS}
-                            FROM claims c JOIN entities s ON s.id=c.subject_id
-                            LEFT JOIN entities o ON o.id=c.object_id
-                            WHERE c.source_chunk_id=? AND c.status!='rejected'
-                            ORDER BY c.confidence DESC LIMIT ?''', (chunk_id, limit)).fetchall()
-    return _current_claims([_to_claim(r) for r in rows])
-
-
-def _document_claims(conn, document_id: str, terms: list[str], limit: int) -> list[dict]:
-    rows = conn.execute(f'''SELECT {_CLAIM_COLUMNS}
-                            FROM claims c JOIN entities s ON s.id=c.subject_id
-                            LEFT JOIN entities o ON o.id=c.object_id
-                            WHERE c.source_document_id=? AND c.status!='rejected'
-                            ORDER BY c.confidence DESC LIMIT 40''', (document_id,)).fetchall()
-    claims = _current_claims([_to_claim(r) for r in rows])
+def _document_claims(document_id: str, terms: list[str], limit: int) -> list[dict]:
+    claims = _current_claims(ClaimRepository().for_document(document_id, 40))
     relevant = [c for c in claims if _claim_relevance(c, terms) > 0]
     return (relevant or claims)[:limit]
 
@@ -269,37 +201,31 @@ def evidence_hits(question: str, limit: int = 8, *, claims_per_chunk: int = 3) -
     if not chunks:
         return []
     terms = _terms(question)
-    conn = connect()
+    documents = DocumentRepository()
     hits: list[dict] = []
-    try:
-        for chunk in chunks:
-            row = conn.execute('''SELECT c.id,c.document_id,c.content,c.chunk_index,
-                                         c.start_offset,c.end_offset,d.title,d.source_type
-                                  FROM chunks c JOIN documents d ON d.id=c.document_id
-                                  WHERE c.id=?''', (chunk['id'],)).fetchone()
-            if not row:
-                continue
-            claims = _chunk_claims(conn, row['id'], claims_per_chunk)
-            if not claims:
-                claims = _document_claims(conn, row['document_id'], terms, claims_per_chunk)
-            best = max(claims, key=lambda c: (c.get('confidence') or 0)) if claims else {}
-            hits.append({
-                'chunk_id': row['id'],
-                'document_id': row['document_id'],
-                'title': row['title'],
-                'quote': str(best.get('source_quote') or '').strip(),
-                'chunk_content': row['content'],
-                'chunk_index': row['chunk_index'],
-                'start_offset': row['start_offset'],
-                'end_offset': row['end_offset'],
-                'confidence': best.get('confidence'),
-                'claims': claims,
-                'score': chunk.get('score') or 0.0,
-                'method': chunk.get('method') or '',
-                'source_type': row['source_type'],
-            })
-    finally:
-        conn.close()
+    for chunk in chunks:
+        row = documents.chunk(chunk['id'])
+        if not row:
+            continue
+        claims = _chunk_claims(row['id'], claims_per_chunk)
+        if not claims:
+            claims = _document_claims(row['document_id'], terms, claims_per_chunk)
+        best = max(claims, key=lambda c: (c.get('confidence') or 0)) if claims else {}
+        hits.append({
+            'chunk_id': row['id'],
+            'document_id': row['document_id'],
+            'title': row['title'],
+            'quote': str(best.get('source_quote') or '').strip(),
+            'chunk_content': row['content'],
+            'chunk_index': row['chunk_index'],
+            'start_offset': row['start_offset'],
+            'end_offset': row['end_offset'],
+            'confidence': best.get('confidence'),
+            'claims': claims,
+            'score': chunk.get('score') or 0.0,
+            'method': chunk.get('method') or '',
+            'source_type': row['source_type'],
+        })
     return hits
 
 
@@ -313,14 +239,8 @@ def entity_summaries(hits: list[dict], limit: int = 3) -> list[dict]:
                     names.append(str(name))
     if not names:
         return []
-    conn = connect()
-    try:
-        placeholders = ','.join('?' for _ in names[:40])
-        rows = conn.execute(f'''SELECT name,type,description,status FROM entities
-                                WHERE name IN ({placeholders})''', names[:40]).fetchall()
-    finally:
-        conn.close()
-    by_name = {r['name']: dict(r) for r in rows}
+    rows = EntityRepository().names(names, 40)
+    by_name = {r['name']: r for r in rows}
     out = []
     for name in names:
         row = by_name.get(name)

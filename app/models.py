@@ -17,6 +17,13 @@ class AskRequest(BaseModel):
     top_k: int = Field(default=8, ge=1, le=20)
 
 
+class CitationValidateRequest(BaseModel):
+    """Validate a QA answer against its citations (Citation Validation)."""
+    question: str = Field(min_length=1)
+    answer: str = Field(min_length=1)
+    citations: list[dict] = Field(default_factory=list)
+
+
 class SearchRequest(BaseModel):
     query: str = Field(min_length=1)
     limit: int = Field(default=10, ge=1, le=50)
@@ -68,3 +75,21 @@ class EventCreate(BaseModel):
 class ResearchCreate(BaseModel):
     question_text: str = Field(min_length=1)
     question_id: str | None = None
+
+
+class CorrectionRequest(BaseModel):
+    """A one-sentence correction to plan (no writes)."""
+    text: str = Field(min_length=1)
+
+
+class CorrectionApplyRequest(BaseModel):
+    """A confirmed correction to execute through the CORRECT operation."""
+    text: str = Field(min_length=1)
+    subject: str = Field(min_length=1)
+    predicate: str = Field(min_length=1)
+    object: str = ''
+    polarity: str = 'positive'
+    confidence: float | None = None
+    relationship: str | None = None
+    related_claim_id: str | None = None
+    apply_supersede: bool = False

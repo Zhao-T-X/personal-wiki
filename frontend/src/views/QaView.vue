@@ -23,6 +23,9 @@ const question = ref((route.query.q as string) || '')
 /* knowledge mode */
 const loading = ref(false)
 const result = ref<{ answer: string; evidence: any[]; citations: any[] } | null>(null)
+/** Citation Validation report for the last answer (POST /api/qa/validate). */
+const validation = ref<any>(null)
+const validating = ref(false)
 
 /* agent mode */
 const agentLoading = ref(false)
@@ -99,12 +102,25 @@ async function send() {
 }
 
 async function askKnowledge() {
-  loading.value = true; result.value = null; agentResult.value = null
+  loading.value = true; result.value = null; agentResult.value = null; validation.value = null
   try {
     result.value = await post('/api/ask', { question: question.value.trim(), top_k: 8 })
     await loadMeta()
     await scrollToResult()
   } catch (e: any) { store.toast(e.message) } finally { loading.value = false }
+}
+
+/** Citation Validation: is this answer actually backed by its citations? */
+async function validateCitations() {
+  if (!result.value) return
+  validating.value = true; validation.value = null
+  try {
+    validation.value = await post('/api/qa/validate', {
+      question: question.value.trim(),
+      answer: result.value.answer,
+      citations: result.value.citations || [],
+    })
+  } catch (e: any) { store.toast(e.message) } finally { validating.value = false }
 }
 
 /* Multi-turn handle (P3): one id per agent chat session; the backend keeps the
@@ -195,12 +211,43 @@ const columns = [
         <div class="row">
           <h3 style="font-size:13px">回答</h3>
           <span v-if="evidenceLevel" class="tag" :class="evidenceLevel.cls">{{ evidenceLevel.label }}</span>
+          <div class="grow"></div>
+          <button v-if="result && !loading" class="btn sm" :disabled="validating" @click="validateCitations">
+            {{ validating ? '校验中…' : '校验引用' }}
+          </button>
         </div>
         <div v-if="loading" class="faint" style="font-size:10px;margin-top:10px">正在检索你的知识并整理证据…</div>
         <MarkdownView v-else-if="result" :content="result.answer" style="margin-top:10px" />
         <div v-else class="empty">输入问题开始提问</div>
         <div v-if="result && !result.evidence.length" class="notice violet" style="margin-top:12px">
           知识库里没有找到支持这个回答的片段。答案可能来自模型的通用知识，请谨慎采信，或先导入相关文档。
+        </div>
+
+        <div v-if="validation" class="sechead" style="margin-top:14px">
+          <h3>引用校验</h3>
+          <span class="tag" :class="'g-' + validation.grade" style="margin:0">{{ validation.grade }} · {{ Math.round(validation.overall * 100) }}%</span>
+        </div>
+        <div v-if="validation" class="cval">
+          <div v-for="(v, k) in validation.dimensions" :key="k" class="cbar">
+            <span class="ck">{{ k }}</span>
+            <span class="ct"><i :style="{ width: Math.round((v || 0) * 100) + '%' }" :class="{ low: (v || 0) < 0.5 }"></i></span>
+            <span class="cv">{{ v == null ? '—' : Math.round(v * 100) }}</span>
+          </div>
+          <div v-if="validation.grounding" class="gbox">
+            <b :class="validation.grounding.grounded ? 'ok' : 'bad'">
+              {{ validation.grounding.grounded ? '语义上可由引用支撑' : '存在无法由引用支撑的断言' }}
+            </b>
+            <p v-if="validation.grounding.rationale" class="faint small">{{ validation.grounding.rationale }}</p>
+            <ul v-if="validation.grounding.assertions?.length" class="glist">
+              <li v-for="(a, i) in validation.grounding.assertions" :key="i" :class="a.supported ? 'ok' : 'bad'">
+                <span>{{ a.supported ? '✓' : '✕' }}</span>{{ a.claim }}
+                <em v-if="a.citation" class="faint">{{ a.citation }}</em>
+              </li>
+            </ul>
+          </div>
+          <div v-if="validation.issues?.length">
+            <div v-for="(iss, i) in validation.issues" :key="i" class="notice red" style="margin:6px 0">{{ iss }}</div>
+          </div>
         </div>
       </div>
 
@@ -274,3 +321,21 @@ const columns = [
     <RunDrawer :run-id="runDrawerId" @close="runDrawerId = null" />
   </div>
 </template>
+
+<style scoped>
+.cval{margin:10px 0 4px;padding:11px;border:1px solid var(--hair);border-radius:11px;background:#fff}
+.cbar{display:grid;grid-template-columns:104px 1fr 28px;align-items:center;gap:9px;font-size:10px;color:var(--sub);margin:4px 0}
+.ck{font-size:9.5px}
+.ct{height:7px;background:#eef1f7;border-radius:99px;overflow:hidden}
+.ct i{display:block;height:100%;background:linear-gradient(90deg,#5b7cff,#8b67f7)}
+.ct i.low{background:#d9695a}
+.cv{text-align:right;color:var(--faint)}
+.gbox{margin-top:10px;padding:9px;border:1px solid var(--hair);border-radius:10px;background:#fcfdff}
+.gbox b.ok{color:#3aa76d}.gbox b.bad{color:#d9695a}
+.glist{margin:8px 0 0;padding-left:16px;display:grid;gap:4px}
+.glist li{font-size:11px;color:var(--text)}
+.glist li.ok{color:#2f7d57}.glist li.bad{color:#c0564b}
+.glist li em{font-style:normal;margin-left:6px;font-size:9px}
+.g-A{background:#3aa76d;color:#fff}.g-B{background:#5b9bd5;color:#fff}
+.g-C{background:#e0a93b;color:#fff}.g-D{background:#d9695a;color:#fff}
+</style>

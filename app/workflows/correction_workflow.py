@@ -1,0 +1,338 @@
+"""One-sentence knowledge correction.
+
+    sentence -> Intent Parser (LLM) -> Candidate Resolver -> Correction Planner
+             -> user confirmation -> CORRECT Operation -> new Claim + Evidence
+             + ClaimRelation -> ClaimStateResolver -> current knowledge
+
+The LLM only *proposes*: it parses the sentence into a structured intent and
+judges how the new statement relates to what we already knew. Execution is
+deterministic (Workflow -> Operation -> Domain rule -> Repository) and the model
+never touches the database.
+
+A user correction is stored as its own small document, so the resulting claim
+has real, traceable provenance — knowledge never appears without a source.
+"""
+from __future__ import annotations
+
+import json
+from dataclasses import asdict, dataclass, field
+
+from ..chunking import chunk_text
+from ..claim_relations import compare_claim
+from ..db import transaction
+from ..domain.operations import OperationError, OperationRequest, run
+from ..ontology import normalize_predicate
+from ..repositories import ClaimRepository, DocumentRepository, EntityRepository
+
+# Most significant relationship first (matches app/claim_relations._PRIORITY).
+_PRIORITY = {'duplicate': 0, 'supersedes': 1, 'contradicts': 2, 'coexists': 3}
+
+
+@dataclass
+class CorrectionIntent:
+    text: str
+    subject: str
+    predicate: str
+    object: str = ''
+    polarity: str = 'positive'
+    confidence: float | None = None
+
+
+@dataclass
+class CorrectionPlan:
+    text: str
+    intent: CorrectionIntent
+    subject_entity_id: str | None
+    relationship: str          # duplicate | contradicts | coexists | supersedes | new
+    related_claim_id: str | None
+    apply_supersede: bool
+    candidates: list[dict] = field(default_factory=list)
+    summary: str = ''
+    verification: dict | None = None
+
+    def to_dict(self) -> dict:
+        return {
+            'text': self.text,
+            'intent': asdict(self.intent),
+            'subject_entity_id': self.subject_entity_id,
+            'relationship': self.relationship,
+            'related_claim_id': self.related_claim_id,
+            'apply_supersede': self.apply_supersede,
+            'candidates': self.candidates,
+            'summary': self.summary,
+            'verification': self.verification,
+        }
+
+
+_INTENT_SYSTEM = (
+    'You extract a single factual statement from a user correction sentence and reply with '
+    'JSON only: {"subject": "...", "predicate": "snake_case", "object": "...", '
+    '"polarity": "positive|negative", "confidence": 0.0-1.0}. '
+    'subject is the entity the sentence is about; predicate is a short relation in snake_case; '
+    'object is the value the subject is being related to. '
+    'Never invent facts that are not in the sentence.'
+)
+
+
+_VERIFY_SYSTEM = (
+    'You verify a new statement against an existing personal knowledge base. '
+    'Given the new statement and existing claims/evidence, decide whether it is '
+    'supported, contradicted, unrelated, or uncertain. '
+    'Reply with JSON only: {"verdict": "supported|contradicted|unrelated|uncertain", '
+    '"confidence": 0.0-1.0, "rationale": "...", "conflicting_claim_id": "..." or null}. '
+    'A contradiction means the new statement and an existing claim cannot both be true, '
+    'for example two different people holding the same single-valued role. '
+    'Never invent facts not present in the supplied claims or evidence.'
+)
+
+
+async def parse_intent(text: str) -> CorrectionIntent | None:
+    """LLM step: sentence -> structured intent. ``None`` when the model is
+    unavailable, so the caller can degrade honestly instead of guessing."""
+    import asyncio
+
+    from ..config import runtime
+    from ..llm import _client
+
+    def _call() -> CorrectionIntent | None:
+        try:
+            client = _client()
+            response = client.chat.completions.create(
+                model=runtime()['openai_model'], temperature=0.0,
+                response_format={'type': 'json_object'},
+                messages=[{'role': 'system', 'content': _INTENT_SYSTEM},
+                          {'role': 'user', 'content': text}])
+            data = json.loads(response.choices[0].message.content or '{}')
+        except Exception:
+            return None
+        subject = str(data.get('subject') or '').strip()
+        predicate = normalize_predicate(str(data.get('predicate') or '').strip())
+        obj = str(data.get('object') or '').strip()
+        if not subject or not predicate:
+            return None
+        polarity = str(data.get('polarity') or 'positive').strip().lower()
+        if polarity not in ('positive', 'negative'):
+            polarity = 'positive'
+        try:
+            raw = data.get('confidence')
+            confidence = float(raw) if raw is not None else None
+        except (TypeError, ValueError):
+            confidence = None
+        return CorrectionIntent(text=text, subject=subject, predicate=predicate,
+                                object=obj, polarity=polarity, confidence=confidence)
+
+    return await asyncio.to_thread(_call)
+
+
+def _pick(candidates: list[dict]) -> dict | None:
+    ranked = [c for c in candidates if c.get('relationship') in _PRIORITY]
+    if not ranked:
+        return None
+    ranked.sort(key=lambda c: (_PRIORITY[c['relationship']], -c.get('confidence', 0.0)))
+    return ranked[0]
+
+
+def build_plan(text: str, intent: CorrectionIntent) -> CorrectionPlan:
+    """Deterministic, read-only planning: where does this new statement land?
+
+    Does not write anything — creating a missing entity is deferred to
+    :func:`apply_correction`, so a plan can be shown to the user first.
+    """
+    subject_row = EntityRepository().by_name(intent.subject)
+    subject_id = subject_row['id'] if subject_row else None
+
+    candidates: list[dict] = []
+    if subject_id:
+        existing = ClaimRepository().related(subject_id=subject_id, predicate=intent.predicate,
+                                             exclude_id='', limit=10)
+        probe = {'subject_id': subject_id, 'predicate': intent.predicate, 'object_id': None,
+                 'object_text': intent.object, 'polarity': intent.polarity}
+        for claim in existing:
+            verdict = compare_claim(probe, claim)
+            candidates.append({
+                'claim_id': claim['id'],
+                'object': claim.get('object_name') or claim.get('object_text'),
+                'content': claim.get('content'),
+                'status': claim.get('status'),
+                **verdict,
+            })
+
+    best = _pick(candidates)
+    relationship = best['relationship'] if best else 'new'
+    related_id = best['related_claim_id'] if best else None
+    summary = (f'与已有断言「{best["content"]}」的关系：{relationship}'
+               if best else '未找到可关联的既有断言，将作为新知识创建')
+    return CorrectionPlan(text=text, intent=intent, subject_entity_id=subject_id,
+                          relationship=relationship, related_claim_id=related_id,
+                          apply_supersede=relationship == 'supersedes',
+                          candidates=candidates, summary=summary)
+
+
+async def verify_new_claim(plan: CorrectionPlan) -> CorrectionPlan:
+    """Check a would-be 'new' claim against existing knowledge before creating it.
+
+    The deterministic planner only matches exact subject+predicate pairs. This
+    semantic verifier broadens the check: it retrieves claims about the same
+    subject plus relevant evidence chunks, then asks the model whether the new
+    statement is supported, contradicted, unrelated, or uncertain.
+
+    If a high-confidence contradiction is found, the plan is upgraded from
+    ``new`` to ``contradicts`` and the user must explicitly decide whether to
+    override existing knowledge.
+    """
+    import asyncio
+
+    from ..config import runtime
+    from ..llm import _client
+    from ..repositories import ClaimRepository
+    from ..retrieval import evidence_hits
+
+    intent = plan.intent
+    subject_id = plan.subject_entity_id
+
+    claims: list[dict] = []
+    if subject_id:
+        claims = [
+            c for c in ClaimRepository().for_entity(subject_id)
+            if c.get('subject_id') == subject_id
+               and c.get('status') not in ('rejected', 'archived')
+        ][:12]
+
+    query = ' '.join(x for x in (intent.subject, intent.predicate, intent.object) if x).strip()
+    chunks = evidence_hits(query, limit=6, claims_per_chunk=3) if query else []
+
+    if not claims and not chunks:
+        plan.verification = {
+            'verdict': 'uncertain',
+            'confidence': 0.0,
+            'rationale': '知识库中没有找到相关证据，无法验证该陈述。',
+            'conflicting_claim_id': None,
+        }
+        return plan
+
+    def _call() -> dict:
+        try:
+            client = _client()
+        except Exception as exc:
+            return {
+                'verdict': 'uncertain',
+                'confidence': 0.0,
+                'rationale': f'验证模型不可用：{exc}',
+                'conflicting_claim_id': None,
+            }
+
+        claim_lines = []
+        for c in claims:
+            claim_lines.append(
+                f"- claim_id: {c['id']} | {c.get('subject_name', '')} {c.get('predicate', '')} "
+                f"{c.get('object_name') or c.get('object_text') or ''} | "
+                f"status: {c.get('status', '')} | quote: {c.get('source_quote') or ''}"
+            )
+        chunk_lines = []
+        for h in chunks:
+            chunk_lines.append(
+                f"- chunk_id: {h['chunk_id']} | doc: {h['title']}\n  {h['chunk_content'][:400]}"
+            )
+            for c in h.get('claims', []):
+                chunk_lines.append(
+                    f"  claim {c.get('id') or ''}: {c.get('subject_name', '')} {c.get('predicate', '')} "
+                    f"{c.get('object_name') or c.get('object_text') or ''}"
+                )
+
+        prompt = (
+            f"New statement to verify:\n"
+            f"  text: {intent.text}\n"
+            f"  subject: {intent.subject} | predicate: {intent.predicate} | object: {intent.object}\n\n"
+            f"Existing claims about the same subject:\n"
+            f"{chr(10).join(claim_lines) or '(none)'}\n\n"
+            f"Relevant source chunks:\n"
+            f"{chr(10).join(chunk_lines) or '(none)'}\n\n"
+            "Is the new statement supported, contradicted, unrelated, or uncertain based on the existing knowledge?"
+        )
+        try:
+            response = client.chat.completions.create(
+                model=runtime()['openai_model'], temperature=0.0,
+                response_format={'type': 'json_object'},
+                messages=[{'role': 'system', 'content': _VERIFY_SYSTEM},
+                          {'role': 'user', 'content': prompt}],
+            )
+            data = json.loads(response.choices[0].message.content or '{}')
+        except Exception as exc:
+            return {
+                'verdict': 'uncertain',
+                'confidence': 0.0,
+                'rationale': f'验证模型调用失败：{exc}',
+                'conflicting_claim_id': None,
+            }
+
+        verdict = str(data.get('verdict') or 'uncertain').strip().lower()
+        if verdict not in ('supported', 'contradicted', 'unrelated', 'uncertain'):
+            verdict = 'uncertain'
+        try:
+            confidence = float(data.get('confidence') or 0.0)
+        except (TypeError, ValueError):
+            confidence = 0.0
+        return {
+            'verdict': verdict,
+            'confidence': round(max(0.0, min(1.0, confidence)), 3),
+            'rationale': str(data.get('rationale') or '').strip()[:800],
+            'conflicting_claim_id': str(data.get('conflicting_claim_id') or '').strip() or None,
+        }
+
+    verification = await asyncio.to_thread(_call)
+    plan.verification = verification
+
+    if verification['verdict'] == 'contradicted' and verification['confidence'] >= 0.6:
+        conflict_id = verification['conflicting_claim_id']
+        if conflict_id and any(c.get('id') == conflict_id for c in claims):
+            plan.relationship = 'contradicts'
+            plan.related_claim_id = conflict_id
+            plan.summary = (
+                f"模型检测到与已有断言的矛盾（置信度 {verification['confidence']}）："
+                f"{verification['rationale']} 若继续应用，将创建一条 contradicts 关系，"
+                "原 Claim 不会被删除；你之后可在 Claim Relations 中将其改为 supersedes。"
+            )
+        else:
+            plan.summary = (
+                "模型认为新陈述可能与现有知识矛盾，但无法定位到具体 Claim。"
+                f"{verification['rationale']}"
+            )
+    return plan
+
+
+def apply_correction(plan: CorrectionPlan, *, relationship: str | None = None,
+                     related_claim_id: str | None = None,
+                     apply_supersede: bool | None = None) -> dict:
+    """Execute the confirmed plan through the CORRECT operation.
+
+    The correction sentence becomes its own document + chunk, so the new claim
+    carries real provenance (document / chunk / offsets / quote).
+    """
+    intent = plan.intent
+    relationship = plan.relationship if relationship is None else relationship
+    related_claim_id = plan.related_claim_id if related_claim_id is None else related_claim_id
+    if apply_supersede is None:
+        apply_supersede = plan.apply_supersede
+
+    with transaction() as conn:
+        documents = DocumentRepository(conn)
+        document_id = documents.create(title=f'纠正：{intent.text[:60]}', content=intent.text,
+                                       source_type='correction')
+        chunks = documents.replace_chunks(document_id, [
+            (c.content, c.index, c.start_offset, c.end_offset) for c in chunk_text(intent.text)])
+        if not chunks:
+            raise OperationError('Correction text produced no chunk')
+        chunk = chunks[0]
+        payload = {
+            'subject': intent.subject, 'predicate': intent.predicate,
+            'object': intent.object, 'content': intent.text,
+            'polarity': intent.polarity, 'confidence': intent.confidence,
+            'source_document_id': document_id, 'source_chunk_id': chunk['id'],
+            'source_start_offset': chunk['start_offset'], 'source_end_offset': chunk['end_offset'],
+            'source_quote': intent.text,
+            'related_claim_id': related_claim_id, 'relationship': relationship,
+            'apply_supersede': apply_supersede,
+        }
+        result = run(OperationRequest(kind='CORRECT', payload=payload, actor='user',
+                                      reason='one-sentence correction'), conn)
+    return {'document_id': document_id, 'operation_id': result.operation_id, **result.affected}

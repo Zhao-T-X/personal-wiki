@@ -25,6 +25,7 @@ const items = [
   { id: '/knowledge', icon: '✦', text: '知识' },
   { id: '/qa', icon: '◎', text: '问答' },
   { id: '/review', icon: '✓', text: '审核' },
+  { id: '/correction', icon: '✎', text: '纠正' },
   { id: '/research', icon: '◇', text: '研究' },
   { id: '/agent', icon: '◌', text: 'Agent 工作台' },
   { id: '/settings', icon: '⚙', text: '设置' },

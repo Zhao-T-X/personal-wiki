@@ -314,6 +314,24 @@ CREATE TABLE IF NOT EXISTS context_cache (
   last_hit_at TEXT
 );
 
+-- Knowledge Operations audit (docs/architecture/KNOWLEDGE-OPERATIONS.md): every
+-- knowledge mutation is recorded so it is traceable and, where possible, undoable.
+-- The operation *is* the record — claims themselves are never silently overwritten.
+CREATE TABLE IF NOT EXISTS knowledge_operations (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  actor TEXT NOT NULL DEFAULT 'user',
+  status TEXT NOT NULL DEFAULT 'applied' CHECK(status IN ('applied','rejected')),
+  reason TEXT,
+  payload_json TEXT NOT NULL DEFAULT '{}',
+  result_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_knowledge_operations_created
+  ON knowledge_operations(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_knowledge_operations_kind
+  ON knowledge_operations(kind, created_at DESC);
+
 DROP TABLE IF EXISTS extraction_runs;
 
 CREATE TABLE IF NOT EXISTS chunk_embeddings (

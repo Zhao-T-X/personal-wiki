@@ -2,17 +2,19 @@ from __future__ import annotations
 
 import re
 import unicodedata
-import uuid
 from difflib import SequenceMatcher
 from typing import Any
-from .db import dumps, loads
+from .db import loads
 from .resolution import resolve_or_create_entity
 from .normalization import derive_relations
 from .ontology import relation_types_allowed, relation_spec
+from .repositories import (ClaimRepository, EntityRepository, EventRepository,
+                           EvidenceRepository, IdeaRepository, QuestionRepository,
+                           RelationRepository)
 
 
-def _source(conn, chunk_id: str):
-    row = conn.execute('SELECT id,document_id,content,start_offset,end_offset FROM chunks WHERE id=?', (chunk_id,)).fetchone()
+def _source(evidence: EvidenceRepository, chunk_id: str) -> dict:
+    row = evidence.provenance(chunk_id)
     if not row:
         raise ValueError(f'Invalid provenance: chunk {chunk_id} does not exist')
     return row
@@ -64,6 +66,14 @@ def _entity_id_by_ref(entity_ids: dict[str, str], ref: str | None) -> str | None
 
 
 def persist_extraction(conn, *, document_id: str, extraction: dict[str, Any]) -> dict[str, int]:
+    entities = EntityRepository(conn)
+    claims = ClaimRepository(conn)
+    events = EventRepository(conn)
+    relations = RelationRepository(conn)
+    ideas = IdeaRepository(conn)
+    questions = QuestionRepository(conn)
+    evidence = EvidenceRepository(conn)
+
     entity_ids: dict[str, str] = {}
     for e in extraction.get('entities', []):
         eid = resolve_or_create_entity(conn, name=e['name'], entity_types=e.get('types'), entity_type=e.get('type'), aliases=e.get('aliases', []), description=e.get('description'), properties=e.get('properties', {}))
@@ -73,7 +83,7 @@ def persist_extraction(conn, *, document_id: str, extraction: dict[str, Any]) ->
     counts = {'entities': len(set(entity_ids.values())), 'claims': 0, 'relations': 0, 'events': 0, 'ideas': 0, 'questions': 0, 'auto_created_subjects': 0, 'imprecise_quotes': 0}
 
     for c in extraction.get('claims', []):
-        src = _source(conn, c['source_chunk'])
+        src = _source(evidence, c['source_chunk'])
         if src['document_id'] != document_id: raise ValueError('Claim provenance points to a different document')
         subject_id = _entity_id_by_ref(entity_ids, c['subject'])
         if not subject_id:
@@ -86,55 +96,67 @@ def persist_extraction(conn, *, document_id: str, extraction: dict[str, Any]) ->
         object_text = None if object_id else c.get('object')
         start, end, quote, located = _locate_quote(src['content'], c.get('evidence_quote'), src['start_offset'], src['end_offset'])
         if not located: counts['imprecise_quotes'] += 1
-        conn.execute('''INSERT INTO claims(id,subject_id,predicate,object_id,object_text,content,context_json,claim_type,polarity,modality,confidence,status,created_by,source_document_id,source_chunk_id,source_start_offset,source_end_offset,source_quote) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
-                     (str(uuid.uuid4()), subject_id, c['predicate'], object_id, object_text, c.get('content'), dumps(c.get('context', {})), c['claim_type'], c['polarity'], c['modality'], c['confidence'], 'candidate', 'llm', document_id, c['source_chunk'], start, end, quote))
+        claims.insert(subject_id=subject_id, predicate=c['predicate'], object_id=object_id, object_text=object_text,
+                      content=c.get('content'), context=c.get('context', {}), claim_type=c['claim_type'],
+                      polarity=c['polarity'], modality=c['modality'], confidence=c['confidence'],
+                      status='candidate', created_by='llm', source_document_id=document_id,
+                      source_chunk_id=c['source_chunk'], source_start_offset=start,
+                      source_end_offset=end, source_quote=quote)
         counts['claims'] += 1
 
     for ev in extraction.get('events', []):
-        src = _source(conn, ev['source_chunk'])
+        src = _source(evidence, ev['source_chunk'])
         if src['document_id'] != document_id: raise ValueError('Event provenance points to a different document')
         start, end, quote, located = _locate_quote(src['content'], ev['evidence_quote'], src['start_offset'], src['end_offset'])
         if not located: counts['imprecise_quotes'] += 1
-        conn.execute('''INSERT INTO events(id,event_type,description,participants_json,time_json,location,status,confidence,source_document_id,source_chunk_id,source_start_offset,source_end_offset,source_quote) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)''',
-                     (str(uuid.uuid4()), ev['event_type'], ev['description'], dumps(ev.get('participants', [])), dumps(ev.get('time', {})), ev.get('location'), ev['status'], ev['confidence'], document_id, ev['source_chunk'], start, end, quote))
+        events.insert(event_type=ev['event_type'], description=ev['description'],
+                      participants=ev.get('participants', []), time=ev.get('time', {}),
+                      location=ev.get('location'), status=ev['status'], confidence=ev['confidence'],
+                      source_document_id=document_id, source_chunk_id=ev['source_chunk'],
+                      source_start_offset=start, source_end_offset=end, source_quote=quote)
         counts['events'] += 1
 
     # Relations are derived deterministically from Claims. Legacy explicit relations are ignored.
     derived = derive_relations(extraction)
     for r in derived:
-        src = _source(conn, r['source_chunk'])
+        src = _source(evidence, r['source_chunk'])
         if src['document_id'] != document_id: raise ValueError('Relation provenance points to a different document')
         source_id = _entity_id_by_ref(entity_ids, r['source'])
         target_id = _entity_id_by_ref(entity_ids, r['target'])
         if not source_id or not target_id: continue
         spec = relation_spec(r['predicate'])
         if not spec: continue
-        srow = conn.execute('SELECT types_json FROM entities WHERE id=?',(source_id,)).fetchone()
-        trow = conn.execute('SELECT types_json FROM entities WHERE id=?',(target_id,)).fetchone()
+        srow = entities.fetch_types_aliases(source_id)
+        trow = entities.fetch_types_aliases(target_id)
         if not relation_types_allowed(loads(srow['types_json'], []), r['predicate'], loads(trow['types_json'], [])): continue
         start, end, quote, located = _locate_quote(src['content'], r['evidence_quote'], src['start_offset'], src['end_offset'])
         if not located: counts['imprecise_quotes'] += 1
-        duplicate = conn.execute('SELECT id FROM relations WHERE source_id=? AND predicate=? AND target_id=? AND source_document_id=? AND source_chunk_id=?', (source_id,r['predicate'],target_id,document_id,r['source_chunk'])).fetchone()
-        if duplicate: continue
-        conn.execute('''INSERT INTO relations(id,source_id,predicate,target_id,context_json,confidence,status,created_by,source_document_id,source_chunk_id,source_start_offset,source_end_offset,source_quote) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)''',
-                     (str(uuid.uuid4()), source_id, r['predicate'], target_id, dumps(r.get('context', {})), r['confidence'], 'candidate', 'normalizer', document_id, r['source_chunk'], start, end, quote))
+        if relations.exists(source_id=source_id, predicate=r['predicate'], target_id=target_id,
+                            document_id=document_id, chunk_id=r['source_chunk']): continue
+        relations.insert(source_id=source_id, predicate=r['predicate'], target_id=target_id,
+                         context=r.get('context', {}), confidence=r['confidence'], status='candidate',
+                         created_by='normalizer', source_document_id=document_id,
+                         source_chunk_id=r['source_chunk'], source_start_offset=start,
+                         source_end_offset=end, source_quote=quote)
         counts['relations'] += 1
 
     for idea in extraction.get('ideas', []):
-        src = _source(conn, idea['source_chunk'])
+        src = _source(evidence, idea['source_chunk'])
         if src['document_id'] != document_id: raise ValueError('Idea provenance points to a different document')
         start, end, quote, located = _locate_quote(src['content'], idea['evidence_quote'], src['start_offset'], src['end_offset'])
         if not located: counts['imprecise_quotes'] += 1
-        conn.execute('INSERT INTO ideas(id,content,status,confidence,source_document_id,source_chunk_id,source_start_offset,source_end_offset,source_quote) VALUES(?,?,?,?,?,?,?,?,?)',
-                     (str(uuid.uuid4()), idea['content'], idea['status'], idea['confidence'], document_id, idea['source_chunk'], start, end, quote))
+        ideas.insert(content=idea['content'], status=idea['status'], confidence=idea['confidence'],
+                     source_document_id=document_id, source_chunk_id=idea['source_chunk'],
+                     source_start_offset=start, source_end_offset=end, source_quote=quote)
         counts['ideas'] += 1
 
     for q in extraction.get('questions', []):
-        src = _source(conn, q['source_chunk'])
+        src = _source(evidence, q['source_chunk'])
         if src['document_id'] != document_id: raise ValueError('Question provenance points to a different document')
         start, end, quote, located = _locate_quote(src['content'], q['evidence_quote'], src['start_offset'], src['end_offset'])
         if not located: counts['imprecise_quotes'] += 1
-        conn.execute('INSERT INTO questions(id,content,status,source_document_id,source_chunk_id,source_start_offset,source_end_offset,source_quote) VALUES(?,?,?,?,?,?,?,?)',
-                     (str(uuid.uuid4()), q['content'], q['status'], document_id, q['source_chunk'], start, end, quote))
+        questions.insert(content=q['content'], status=q['status'], source_document_id=document_id,
+                         source_chunk_id=q['source_chunk'], source_start_offset=start,
+                         source_end_offset=end, source_quote=quote)
         counts['questions'] += 1
     return counts
