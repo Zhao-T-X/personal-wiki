@@ -127,6 +127,7 @@ def _currentness_score(citations: list[dict], *, conn=None) -> float:
     if conn is None:
         return 1.0  # nothing to supersede-check without a connection
     from ..repositories import ClaimRepository
+    from .claim_state import is_current
     stale = 0
     total = 0
     for c in citations:
@@ -135,7 +136,9 @@ def _currentness_score(citations: list[dict], *, conn=None) -> float:
             continue
         total += 1
         claims = ClaimRepository(conn).for_chunk(cid, limit=10)
-        if any(str(cl.get('status')) == 'superseded' for cl in claims):
+        # Currentness is defined once, in domain.claim_state (§30): a cited chunk
+        # is stale when everything it backs has stopped being current.
+        if any(not is_current(cl) for cl in claims):
             stale += 1
     if total == 0:
         return 0.0

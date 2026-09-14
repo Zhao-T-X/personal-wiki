@@ -26,6 +26,8 @@ from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from typing import Any
 
+from .claim_state import SUPERSEDED, is_current
+
 # Extraction v2 schema: the fields a claim must carry. ``object`` is optional
 # (it may be free text), ``content`` is optional prose, so they are not scored.
 _REQUIRED = ('subject_name', 'predicate', 'claim_type', 'polarity', 'modality',
@@ -265,7 +267,10 @@ def score_claim_by_id(claim_id: str, conn=None) -> ClaimQuality | None:
     for rel in claims.relations_for_claim(claim_id):
         if rel.get('relationship') in _LIVE_CONFLICT_RELATIONSHIPS:
             other_id = rel['source_claim_id'] if rel['source_claim_id'] != claim_id else rel['target_claim_id']
-            if claims.status_of(other_id) not in ('superseded', None):
+            other_status = claims.status_of(other_id)
+            # A conflict is only live while the other claim is still current
+            # (domain.claim_state is the single definition of that, §30).
+            if other_status is not None and other_status != SUPERSEDED:
                 conflict_live = True
                 break
 
@@ -287,7 +292,7 @@ def score_claim_by_id(claim_id: str, conn=None) -> ClaimQuality | None:
         subject_entity=subject_entity,
         object_entity=object_entity,
         predicate_registered=predicate_registered,
-        is_superseded=claim.get('status') == 'superseded',
+        is_superseded=not is_current(claim),
         conflict_live=conflict_live,
     ))
 

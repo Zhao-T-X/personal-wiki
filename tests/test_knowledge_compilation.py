@@ -237,3 +237,55 @@ def test_predicate_semantics_come_from_the_registry():
 
     assert claim_predicate_spec('uses').functional is False
     assert claim_predicate_spec('frobnicates') is None    # unregistered -> no spec
+
+
+# --- Quality Gate is wired into the compiler (task §14/§15) -------------------
+
+def test_compiler_accepts_a_fully_grounded_claim():
+    from app.domain.compiler import COMPILED, ClaimDraft, KnowledgeCompiler
+    from app.domain.quality_gate import QualitySignals
+
+    grounded = QualitySignals(
+        ontology_valid=True, schema_complete=True, entity_resolved=True,
+        evidence_found=True, quote_exact=True, no_contradiction=True)
+    result = KnowledgeCompiler().compile_claim(
+        ClaimDraft(subject='RAG', predicate_candidate='improves', object='Accuracy'),
+        quality=grounded)
+    assert result.status == COMPILED
+    assert result.quality is not None
+    assert result.quality.verdict == 'accept'
+
+
+def test_quality_gate_vetoes_an_ungrounded_claim():
+    """A legal, well-formed claim with no evidence is still not knowledge.
+
+    Note ``llm_confidence=1.0``: the model's own certainty cannot rescue it.
+    """
+    from app.domain.compiler import REJECTED, ClaimDraft, KnowledgeCompiler
+    from app.domain.quality_gate import QualitySignals
+
+    ungrounded = QualitySignals(
+        ontology_valid=True, schema_complete=False, entity_resolved=False,
+        evidence_found=False, quote_exact=False, no_contradiction=True,
+        llm_confidence=1.0)
+    result = KnowledgeCompiler().compile_claim(
+        ClaimDraft(subject='RAG', predicate_candidate='improves', object='Accuracy'),
+        quality=ungrounded)
+    assert result.status == REJECTED
+    assert result.claim is None
+    assert 'quality_gate_rejected' in result.reasons
+
+
+def test_quality_gate_routes_mid_quality_to_review():
+    from app.domain.compiler import COMPILED, ClaimDraft, KnowledgeCompiler
+    from app.domain.quality_gate import QualitySignals
+
+    mid = QualitySignals(
+        ontology_valid=True, schema_complete=True, entity_resolved=True,
+        evidence_found=False, quote_exact=False, no_contradiction=True)
+    result = KnowledgeCompiler().compile_claim(
+        ClaimDraft(subject='RAG', predicate_candidate='improves', object='Accuracy'),
+        quality=mid)
+    assert result.status == COMPILED          # review still compiles, but is flagged
+    assert 'quality_gate_review' in result.reasons
+    assert result.quality.verdict == 'review'

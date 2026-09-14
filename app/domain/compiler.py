@@ -7,6 +7,7 @@ predicate means and no per-agent rule set:
     LLM draft            ClaimDraft          "I think this expresses a CEO relation"
       -> resolve         PredicateResolver   candidate -> registered predicate | unresolved
       -> validate        Domain rules        domain/range, claim_type, polarity, modality
+      -> gate            QualityGate         accept / review / reject from real evidence
       -> compile         CanonicalClaim      the only shape persistence accepts
 
 The LLM only ever touches ``ClaimDraft``. ``CanonicalClaim`` is constructed by
@@ -18,7 +19,7 @@ Pure logic: no database, no framework, no LLM (docs/adr/ADR-011).
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from ..ontology import (canonical_claim_type, canonical_modality, canonical_polarity,
@@ -28,6 +29,8 @@ from ..ontology import (canonical_claim_type, canonical_modality, canonical_pola
 # ``canonical_entity_type`` is invoked inside ``relation_types_allowed``; the
 # compiler only needs the boolean result.
 from .predicate_resolver import PredicateResolution, resolve_predicate
+from .quality_gate import (REJECT, REVIEW, QualityAssessment, QualitySignals,
+                           evaluate as evaluate_quality)
 
 COMPILED = 'compiled'
 REJECTED = 'rejected'
@@ -93,6 +96,9 @@ class CompileResult:
     claim: CanonicalClaim | None
     resolution: PredicateResolution
     reasons: tuple[str, ...] = ()
+    # Present only when the caller supplied evidence signals; carrying it here
+    # lets Review route on the gate verdict without re-deriving it (§14).
+    quality: QualityAssessment | None = None
 
     @property
     def ok(self) -> bool:
@@ -104,13 +110,25 @@ class CompileResult:
             'claim': self.claim.to_dict() if self.claim else None,
             'resolution': self.resolution.to_dict(),
             'reasons': list(self.reasons),
+            'quality': asdict(self.quality) if self.quality is not None else None,
         }
 
 
 class KnowledgeCompiler:
     """Compile Drafts into Canonical knowledge, or refuse with a reason."""
 
-    def compile_claim(self, draft: ClaimDraft) -> CompileResult:
+    def compile_claim(self, draft: ClaimDraft, *,
+                      quality: QualitySignals | None = None) -> CompileResult:
+        """Compile one draft, optionally passing a Quality Gate verdict.
+
+        When ``quality`` is supplied the deterministic gate is consulted and it
+        can **veto** acceptance: a ``reject`` verdict makes the compile fail even
+        though the ontology was legal (a claim can be well-formed and still not
+        be knowledge). A ``review`` verdict still compiles but is flagged, which
+        is what sends the claim to human review rather than auto-accept (§14).
+        """
+        assessment = evaluate_quality(quality) if quality is not None else None
+
         resolution = resolve_predicate(
             draft.predicate_candidate,
             text=self._context_text(draft),
@@ -118,16 +136,16 @@ class KnowledgeCompiler:
         )
         if not resolution.resolved or not resolution.predicate:
             # No registered predicate: report, do not compile, do not invent.
-            return CompileResult(status=UNRESOLVED, claim=None,
-                                 resolution=resolution, reasons=(resolution.reason,))
+            return CompileResult(status=UNRESOLVED, claim=None, resolution=resolution,
+                                 reasons=(resolution.reason,), quality=assessment)
 
         try:
             claim_type = canonical_claim_type(draft.claim_type)
             polarity = canonical_polarity(draft.polarity)
             modality = canonical_modality(draft.modality)
         except ValueError as exc:
-            return CompileResult(status=REJECTED, claim=None,
-                                 resolution=resolution, reasons=(str(exc),))
+            return CompileResult(status=REJECTED, claim=None, resolution=resolution,
+                                 reasons=(str(exc),), quality=assessment)
 
         # Domain/range: a registered predicate can still be used illegally
         # (e.g. an Organization value where a Person is required).
@@ -138,12 +156,18 @@ class KnowledgeCompiler:
                     draft.subject_types or ['*'], resolution.predicate,
                     draft.object_types or ['*'])
             except ValueError as exc:
-                return CompileResult(status=REJECTED, claim=None,
-                                     resolution=resolution, reasons=(str(exc),))
+                return CompileResult(status=REJECTED, claim=None, resolution=resolution,
+                                     reasons=(str(exc),), quality=assessment)
             if not allowed:
                 return CompileResult(
                     status=REJECTED, claim=None, resolution=resolution,
-                    reasons=('domain_range_violation',))
+                    reasons=('domain_range_violation',), quality=assessment)
+
+        if assessment is not None and assessment.verdict == REJECT:
+            # Legal ontology, unacceptable quality: still not knowledge.
+            return CompileResult(status=REJECTED, claim=None, resolution=resolution,
+                                 reasons=('quality_gate_rejected', *assessment.reasons),
+                                 quality=assessment)
 
         signal = draft.temporal_signal or resolution.temporal_signal
         claim = CanonicalClaim(
@@ -157,10 +181,14 @@ class KnowledgeCompiler:
             context=draft.context if isinstance(draft.context, dict) else {},
             confidence=draft.confidence,
         )
-        return CompileResult(status=COMPILED, claim=claim, resolution=resolution)
+        reasons = ('quality_gate_review',) if (
+            assessment is not None and assessment.verdict == REVIEW) else ()
+        return CompileResult(status=COMPILED, claim=claim, resolution=resolution,
+                             reasons=reasons, quality=assessment)
 
     def compile_extraction_claim(self, raw: dict[str, Any],
-                                 *, entities: dict[str, dict] | None = None) -> CompileResult:
+                                 *, entities: dict[str, dict] | None = None,
+                                 quality: QualitySignals | None = None) -> CompileResult:
         """Compile one claim from an extraction payload (the extraction path).
 
         ``entities`` optionally maps a normalized entity name to its record so
@@ -184,7 +212,7 @@ class KnowledgeCompiler:
             subject_types=list(subject_record.get('types') or []),
             object_types=list(object_record.get('types') or []),
         )
-        return self.compile_claim(draft)
+        return self.compile_claim(draft, quality=quality)
 
     @staticmethod
     def _context_text(draft: ClaimDraft) -> str:

@@ -19,6 +19,8 @@ from .operations import (KINDS, OperationError, OperationRequest, OperationResul
 from .predicate_resolver import (AMBIGUOUS, RESOLVED, TEMPORAL_SIGNALS,
                                  PredicateResolution, resolve_predicate,
                                  split_temporal_signal)
+from .quality_gate import (ACCEPT, REJECT, REVIEW, QualityAssessment, QualitySignals,
+                           evaluate as evaluate_quality)
 
 __all__ = [
     'SUPERSEDED', 'current', 'history', 'is_current', 'resolve',
@@ -31,4 +33,6 @@ __all__ = [
     'CompileResult', 'KnowledgeCompiler',
     'AMBIGUOUS', 'RESOLVED', 'TEMPORAL_SIGNALS', 'PredicateResolution',
     'resolve_predicate', 'split_temporal_signal',
+    'ACCEPT', 'REVIEW', 'REJECT', 'QualityAssessment', 'QualitySignals',
+    'evaluate_quality',
 ]

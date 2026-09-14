@@ -157,10 +157,16 @@ def test_index_document_records_extract_run(tmp_path, monkeypatch):
     import app.llm as llm
     from app.service import create_document, index_document
 
+    async def fake_detect_structured(payload):
+        # Pass 1 (task §12): triage which kinds the batch holds.
+        return {'entities': True, 'claims': True, 'events': False,
+                'ideas': False, 'questions': False}
+
     async def fake_extract_structured(payload):
         return {'entities': [{'name': 'RAG', 'types': ['Concept']}],
                 'claims': [], 'events': [], 'ideas': [], 'questions': []}
 
+    monkeypatch.setattr(llm, 'detect_structured', fake_detect_structured)
     monkeypatch.setattr(llm, 'extract_structured', fake_extract_structured)
     doc_id = create_document(title='T', content='RAG helps.',
                              source_type='note', source_uri=None, metadata={})
@@ -169,13 +175,14 @@ def test_index_document_records_extract_run(tmp_path, monkeypatch):
     assert result['llm'] == 'success'
     conn = db.connect()
     run_row = conn.execute("SELECT * FROM llm_runs WHERE task_type='extract'").fetchone()
-    steps = conn.execute('SELECT * FROM llm_run_steps').fetchall()
+    steps = conn.execute('SELECT * FROM llm_run_steps ORDER BY step_index').fetchall()
     conn.close()
     assert run_row['status'] == 'success'
     assert run_row['document_id'] == doc_id
     assert run_row['agent_role'] == 'extractor'
-    assert run_row['step_count'] == 1
+    # Extraction is two passes now, so both model calls are recorded as steps.
+    assert run_row['step_count'] == 2
     summary = json.loads(run_row['summary_json'])
     assert summary['entities'] == 1 and summary['chunks'] == 1
-    assert len(steps) == 1 and steps[0]['name'] == 'extract_batch'
-    assert json.loads(steps[0]['output_text'])['entities'][0]['name'] == 'RAG'
+    assert [s['name'] for s in steps] == ['detect_batch', 'extract_batch']
+    assert json.loads(steps[1]['output_text'])['entities'][0]['name'] == 'RAG'

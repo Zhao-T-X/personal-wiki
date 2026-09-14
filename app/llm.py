@@ -1,7 +1,8 @@
 from __future__ import annotations
 import json
 from .config import runtime
-from .agents.extraction_agent import extract_structured
+from .agents.extraction_agent import (
+    KIND_KEYS, detect_structured, extract_structured, scope_hint, wanted_kinds)
 from .extraction import normalize_extraction
 from .runlog import current_run, is_cancelled, record_run
 
@@ -65,13 +66,45 @@ async def _extract_one(payload: str, step_name: str, input_summary: str) -> dict
         return data
 
 
-async def extract(chunks: list[dict]) -> dict:
-    """Extract knowledge with the AgentScope extraction agent.
+def _restrict(data: dict, wanted: set[str]) -> dict:
+    """Erase the kinds Pass 1 did not name, keeping all five schema keys."""
+    if not isinstance(data, dict):
+        return data
+    out = dict(data)
+    for kind in KIND_KEYS:
+        if kind not in wanted:
+            out[kind] = []
+    return out
 
-    The agent owns the reasoning-acting loop. It can open the Knowledge
-    Extraction skill, load the registries on demand, and must return its
-    result through the structured-output contract defined in
-    ``app.agents.extraction_agent``.
+
+async def _detect_one(payload: str, step_name: str, input_summary: str) -> set[str] | None:
+    """Pass 1: triage which kinds a batch contains, recorded as its own step.
+
+    Detection only narrows the work, so a failure (missing model, provider
+    error, malformed output) must never drop a batch: it degrades to ``None``
+    and the caller extracts every kind, exactly as the single-pass pipeline did.
+    """
+    run = current_run()
+    try:
+        if run is None:
+            return wanted_kinds(await detect_structured(payload))
+        with run.step(step_name, input_summary=input_summary) as step:
+            data = await detect_structured(payload)
+            step.output = json.dumps(data, ensure_ascii=False)
+            return wanted_kinds(data)
+    except Exception:
+        # Degradation, not failure: an unknown scope means "extract everything".
+        return None
+
+
+async def extract(chunks: list[dict]) -> dict:
+    """Extract knowledge with the AgentScope extraction agent (task §12).
+
+    Each batch runs in two passes. Pass 1 (``detect_structured``) cheaply
+    decides which knowledge kinds the batch contains; only when it names at
+    least one kind does Pass 2 (``extract_structured``) run, scoped to those
+    kinds. A failed detection degrades to the original single-pass behaviour
+    instead of losing the batch.
     """
     results = []
     batch_size = max(1, int(runtime()['llm_batch_chunks']))
@@ -82,15 +115,34 @@ async def extract(chunks: list[dict]) -> dict:
             raise RuntimeError('提取已被用户取消')
         payload = '\n\n'.join(f"[CHUNK {c['id']}]\n{c['content']}" for c in batch)
         chars = sum(len(c['content']) for c in batch)
-        data = await _extract_one(
-            payload, 'extract_batch',
-            f'batch {n}/{len(batches)} · {len(batch)} chunks · {chars} chars')
+        scope = f'batch {n}/{len(batches)} · {len(batch)} chunks · {chars} chars'
+        # Pass 1: does this batch hold anything worth extracting?
+        wanted = await _detect_one(payload, 'detect_batch', scope)
+        if wanted is not None and not wanted:
+            # Nothing named → skip Pass 2 entirely (no extraction call at all).
+            results.append(_empty())
+            continue
+        # Pass 2: extract, scoped to the kinds Pass 1 named (or unscoped when
+        # detection was unavailable).
+        if wanted is None:
+            scoped, extract_summary = payload, scope
+        else:
+            scoped = f'{payload}\n\n{scope_hint(wanted)}'
+            extract_summary = f'{scope} · kinds: {", ".join(sorted(wanted))}'
+        data = await _extract_one(scoped, 'extract_batch', extract_summary)
+        if wanted is not None:
+            data = _restrict(data, wanted)
         try:
             results.append(normalize_extraction(data))
         except ValueError as exc:
+            repair = _repair_instruction(data, error=str(exc))
+            if wanted is not None:
+                repair = f'{repair}\n\n{scope_hint(wanted)}'
             repaired = await _extract_one(
-                _repair_instruction(data, error=str(exc)), 'extract_repair',
+                repair, 'extract_repair',
                 f'batch {n}/{len(batches)} · retry after validation failure')
+            if wanted is not None:
+                repaired = _restrict(repaired, wanted)
             results.append(normalize_extraction(repaired))
     return _merge(results)
 

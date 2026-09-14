@@ -1,0 +1,206 @@
+{
+  "version": "1.0",
+  "description": "Offline extraction-evaluation golden set (task §16/§17). Every model_draft claim carries the fields the extraction schema requires; evidence_quote is always a substring of source_text. Cases marked with an invented predicate must never compile.",
+  "cases": [
+    {
+      "id": "apple-ceo-succession",
+      "note": "Permanent regression case from task §41: an invented predicate ('new_ceo') must never become knowledge.",
+      "source_text": "苹果的新任首席执行官是约翰·特努斯。",
+      "model_draft": {
+        "entities": [
+          {"name": "苹果", "types": ["Organization"]},
+          {"name": "约翰·特努斯", "types": ["Person"]}
+        ],
+        "claims": [
+          {
+            "subject": "苹果",
+            "predicate": "new_ceo",
+            "object": "约翰·特努斯",
+            "claim_type": "factual",
+            "polarity": "positive",
+            "modality": "asserted",
+            "context": {},
+            "confidence": 0.9,
+            "source_chunk": "chunk-1",
+            "evidence_quote": "苹果的新任首席执行官是约翰·特努斯。"
+          }
+        ]
+      },
+      "expected_entities": [
+        {"name": "苹果", "types": ["Organization"]},
+        {"name": "约翰·特努斯", "types": ["Person"]}
+      ],
+      "expected_claims": []
+    },
+    {
+      "id": "alias-canonicalization",
+      "note": "The registry lists 'optimise' as an alias of 'improves': the candidate is canonised, not invented.",
+      "source_text": "The new caching layer optimises query latency.",
+      "model_draft": {
+        "entities": [
+          {"name": "caching layer", "types": ["Software"]},
+          {"name": "query latency", "types": ["Concept"]}
+        ],
+        "claims": [
+          {
+            "subject": "caching layer",
+            "predicate": "optimises",
+            "object": "query latency",
+            "claim_type": "factual",
+            "polarity": "positive",
+            "modality": "asserted",
+            "context": {},
+            "confidence": 0.85,
+            "source_chunk": "chunk-1",
+            "evidence_quote": "optimises query latency"
+          }
+        ]
+      },
+      "expected_entities": [
+        {"name": "caching layer", "types": ["Software"]},
+        {"name": "query latency", "types": ["Concept"]}
+      ],
+      "expected_claims": [
+        {"subject": "caching layer", "predicate": "improves", "object": "query latency"}
+      ]
+    },
+    {
+      "id": "unmappable-predicate",
+      "note": "A predicate with no registry alias at all has a legal failure exit: unresolved, never compiled.",
+      "source_text": "The widget frobnicates quantum flux.",
+      "model_draft": {
+        "entities": [
+          {"name": "widget", "types": ["Concept"]}
+        ],
+        "claims": [
+          {
+            "subject": "widget",
+            "predicate": "frobnicates_quantum",
+            "object": "quantum flux",
+            "claim_type": "factual",
+            "polarity": "positive",
+            "modality": "asserted",
+            "context": {},
+            "confidence": 0.4,
+            "source_chunk": "chunk-1",
+            "evidence_quote": "frobnicates quantum flux"
+          }
+        ]
+      },
+      "expected_entities": [
+        {"name": "widget", "types": ["Concept"]}
+      ],
+      "expected_claims": []
+    },
+    {
+      "id": "clean-registered",
+      "note": "A registered relation predicate with grounded entity types compiles as-is.",
+      "source_text": "Knowledge Compiler uses the predicate registry.",
+      "model_draft": {
+        "entities": [
+          {"name": "Knowledge Compiler", "types": ["Software"]},
+          {"name": "predicate registry", "types": ["Resource"]}
+        ],
+        "claims": [
+          {
+            "subject": "Knowledge Compiler",
+            "predicate": "uses",
+            "object": "predicate registry",
+            "claim_type": "factual",
+            "polarity": "positive",
+            "modality": "asserted",
+            "context": {},
+            "confidence": 0.95,
+            "source_chunk": "chunk-1",
+            "evidence_quote": "Knowledge Compiler uses the predicate registry"
+          }
+        ]
+      },
+      "expected_entities": [
+        {"name": "Knowledge Compiler", "types": ["Software"]},
+        {"name": "predicate registry", "types": ["Resource"]}
+      ],
+      "expected_claims": [
+        {"subject": "Knowledge Compiler", "predicate": "uses", "object": "predicate registry"}
+      ]
+    },
+    {
+      "id": "entity-type-violation",
+      "note": "'Company' is not a registered entity type: it is counted as a violation and the entity is dropped, without raising.",
+      "source_text": "Acme Corp improves throughput.",
+      "model_draft": {
+        "entities": [
+          {"name": "Acme Corp", "types": ["Company"]},
+          {"name": "throughput", "types": ["Concept"]}
+        ],
+        "claims": [
+          {
+            "subject": "Acme Corp",
+            "predicate": "improves",
+            "object": "throughput",
+            "claim_type": "factual",
+            "polarity": "positive",
+            "modality": "asserted",
+            "context": {},
+            "confidence": 0.7,
+            "source_chunk": "chunk-1",
+            "evidence_quote": "Acme Corp improves throughput"
+          }
+        ]
+      },
+      "expected_entities": [
+        {"name": "throughput", "types": ["Concept"]}
+      ],
+      "expected_claims": [
+        {"subject": "Acme Corp", "predicate": "improves", "object": "throughput"}
+      ]
+    },
+    {
+      "id": "multi-claim",
+      "note": "One record with two legal claims: both must compile and both must match. 'creates' is a registered claim predicate; 'develops' is relation-registry-only and deliberately not used here.",
+      "source_text": "Alice creates the Knowledge Compiler. The compiler improves retrieval accuracy.",
+      "model_draft": {
+        "entities": [
+          {"name": "Alice", "types": ["Person"]},
+          {"name": "Knowledge Compiler", "types": ["Software"]},
+          {"name": "retrieval accuracy", "types": ["Concept"]}
+        ],
+        "claims": [
+          {
+            "subject": "Alice",
+            "predicate": "creates",
+            "object": "Knowledge Compiler",
+            "claim_type": "factual",
+            "polarity": "positive",
+            "modality": "asserted",
+            "context": {},
+            "confidence": 0.9,
+            "source_chunk": "chunk-1",
+            "evidence_quote": "Alice creates the Knowledge Compiler."
+          },
+          {
+            "subject": "Knowledge Compiler",
+            "predicate": "improves",
+            "object": "retrieval accuracy",
+            "claim_type": "factual",
+            "polarity": "positive",
+            "modality": "asserted",
+            "context": {},
+            "confidence": 0.8,
+            "source_chunk": "chunk-2",
+            "evidence_quote": "The compiler improves retrieval accuracy."
+          }
+        ]
+      },
+      "expected_entities": [
+        {"name": "Alice", "types": ["Person"]},
+        {"name": "Knowledge Compiler", "types": ["Software"]},
+        {"name": "retrieval accuracy", "types": ["Concept"]}
+      ],
+      "expected_claims": [
+        {"subject": "Alice", "predicate": "creates", "object": "Knowledge Compiler"},
+        {"subject": "Knowledge Compiler", "predicate": "improves", "object": "retrieval accuracy"}
+      ]
+    }
+  ]
+}

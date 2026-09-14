@@ -20,6 +20,7 @@ from agentscope.agent import Agent
 from agentscope.message import UserMsg
 
 from .base import build_agent
+from ..config import runtime
 from ..prompt_profiles import compose_prompt
 from ..tools.skill_tools import list_skills, read_skill_reference
 
@@ -218,6 +219,35 @@ class Extraction(BaseModel):
     questions: list[Question] = Field(default_factory=list)
 
 
+class Detection(BaseModel):
+    """Pass 1 output: which knowledge kinds a chunk batch is worth extracting.
+
+    All five flags default to False, so a model that omits one is read as
+    "nothing of that kind here" instead of failing the whole pass.
+    """
+
+    entities: bool = False
+    claims: bool = False
+    events: bool = False
+    ideas: bool = False
+    questions: bool = False
+
+
+# Canonical order of the five knowledge kinds; shared with the schema contract.
+KIND_KEYS: tuple[str, ...] = ("entities", "claims", "events", "ideas", "questions")
+
+
+def wanted_kinds(detection: dict | Detection | None) -> set[str]:
+    """The kinds Pass 1 judged present (True); every other kind is skipped."""
+    if detection is None:
+        return set()
+    if isinstance(detection, BaseModel):
+        detection = detection.model_dump()
+    if not isinstance(detection, dict):
+        return set()
+    return {key for key in KIND_KEYS if bool(detection.get(key))}
+
+
 # References are no longer inlined into every extraction call. The closed
 # vocabularies already ship as the structured-output contract (Pydantic Literal
 # enums, which the provider receives as a machine schema), so inlining
@@ -259,3 +289,82 @@ async def extract_structured(payload: str) -> dict:
     if not isinstance(data, dict):
         raise RuntimeError("Extraction agent did not return structured output")
     return data
+
+
+# Pass 1 is deliberately tiny: no tools, no skill catalogue, no references. It
+# only triages which of the five kinds a batch contains, so paying for the full
+# extraction prompt (and a reasoning-acting loop) on a chunk that holds nothing
+# worth extracting is pure waste (task §12).
+DETECTION_SYSTEM_PROMPT = (
+    "You are a fast triage classifier for a personal knowledge base. "
+    "Read the text chunks and report which knowledge kinds they contain.\n"
+    "- entities: named people, organizations, products, software, technologies, "
+    "methods, concepts, theories, datasets, models, standards, protocols, "
+    "resources or locations.\n"
+    "- claims: asserted facts, definitions, causes, comparisons, evaluations or "
+    "predictions about something.\n"
+    "- events: dated or sequential occurrences (creation, release, deployment, "
+    "migration, meeting, failure, ...).\n"
+    "- ideas: proposals, suggestions or design thoughts that are not yet facts.\n"
+    "- questions: explicit open questions the text asks.\n"
+    "Set a kind to true only when the text really contains it, otherwise false. "
+    "Do not extract the content itself."
+)
+
+
+def build_detection_agent() -> Agent:
+    """Create the minimal Pass 1 agent: no tools, no skills, a short prompt."""
+    cfg = runtime()
+    if not cfg.get("openai_api_key"):
+        raise RuntimeError("LLM API key is not configured")
+    from agentscope.credential import OpenAICredential
+    from agentscope.model import OpenAIChatModel
+
+    credential = OpenAICredential(
+        api_key=cfg["openai_api_key"],
+        base_url=cfg["openai_base_url"],
+    )
+    model = OpenAIChatModel(
+        credential=credential,
+        model=cfg["openai_model"],
+        stream=False,
+    )
+    # No toolkit argument: Agent falls back to an empty Toolkit, so neither the
+    # knowledge-base tools nor the skill catalogue reach the model call.
+    return Agent(
+        name="DetectionAgent",
+        system_prompt=DETECTION_SYSTEM_PROMPT,
+        model=model,
+    )
+
+
+async def detect_structured(payload: str) -> dict:
+    """Pass 1: return ``{kind: bool}`` for the five knowledge kinds.
+
+    Runs on a minimal agent with no tools and no skill references. Callers must
+    treat a failure as "unknown" and fall back to a full extraction rather than
+    dropping the batch (see ``app/llm.py::_detect_one``).
+    """
+    agent = build_detection_agent()
+    from ..agent_usage import collect, context_length, record
+    context_before = context_length(agent)
+    message = await agent.reply(
+        UserMsg(name="user", content=payload),
+        structured_schema=Detection,
+    )
+    # The step record is owned by app/llm.py, so hand the provider usage over.
+    record(collect(agent, message, context_before))
+    data = getattr(message, "structured_output", None)
+    if not isinstance(data, dict):
+        raise RuntimeError("Detection agent did not return structured output")
+    return {key: bool(data.get(key, False)) for key in KIND_KEYS}
+
+
+def scope_hint(wanted: set[str]) -> str:
+    """Instruction appended to a Pass 2 payload to limit what gets extracted."""
+    kinds = ", ".join(key for key in KIND_KEYS if key in wanted)
+    return (
+        "[PASS 2 SCOPE]\n"
+        f"A lightweight pre-scan found only these knowledge kinds in this batch: {kinds}.\n"
+        "Extract ONLY those kinds and return every other array as an empty list."
+    )

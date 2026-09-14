@@ -101,6 +101,12 @@ Resolver **不允许发明式映射**：`new` + 已注册词根可以机械拆�
     抽取链路已改走 resolver。
   - 纠正流程（`app/workflows/correction_workflow.py`）改走编译器：谓词候选受控，无法映射时
     `blocked` 并如实说明；`apply_correction` 二次校验，任何路由都无法写入未注册谓词。
+  - **Quality Gate 已接入编译器**（`app/domain/quality_gate.py`）：确定性信号权重（10–20 分/项）
+    严格高于 LLM 自报置信度（5 分）；`reject` 能否决一条本体合法的 claim。
+  - **抽取评测基建**（`app/evaluation/` + `tests/evaluation/extraction/golden.json`）：
+    Entity/Claim Precision·Recall、Evidence Accuracy、OntologyViolationRate；
+    当前 Golden Set 上 OntologyViolationRate = 0。
+  - 谓词语义（`functional`/`temporal`）已回归 Registry（§31），并由边界测试守住。
 - **PARTIAL / TARGET**
   - Extraction 之外的其他 Agent（Research / Curator / Review）尚未全部显式接入编译器。
   - 运行时「任务相关谓词子集」已用于纠正流程；抽取 Agent 的 prompt 注入仍为 TARGET。
