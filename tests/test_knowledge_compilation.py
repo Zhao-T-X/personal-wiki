@@ -217,3 +217,23 @@ def test_correction_plan_is_blocked_when_predicate_is_unresolved(tmp_path):
     assert plan.blocked is True
     assert plan.relationship == 'unresolved'
     assert '受控谓词' in plan.summary
+
+
+# --- Predicate semantics are registry data, not Python literals (task §31) ----
+
+def test_predicate_semantics_come_from_the_registry():
+    from app.claim_relations import FUNCTIONAL_PREDICATES
+    from app.ontology import CLAIM_PREDICATES, claim_predicate_spec
+
+    # The set is derived from the registry and can never contain a non-predicate.
+    assert FUNCTIONAL_PREDICATES
+    assert FUNCTIONAL_PREDICATES <= CLAIM_PREDICATES
+
+    spec = claim_predicate_spec('defined_as')
+    assert spec is not None
+    assert spec.functional is True
+    assert spec.temporal is True
+    assert spec.evolution == 'supersedable'
+
+    assert claim_predicate_spec('uses').functional is False
+    assert claim_predicate_spec('frobnicates') is None    # unregistered -> no spec

@@ -18,6 +18,7 @@ honest question.
 """
 from __future__ import annotations
 
+from .ontology import functional_claim_predicates
 from .repositories import ClaimRepository
 
 RELATIONSHIPS = ('duplicate', 'coexists', 'supersedes', 'contradicts', 'unclear')
@@ -25,10 +26,12 @@ RELATIONSHIPS = ('duplicate', 'coexists', 'supersedes', 'contradicts', 'unclear'
 # Predicates whose subject holds one value at a time. Two different objects then
 # describe a knowledge *change* rather than two facts standing side by side.
 #
-# Deliberately conservative and deliberately small: predicates absent from this
-# set fall back to `coexists`, which destroys nothing and never asks the user to
-# resolve a conflict that isn't one. Extend with evidence, not with guesses.
-FUNCTIONAL_PREDICATES = frozenset({'is', 'defined_as', 'classified_as'})
+# Derived from the registry, never hardcoded (ADR-011; task §31): whether a
+# predicate is single-valued is ontology data. Changing this set means editing
+# schemas/claim-predicate-registry.json, not Python. Predicates absent from it
+# fall back to `coexists`, which destroys nothing and never asks the user to
+# resolve a conflict that isn't one.
+FUNCTIONAL_PREDICATES = functional_claim_predicates()
 
 # Ranking for "most interesting relationship first" in a review queue.
 _PRIORITY = {'duplicate': 0, 'supersedes': 1, 'contradicts': 2, 'coexists': 3, 'unclear': 4}

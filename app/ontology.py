@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -124,6 +125,45 @@ def relation_spec(predicate: str) -> dict[str, Any] | None:
 
 def claim_predicate_allowed(predicate: str) -> bool:
     return normalize_predicate(predicate) in CLAIM_PREDICATES
+
+
+# Predicate semantics are ontology data, not Python literals (ADR-011; task §31):
+# "does this predicate hold one value at a time" is a property of the relation,
+# so it lives in the registry and is read from there. Python must not carry a
+# second, editable-in-code copy of ontology knowledge.
+@dataclass(frozen=True)
+class PredicateSpec:
+    """Registry-declared semantics of one claim predicate."""
+
+    predicate: str
+    functional: bool = False
+    temporal: bool = False
+    evolution: str | None = None
+
+
+def claim_predicate_spec(predicate: str) -> PredicateSpec | None:
+    """The registry spec for ``predicate``, or ``None`` if it is not registered.
+
+    ``None`` is meaningful: it is the same answer the resolver gives for an
+    unregistered candidate, and it is never a license to invent semantics.
+    """
+    normalized = normalize_predicate(predicate)
+    if normalized not in CLAIM_PREDICATES:
+        return None
+    meta = (CLAIM_REGISTRY.get('predicate_metadata') or {}).get(normalized) or {}
+    return PredicateSpec(
+        predicate=normalized,
+        functional=bool(meta.get('functional')),
+        temporal=bool(meta.get('temporal')),
+        evolution=meta.get('evolution'),
+    )
+
+
+def functional_claim_predicates() -> frozenset[str]:
+    """Registered predicates whose subject holds one value at a time."""
+    metadata = CLAIM_REGISTRY.get('predicate_metadata') or {}
+    return frozenset(
+        p for p in CLAIM_PREDICATES if bool((metadata.get(p) or {}).get('functional')))
 
 
 # Registry Subset matcher (Context Runtime P2c, spec §5): the full registry never

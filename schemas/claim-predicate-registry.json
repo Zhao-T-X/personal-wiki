@@ -1,5 +1,5 @@
 {
-  "version":"1.0",
+  "version":"1.1",
   "claim_predicates":[
     "is","defined_as","classified_as","contains","includes","consists_of",
     "uses","retrieves","accesses","provides","receives","generates","produces","creates","extracts","transforms",
@@ -7,5 +7,10 @@
     "depends_on","requires","implements","based_on","derived_from","extends",
     "trained_on","evaluated_on","tested_on","studies","investigates","evaluates","analyzes",
     "compares_with","better_than","worse_than","designed_for","used_for","applied_to","addresses"
-  ]
+  ],
+  "predicate_metadata":{
+    "is":{"functional":true,"temporal":true,"evolution":"supersedable"},
+    "defined_as":{"functional":true,"temporal":true,"evolution":"supersedable"},
+    "classified_as":{"functional":true,"temporal":true,"evolution":"supersedable"}
+  }
 }

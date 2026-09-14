@@ -72,3 +72,23 @@ def test_llm_client_is_not_imported_by_the_domain_layer():
         src = path.read_text(encoding='utf-8')
         assert 'from ..llm' not in src and 'import llm' not in src, \
             f'{path.name} must not import the LLM client'
+
+
+def test_ontology_semantics_are_not_redeclared_in_python():
+    """ADR-011 rule 6 / task §31: the ontology is registry data, not Python.
+
+    Registered vocabularies (predicates, entity types, and predicate semantics
+    such as ``functional``) may only be declared in ``schemas/`` and read
+    through ``app/ontology.py``. A second, code-resident copy would let the
+    runtime drift from — or silently extend — the ontology.
+    """
+    literals = ('FUNCTIONAL_PREDICATES = frozenset({', 'CLAIM_PREDICATES = {',
+                'ENTITY_TYPES = {', 'RELATION_TYPES = {')
+    offenders = []
+    for path in (ROOT / 'app').rglob('*.py'):
+        rel = str(path.relative_to(ROOT)).replace('\\', '/')
+        if rel == 'app/ontology.py':
+            continue                       # the one reader of the registry
+        src = path.read_text(encoding='utf-8')
+        offenders.extend(f'{rel}: {literal}' for literal in literals if literal in src)
+    assert offenders == [], f'ontology values redeclared in Python: {offenders}'
