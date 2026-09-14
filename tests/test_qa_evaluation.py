@@ -16,8 +16,8 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-RETRIEVAL_GOLDEN = ROOT / 'tests' / 'evaluation' / 'retrieval' / 'golden.json'
-QA_GOLDEN = ROOT / 'tests' / 'evaluation' / 'qa' / 'golden.json'
+RETRIEVAL_GOLDEN = ROOT / 'app' / 'evaluation' / 'data' / 'golden' / 'retrieval.json'
+QA_GOLDEN = ROOT / 'app' / 'evaluation' / 'data' / 'golden' / 'qa.json'
 
 from app.evaluation.qa_eval import (QaCase, evaluate_qa_case, evaluate_qa_dataset,
                                     load_qa_cases, refusal_kind)
@@ -241,7 +241,12 @@ def test_a_correct_refusal_is_rewarded():
 
 def test_evaluation_modules_do_not_import_infrastructure():
     """Same mechanical source guard the domain layer uses (ADR-011)."""
+    _INFRA = {'store.py', 'runners.py', 'baseline.py'}
     for path in (ROOT / 'app' / 'evaluation').glob('*.py'):
+        if path.name in _INFRA:
+            # store.py / runners.py / baseline.py are backend wiring and are
+            # explicitly allowed to touch the database; they are checked separately.
+            continue
         source = path.read_text(encoding='utf-8')
         for framework in ('fastapi', 'agentscope', 'sqlite3'):
             assert f'import {framework}' not in source, f'{path.name} must not import {framework}'

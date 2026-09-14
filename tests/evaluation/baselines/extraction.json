@@ -1,0 +1,24 @@
+{
+  "suite": "extraction",
+  "metrics": {
+    "entity_precision": 1.0,
+    "entity_recall": 1.0,
+    "claim_precision": 1.0,
+    "claim_recall": 1.0,
+    "evidence_accuracy": 1.0,
+    "ontology_violation_rate": 0.0,
+    "totals": {
+      "entity_tp": 11,
+      "entity_fp": 0,
+      "entity_fn": 0,
+      "claim_tp": 6,
+      "claim_fp": 0,
+      "claim_fn": 0,
+      "compiled_claims": 6,
+      "evidence_hits": 6,
+      "ontology_violations": 0,
+      "entity_type_violations": 1
+    },
+    "case_count": 6
+  }
+}

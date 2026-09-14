@@ -22,6 +22,10 @@ from .prompt_profiles import list_profiles, get_profile, update_profile, reset_p
 from .repositories import (CatalogRepository, ClaimRepository, DocumentRepository, EntityRepository,
                            EventRepository, IdeaRepository, OperationRepository, QuestionRepository,
                            RelationRepository, ResearchRepository, RunRepository)
+from .evaluation.runners import run_evaluation
+# Aliased to avoid shadowing the existing /api/runs handlers `list_runs`/`get_run`.
+from .evaluation.store import list_runs as list_eval_runs, get_run as get_eval_run
+from .evaluation import baseline as _evaluation_baseline
 
 app=FastAPI(title='LLM-Wiki', version=__version__)
 
@@ -797,6 +801,63 @@ def stats():
 @app.get('/api/export')
 def export_all():
     return CatalogRepository().export_all()
+
+# --- evaluation board (Phase 7) --------------------------------------------
+class EvalRunRequest(__import__('pydantic').BaseModel):
+    suite: str
+
+
+@app.post('/api/eval/run')
+def eval_run(req: EvalRunRequest):
+    """Run one evaluation suite end-to-end and persist the result."""
+    try:
+        return run_evaluation(req.suite)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.get('/api/eval/runs')
+def eval_runs(limit: int = 20):
+    """Most-recent evaluation runs as ``{run_id, suite, created_at, summary}``."""
+    return list_eval_runs(limit)
+
+
+@app.get('/api/eval/runs/{run_id}')
+def eval_run_detail(run_id: str):
+    item = get_eval_run(run_id)
+    if item is None:
+        raise HTTPException(404, 'Evaluation run not found')
+    return item
+
+
+@app.get('/api/eval/baseline')
+def eval_baseline(suite: str | None = None):
+    """Baseline metrics: for one suite, or all suites keyed by name."""
+    if suite is not None:
+        data = _evaluation_baseline.read_baseline(suite)
+        if data is None:
+            raise HTTPException(404, f'No baseline recorded for suite: {suite}')
+        return data
+    return {'suites': _evaluation_baseline.read_all_baselines()}
+
+
+class EvalBaselinePinRequest(__import__('pydantic').BaseModel):
+    suite: str
+    run_id: str
+
+
+@app.post('/api/eval/baseline/pin')
+def eval_baseline_pin(req: EvalBaselinePinRequest):
+    """Pin a run's summary as the new baseline for its suite."""
+    if req.suite not in ('extraction', 'qa', 'retrieval'):
+        raise HTTPException(422, f'Unknown suite: {req.suite}')
+    item = get_eval_run(req.run_id)
+    if item is None:
+        raise HTTPException(404, 'Evaluation run not found')
+    if item['suite'] != req.suite:
+        raise HTTPException(422, 'run_id does not belong to the given suite')
+    return _evaluation_baseline.pin_baseline(req.suite, item['summary'])
+
 
 from pathlib import Path as _Path
 _DIST = _Path('web/dist')

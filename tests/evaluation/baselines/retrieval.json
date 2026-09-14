@@ -1,0 +1,16 @@
+{
+  "suite": "retrieval",
+  "metrics": {
+    "recall_at_5": 0.6153846153846154,
+    "recall_at_10": 0.9615384615384616,
+    "precision_at_5": 0.5333333333333333,
+    "mrr": 0.6904761904761904,
+    "totals": {
+      "hits_at_5": 16,
+      "hits_at_10": 25,
+      "relevant": 26,
+      "window_at_5": 30
+    },
+    "case_count": 6
+  }
+}

@@ -342,6 +342,16 @@ CREATE INDEX IF NOT EXISTS idx_knowledge_operations_kind
 
 DROP TABLE IF EXISTS extraction_runs;
 
+-- Evaluation board (Phase 7): persisted offline eval runs. One row per run;
+-- summary/report are JSON (summary = scalar aggregates, report keeps case_details).
+CREATE TABLE IF NOT EXISTS evaluation_runs (
+  id TEXT PRIMARY KEY,
+  suite TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  report TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS chunk_embeddings (
   chunk_id TEXT PRIMARY KEY REFERENCES chunks(id) ON DELETE CASCADE,
   model TEXT NOT NULL,

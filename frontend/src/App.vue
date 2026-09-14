@@ -29,11 +29,13 @@ const items = [
   { id: '/research', icon: '◇', text: '研究' },
   { id: '/agent', icon: '◌', text: 'Agent 工作台' },
   { id: '/settings', icon: '⚙', text: '设置' },
+  { id: '/eval', icon: '◈', text: '评测' },
 ]
 
 const CRUMBS: Record<string, string> = {
   '/': '首页', '/knowledge': '知识', '/qa': '问答', '/review': '审核', '/research': '研究',
   '/agent': 'Agent 工作台', '/settings': '设置', '/settings/database': '设置 / Database',
+  '/eval': '评测',
 }
 const crumb = computed(() => {
   const path = route.path
@@ -55,6 +57,7 @@ const MOBILE_ITEMS = [
   { id: '/qa', icon: '◎', text: '问答' },
   { id: '/research', icon: '◇', text: '研究' },
   { id: '/agent', icon: '◌', text: 'Agent' },
+  { id: '/eval', icon: '◈', text: '评测' },
 ]
 </script>
 

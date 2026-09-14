@@ -4,6 +4,7 @@ These are cheap, mechanical guards against the architecture silently eroding:
 they read source, not runtime, so they fail loudly the moment a layer starts
 reaching where it should not.
 """
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,7 +29,25 @@ PERSISTENCE_PREFIXES = (
     'app/embeddings.py',
     'app/prompt_profiles.py',
     'app/runlog.py',
+    # Evaluation landing files that legitimately persist results (task §16).
+    # They are the *only* evaluation modules exempt from the purity red line below.
+    'app/evaluation/store.py',
+    'app/evaluation/runners.py',
 )
+
+# The five harness modules that must stay pure: imported by ``app.evaluation`` and
+# exercised in CI with no API key and no database. They may not reach for the web
+# framework, the agent framework, the database driver or the LLM client.
+EVAL_PURE_MODULES = (
+    'app/evaluation/__init__.py',
+    'app/evaluation/extraction_eval.py',
+    'app/evaluation/qa_eval.py',
+    'app/evaluation/retrieval_eval.py',
+    'app/evaluation/metrics.py',
+)
+
+# Imports the pure evaluation harness must never make.
+EVAL_BANNED_IMPORTS = ('fastapi', 'agentscope', 'sqlite3', 'llm')
 
 FRAMEWORKS = ('fastapi', 'agentscope', 'sqlite3')
 
@@ -92,3 +111,29 @@ def test_ontology_semantics_are_not_redeclared_in_python():
         src = path.read_text(encoding='utf-8')
         offenders.extend(f'{rel}: {literal}' for literal in literals if literal in src)
     assert offenders == [], f'ontology values redeclared in Python: {offenders}'
+
+
+def test_evaluation_modules_are_pure():
+    """The offline eval harness must not depend on runtime infrastructure (red line).
+
+    ``app.evaluation`` is imported and run in CI with no API key and no database to
+    produce reproducible numbers. If any of the five pure harness modules starts to
+    import FastAPI, AgentScope, sqlite3 or the LLM client, those numbers can no
+    longer be trusted and the regression suite silently becomes environment-dependent.
+
+    DB-backed landing files (``store.py`` / ``runners.py``) are intentionally exempt
+    and covered by the persistence rule in
+    :func:`test_sql_lives_only_in_the_persistence_layer`.
+    """
+    pattern = re.compile(
+        r'^\s*(?:import\s+.*\b(?:'
+        + '|'.join(EVAL_BANNED_IMPORTS)
+        + r')\b|from\s+[^#]*\b(?:'
+        + '|'.join(EVAL_BANNED_IMPORTS)
+        + r')\b)',
+        re.MULTILINE,
+    )
+    for rel in EVAL_PURE_MODULES:
+        src = _source(rel)
+        bad = pattern.search(src)
+        assert bad is None, f'{rel} must not import {EVAL_BANNED_IMPORTS} (matched: {bad.group(0).strip()!r})'

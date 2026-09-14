@@ -94,3 +94,48 @@ export interface GraphPayload {
   edges: { id: string; source_id: string; target_id: string; predicate: string; confidence: number | null; status: string; source_name?: string; target_name?: string }[]
   claims: any[]
 }
+
+/* ───── Evaluation Dashboard (Phase 7) ───── */
+export type EvalSuite = 'extraction' | 'qa' | 'retrieval'
+
+/** Aggregated scalar metrics for a run. Keys depend on the suite (see EvalDashboard). */
+export type EvalSummary = Record<string, number>
+
+/** One entry in the run-history list (no report). */
+export interface EvalRunListItem {
+  run_id: string
+  suite: EvalSuite
+  created_at: string
+  summary: EvalSummary
+}
+
+/** Full run detail, including the complete report. */
+export interface EvalRunDetail {
+  run_id: string
+  suite: EvalSuite
+  created_at: string
+  summary: EvalSummary
+  report: EvalReport
+}
+
+/** The report payload: case_details is an array of per-case metric objects. */
+export interface EvalReport {
+  case_details?: EvalCaseDetail[]
+  [key: string]: unknown
+}
+
+/** A single case's metrics. Shape is open because each suite reports different fields. */
+export type EvalCaseDetail = Record<string, unknown>
+
+/** Baseline response. With `?suite=`: { suite, metrics }. Without: { suites }. */
+export interface EvalBaseline {
+  suite?: EvalSuite
+  metrics?: Record<string, number>
+  suites?: Record<string, Record<string, number>>
+}
+
+/** Body for POST /api/eval/baseline/pin */
+export interface EvalBaselinePin {
+  suite: EvalSuite
+  run_id: string
+}

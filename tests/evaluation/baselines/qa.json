@@ -1,0 +1,10 @@
+{
+  "suite": "qa",
+  "metrics": {
+    "citation_coverage": 0.9857142857142858,
+    "groundedness": 0.9938714285714286,
+    "answer_correctness": 1.0,
+    "unknown_answer_hallucination_rate": 0.0,
+    "case_count": 7
+  }
+}
