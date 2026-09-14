@@ -45,10 +45,24 @@ Question -> Query Router ┬ FACT_LOOKUP          0 LLM（唯一主语+唯一谓
    给出一个看起来确定的答案。
 2. **直查不改写。** 0-LLM 的答案就是已存 Claim 的原文（`content` 或
    `subject predicate object`），不做润色。润色就是生成，而生成正是我们要避免的那一步。
-3. **歧义拒答。** 同一 `(subject, predicate)` 存在**多条当前 Claim** 时返回
-   `NO_SUFFICIENT_EVIDENCE`，而不是挑一条。冲突是知识状态，不是可以四舍五入的噪声。
-4. **缺失证据才回退。** 只有 `no_current_claim` / 无 object 这类「答案可能以散文形式
-   存在于文档里」的情形才回退到检索+生成路径；歧义不回退（否则等于让模型替我们猜）。
+3. **拒答优于猜测。** FACT_LOOKUP 命中后，只有以下情形返回 `NO_SUFFICIENT_EVIDENCE`：
+
+   | reason | 含义 | 端点行为 |
+   |---|---|---|
+   | `ambiguous_multiple_current_claims` | 同一 `(subject, predicate)` 有多条当前 Claim | **拒答** |
+   | `no_current_claim` | 只有 superseded 记录，没有当前值 | **拒答** |
+   | `no_object_value` | 有当前 Claim 但没有 object | 回退检索+生成 |
+
+   冲突与过时都是**知识状态**，不是可以四舍五入的噪声；而无 object 的当前 Claim，
+   其答案可能以散文形式存在于文档里，才值得回退。
+4. **「该谓词有直查路径」≠「有当前值」。** `direct_claim_available` 判定的是
+   「存在非 rejected/archived 的 Claim 行」（含 superseded），而不是「存在当前 Claim」。
+   这是刻意的：若按后者判定，superseded-only 会被直接路由到 EVIDENCE_SYNTHESIS 回退给模型——
+   而检索会**保留**「无当前覆盖的 superseded claim」，模型就可能把**过时值当成现值**回答。
+   先承认「这里有结构化知识，但它不是当前的」，才谈得上诚实拒答。
+5. **拒答文案必须满足统一契约。** 拒答时 `citations` 必须为空，且文案必须包含
+   `app/evaluation/qa_eval.py::REFUSAL_MARKERS` 中的标记；否则评测会把它计为
+   unknown-answer hallucination。
 
 `NO_SUFFICIENT_EVIDENCE` 是一等结果：拒答时 `citations` 必须为空、答案必须带显式拒答标记，
 并且**不记录任何 model step**（`step_count = 0`），这样 §37 的 LLM 调用统计才是诚实的。
@@ -87,6 +101,10 @@ Question -> Query Router ┬ FACT_LOOKUP          0 LLM（唯一主语+唯一谓
   - STRUCTURED_REASONING 与 RESEARCH 目前仍走同一条检索+生成路径，尚未有各自的专用流程。
   - 谓语候选唯一性依赖 hint 匹配；需要用真实问题集扩充 hint 词表。
   - 多跳问题的图式查询（Claim Evolution / Graph）尚未落地。
+  - **「拒答」目前有两个判定**：`domain/citation_validation.py::_is_refusal`（宽松：
+    无 citations 且长度 <80 也算拒答）与 `evaluation/qa_eval.py::is_refusal`（严格：
+    必须带显式标记）。二者语义不同且各有用途，但应当收敛为**同一定义**，否则
+    `/api/qa/validate` 与评测会对同一条回答给出不同结论。
 
 ## References
 

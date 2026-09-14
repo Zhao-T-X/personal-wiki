@@ -646,10 +646,24 @@ def context_metrics(days:int=14):
 
 _NO_EVIDENCE_REPLY = ('知识库中没有找到与该问题匹配的证据。请先导入相关文档并建立索引，'
                       '或换用 Agent 问答让 Agent 尝试检索。')
-# §23: the wiki holds several competing current claims for one (subject, predicate),
-# so there is no single confident answer — refuse instead of picking one of them.
-_NO_CONFIDENT_ANSWER = '知识库中没有足够证据确定唯一答案（存在多条冲突记录），因此不作答。'
-_AMBIGUOUS_REASON = 'ambiguous_multiple_current_claims'
+# §23: a FACT_LOOKUP that cannot be answered *certainly* must refuse, not guess.
+#   ambiguous -> several current claims compete, so there is no single answer;
+#   stale     -> the only claims are superseded, so the wiki's structured knowledge
+#                on this exact (subject, predicate) is not current. Falling through
+#                to retrieval would hand the model an outdated claim (retrieval keeps
+#                a superseded claim that nothing current covers) and invite it to
+#                present that as today's answer — the exact failure §23 exists to
+#                prevent.
+# ``no_object_value`` is deliberately absent: that claim *is* current and simply has
+# no object, so the answer may still exist as prose in a document — it falls through.
+_DIRECT_REFUSALS = {
+    'ambiguous_multiple_current_claims':
+        '知识库中没有足够证据确定唯一答案（存在多条冲突记录），因此不作答。',
+    # The wording must contain a refusal marker (see app/evaluation/qa_eval.py):
+    # a refusal the evaluator does not recognise would be scored as a hallucination.
+    'no_current_claim':
+        '知识库中没有当前有效值：关于该问题的记录已被取代或过时，因此不作答。',
+}
 
 
 @app.post('/api/ask')
@@ -658,8 +672,9 @@ def ask(req:AskRequest):
 
     Route first (task §19/§20): the Query Router decides whether this question can
     be answered from stored knowledge at all. A simple fact lookup is answered from
-    its Claim with **0 LLM calls**; an ambiguous one is refused rather than guessed
-    (§23). Everything else keeps the retrieval + generation path below.
+    its Claim with **0 LLM calls**; one that cannot be answered *certainly* (ambiguous
+    or superseded-only) is refused rather than guessed (§23). Everything else keeps
+    the retrieval + generation path below.
 
     Minimum sufficient evidence: dedup the retrieved chunks, escalate each hit only
     as far as its own signals justify (L1 quote by default), add summary-first
@@ -677,8 +692,8 @@ def ask(req:AskRequest):
 
     _signals, route_plan = plan_question(req.question)
     direct = try_direct_answer(req.question) if route_plan.route == FACT_LOOKUP else None
-    if direct is not None and (direct.status == ANSWERED or direct.reason == _AMBIGUOUS_REASON):
-        reply = direct.answer if direct.status == ANSWERED else _NO_CONFIDENT_ANSWER
+    if direct is not None and (direct.status == ANSWERED or direct.reason in _DIRECT_REFUSALS):
+        reply = direct.answer if direct.status == ANSWERED else _DIRECT_REFUSALS[direct.reason]
         with record_run('ask', agent_role='ask') as run:
             # No step is recorded: a direct lookup is not a model call, so the
             # run's step_count stays 0 and the LLM-call accounting stays honest.

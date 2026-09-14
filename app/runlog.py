@@ -152,7 +152,9 @@ class Run:
         try:
             conn = _connect()
             row = conn.execute(
-                "SELECT SUM(CASE WHEN status='success' THEN 1 ELSE 0 END) c,"
+                # COALESCE matters: a run with no steps (e.g. a 0-LLM direct
+                # lookup) makes SUM() return NULL, and step_count is NOT NULL.
+                "SELECT COALESCE(SUM(CASE WHEN status='success' THEN 1 ELSE 0 END),0) c,"
                 " COALESCE(SUM(prompt_tokens),0) p,"
                 " COALESCE(SUM(completion_tokens),0) o"
                 " FROM llm_run_steps WHERE run_id=?",
