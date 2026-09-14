@@ -23,11 +23,8 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from ..ontology import (canonical_claim_type, canonical_modality, canonical_polarity,
-                        normalize_name, normalize_predicate, relation_spec,
-                        relation_types_allowed)
-
-# ``canonical_entity_type`` is invoked inside ``relation_types_allowed``; the
-# compiler only needs the boolean result.
+                        normalize_name, normalize_predicate, relation_endpoint_allowed,
+                        relation_spec)
 from .predicate_resolver import PredicateResolution, resolve_predicate
 from .quality_gate import (REJECT, REVIEW, QualityAssessment, QualitySignals,
                            evaluate as evaluate_quality)
@@ -148,17 +145,20 @@ class KnowledgeCompiler:
                                  reasons=(str(exc),), quality=assessment)
 
         # Domain/range: a registered predicate can still be used illegally
-        # (e.g. an Organization value where a Person is required).
+        # (e.g. an Organization value where a Person is required). Each declared
+        # endpoint is checked on its own — a side we know nothing about is
+        # unconstrained, not a violation.
         spec = relation_spec(resolution.predicate)
         if spec and (draft.subject_types or draft.object_types):
             try:
-                allowed = relation_types_allowed(
-                    draft.subject_types or ['*'], resolution.predicate,
-                    draft.object_types or ['*'])
+                source_ok = relation_endpoint_allowed(
+                    draft.subject_types, resolution.predicate)
+                target_ok = relation_endpoint_allowed(
+                    draft.object_types, resolution.predicate, target=True)
             except ValueError as exc:
                 return CompileResult(status=REJECTED, claim=None, resolution=resolution,
                                      reasons=(str(exc),), quality=assessment)
-            if not allowed:
+            if not (source_ok and target_ok):
                 return CompileResult(
                     status=REJECTED, claim=None, resolution=resolution,
                     reasons=('domain_range_violation',), quality=assessment)

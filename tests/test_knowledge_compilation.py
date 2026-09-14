@@ -171,6 +171,30 @@ def test_compiler_enforces_domain_and_range():
     assert 'domain_range_violation' in illegal.reasons
 
 
+def test_unknown_endpoint_type_is_unconstrained_not_a_violation():
+    """A side whose entity type was never declared imposes no constraint.
+
+    Regression guard: the compiler used to pass ``['*']`` as the *actual* type
+    of the unknown side, and ``canonical_entity_type('*')`` rejects ``'*'`` — so
+    every relation with one undeclared endpoint was wrongly rejected.
+    """
+    from app.domain.compiler import COMPILED, REJECTED, ClaimDraft, KnowledgeCompiler
+
+    compiler = KnowledgeCompiler()
+    unknown_object = compiler.compile_claim(ClaimDraft(
+        subject='GPT-4', predicate_candidate='trained_on', object='MMLU',
+        subject_types=['Model'], object_types=[]))
+    assert unknown_object.status == COMPILED
+
+    # The declared side is still validated: a Model-only predicate cannot be
+    # applied to a Technology subject merely because the object is unknown.
+    wrong_subject = compiler.compile_claim(ClaimDraft(
+        subject='Transformer', predicate_candidate='trained_on', object='MMLU',
+        subject_types=['Technology'], object_types=[]))
+    assert wrong_subject.status == REJECTED
+    assert 'domain_range_violation' in wrong_subject.reasons
+
+
 # --- Extraction path obeys the pipeline --------------------------------------
 
 def test_extraction_carries_temporal_signal_instead_of_a_new_predicate(tmp_path):

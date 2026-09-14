@@ -258,6 +258,24 @@ def relation_types_allowed(source_types: list[str], predicate: str, target_types
     return _types_allowed(src, spec['source_types']) and _types_allowed(tgt, spec['target_types'])
 
 
+def relation_endpoint_allowed(types: list[str], predicate: str, *, target: bool = False) -> bool:
+    """Whether one *declared* endpoint's types are legal for ``predicate``.
+
+    The per-endpoint form of :func:`relation_types_allowed`, for callers that may
+    only know one side: an empty ``types`` list means the endpoint's type is
+    *unknown*, which imposes no constraint. Absence of a declaration is not a
+    violation — never pass ``['*']`` as a *declared* type, that is a spec
+    wildcard, not an entity type (ADR-011).
+    """
+    spec = relation_spec(predicate)
+    if not spec:
+        return False
+    if not types:
+        return True
+    allowed = spec['target_types'] if target else spec['source_types']
+    return _types_allowed({canonical_entity_type(t) for t in types}, allowed)
+
+
 def inverse_label(predicate: str) -> str | None:
     spec = relation_spec(predicate)
     return spec['inverse_label'] if spec else None
