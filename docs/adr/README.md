@@ -37,6 +37,7 @@ ADR 是**追加式、不可改写**的：决策变了不修改旧 ADR，而是�
 | [ADR-008](./ADR-008-CONTEXT-RUNTIME-BOUNDARY.md) | Context Runtime 边界 | CURRENT |
 | [ADR-009](./ADR-009-KNOWLEDGE-OPERATIONS.md) | 知识变更统一经 Operation | TARGET |
 | [ADR-010](./ADR-010-DETERMINISTIC-FIRST.md) | 确定性优先于 LLM | CURRENT |
+| [ADR-011](./ADR-011-KNOWLEDGE-COMPILATION-PIPELINE.md) | 知识编译管线与封闭本体 | PARTIAL |
 
 ---
 

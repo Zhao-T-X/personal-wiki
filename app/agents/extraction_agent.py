@@ -50,6 +50,25 @@ ClaimType = Literal[
     "hypothetical",
 ]
 Polarity = Literal["positive", "negative"]
+TemporalSignal = Literal[
+    "new",
+    "current",
+    "former",
+    "previous",
+    "prior",
+    "existing",
+    "next",
+    "future",
+    "upcoming",
+    "incoming",
+    "outgoing",
+    "successor",
+    "predecessor",
+    "past",
+    "interim",
+    "acting",
+    "designated",
+]
 Modality = Literal[
     "asserted",
     "possible",
@@ -137,6 +156,9 @@ class Claim(_Strict):
     subject: str = Field(min_length=1)
     predicate: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
     object: Optional[str] = None
+    # Temporal/evolution meaning ("new", "former", "current") is carried here,
+    # never inside the predicate name (ONTOLOGY MUTATION POLICY; ADR-011).
+    temporal_signal: Optional[TemporalSignal] = None
     claim_type: ClaimType
     polarity: Polarity
     modality: Modality

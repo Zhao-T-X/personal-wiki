@@ -144,10 +144,15 @@ onMounted(loadHistory)
           现有知识可能已包含不同事实。继续应用将创建一条 contradicts 关系；原 Claim 不会被删除，你之后可在 Claim Relations 中改为 supersedes。
         </div>
 
+        <div v-if="plan.blocked" class="notice red" style="margin-top:8px">
+          谓词未能映射到受控词表，系统不会创建新谓词，也不会写入这条知识。请改用已注册的谓词来表达该关系。
+        </div>
+
         <div class="chips">
           <span class="chip"><i>subject</i>{{ plan.intent?.subject }}</span>
-          <span class="chip"><i>predicate</i>{{ plan.intent?.predicate }}</span>
+          <span class="chip"><i>predicate</i>{{ plan.intent?.predicate || plan.intent?.predicate_candidate || '—' }}</span>
           <span class="chip"><i>object</i>{{ plan.intent?.object || '—' }}</span>
+          <span v-if="plan.intent?.temporal_signal" class="chip"><i>temporal</i>{{ plan.intent.temporal_signal }}</span>
         </div>
 
         <div v-if="planQuality" class="quality">
@@ -169,8 +174,8 @@ onMounted(loadHistory)
         </div>
 
         <div class="row" style="margin-top:12px">
-          <button class="btn primary" :disabled="applying" @click="confirm">
-            {{ applying ? '执行中…' : '确认并应用' }}
+          <button class="btn primary" :disabled="applying || plan.blocked" @click="confirm">
+            {{ plan.blocked ? '不可应用（谓词未注册）' : (applying ? '执行中…' : '确认并应用') }}
           </button>
           <button class="btn ghost" @click="plan = null">取消</button>
         </div>

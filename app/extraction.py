@@ -4,8 +4,9 @@ import json
 from pathlib import Path
 from typing import Any
 from jsonschema import Draft202012Validator
+from .domain.predicate_resolver import TEMPORAL_SIGNALS, resolve_predicate
 from .ontology import (
-    ENTITY_TYPES, CLAIM_PREDICATES, match_claim_predicates,
+    ENTITY_TYPES, match_claim_predicates,
     EVENT_TYPES, EVENT_STATUSES, QUESTION_TYPES, QUESTION_STATUSES,
     IDEA_STATUSES, normalize_name, normalize_predicate, canonical_entity_type,
     canonical_claim_type, canonical_polarity, canonical_modality,
@@ -79,14 +80,24 @@ def normalize_extraction(data: dict[str, Any]) -> dict[str, Any]:
             raise ValueError('Entity requires name and at least one type')
     for c in out['claims']:
         c['subject'] = ' '.join(c['subject'].split())
-        c['predicate'] = normalize_predicate(c['predicate'])
-        if c['predicate'] not in CLAIM_PREDICATES:
+        candidate = c.get('predicate')
+        # Knowledge Compilation Pipeline (ADR-011): the LLM supplies a candidate,
+        # the resolver decides whether it can become a registered predicate.
+        resolution = resolve_predicate(
+            candidate,
+            text=' '.join(x for x in (c.get('content'), c.get('evidence_quote')) if x),
+            limit=4)
+        if not resolution.resolved:
             # Registry subset (spec §5): the repair LLM sees the 2-5 closest
-            # registered predicates, never the full registry.
-            subset = match_claim_predicates(c['predicate'], limit=4)
+            # registered predicates, never the full registry, and never gets to
+            # keep an invented predicate.
+            subset = list(resolution.candidates) or match_claim_predicates(candidate, limit=4)
             hint = (f' Closest registered predicates: {", ".join(subset)} - use one of these.'
                     if subset else ' Use a predicate from the schema enum.')
-            raise ValueError(f'Unsupported claim predicate: {c["predicate"]}.{hint}')
+            raise ValueError(f'Unsupported claim predicate: {normalize_predicate(candidate)}.{hint}')
+        c['predicate'] = resolution.predicate
+        signal = c.get('temporal_signal') or resolution.temporal_signal
+        c['temporal_signal'] = signal if signal in TEMPORAL_SIGNALS else None
         c['claim_type'] = canonical_claim_type(c.get('claim_type'))
         c['polarity'] = canonical_polarity(c.get('polarity'))
         c['modality'] = canonical_modality(c.get('modality'))

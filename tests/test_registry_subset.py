@@ -59,18 +59,40 @@ def test_validation_error_carries_the_candidate_subset(tmp_path):
     bad = {
         'entities': [{'name': 'RAG', 'types': ['Concept']},
                      {'name': 'Accuracy', 'types': ['Concept']}],
-        'claims': [{'subject': 'RAG', 'predicate': 'optimises', 'object': 'Accuracy',
-                    'content': 'RAG optimises Accuracy.', 'evidence_quote': 'RAG optimises Accuracy.'}],
+        'claims': [{'subject': 'RAG', 'predicate': 'frobnicates', 'object': 'Accuracy',
+                    'content': '该方法提高了准确率。', 'evidence_quote': '该方法提高了准确率。',
+                    'confidence': 0.8, 'source_chunk': 'chunk-1'}],
         'events': [], 'ideas': [], 'questions': [],
     }
     try:
         normalize_extraction(bad)
-        assert False, 'unregistered predicate must be rejected'
+        assert False, 'an unmappable predicate must be rejected'
     except ValueError as exc:
         message = str(exc)
-        assert 'Unsupported claim predicate: optimises' in message
+        assert 'Unsupported claim predicate: frobnicates' in message
         assert 'Closest registered predicates' in message
         assert 'improves' in message                  # the repair LLM sees candidates
+
+
+def test_registry_alias_is_canonicalized_not_invented(tmp_path):
+    """ADR-011: the LLM proposes a candidate; the resolver canonizes it.
+
+    ``optimises`` is a registry alias of ``improves``, so it is compiled rather
+    than rejected - and it is never persisted as a brand-new predicate.
+    """
+    _reload(tmp_path)
+    from app.extraction import normalize_extraction
+
+    draft = {
+        'entities': [{'name': 'RAG', 'types': ['Concept']},
+                     {'name': 'Accuracy', 'types': ['Concept']}],
+        'claims': [{'subject': 'RAG', 'predicate': 'optimises', 'object': 'Accuracy',
+                    'content': 'RAG optimises Accuracy.', 'evidence_quote': 'RAG optimises Accuracy.',
+                    'confidence': 0.9, 'source_chunk': 'chunk-1'}],
+        'events': [], 'ideas': [], 'questions': [],
+    }
+    out = normalize_extraction(draft)
+    assert out['claims'][0]['predicate'] == 'improves'
 
 
 def test_registered_predicate_still_passes_normally(tmp_path):

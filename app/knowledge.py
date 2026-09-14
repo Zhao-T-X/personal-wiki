@@ -96,8 +96,13 @@ def persist_extraction(conn, *, document_id: str, extraction: dict[str, Any]) ->
         object_text = None if object_id else c.get('object')
         start, end, quote, located = _locate_quote(src['content'], c.get('evidence_quote'), src['start_offset'], src['end_offset'])
         if not located: counts['imprecise_quotes'] += 1
+        # Temporal/evolution meaning travels in the claim context, not in the
+        # predicate: no schema migration, and the predicate stays canonical.
+        context = dict(c.get('context') or {})
+        if c.get('temporal_signal'):
+            context.setdefault('temporal_signal', c['temporal_signal'])
         claims.insert(subject_id=subject_id, predicate=c['predicate'], object_id=object_id, object_text=object_text,
-                      content=c.get('content'), context=c.get('context', {}), claim_type=c['claim_type'],
+                      content=c.get('content'), context=context, claim_type=c['claim_type'],
                       polarity=c['polarity'], modality=c['modality'], confidence=c['confidence'],
                       status='candidate', created_by='llm', source_document_id=document_id,
                       source_chunk_id=c['source_chunk'], source_start_offset=start,

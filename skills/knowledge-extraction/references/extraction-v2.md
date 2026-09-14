@@ -71,6 +71,7 @@ Each Claim contains:
 subject
 predicate
 object?
+temporal_signal?
 claim_type
 polarity
 modality
@@ -82,6 +83,35 @@ evidence_quote
 ```
 
 `predicate` must be a registered Claim Predicate (see `claim-predicates.md`).
+It is a *candidate*: a deterministic compiler resolves it against the closed
+registry and rejects anything unregistered. Never invent a predicate.
+
+`temporal_signal` carries temporal/evolution meaning separately from the
+predicate. Registered values:
+
+```text
+new
+current
+former
+previous
+prior
+existing
+next
+future
+upcoming
+incoming
+outgoing
+successor
+predecessor
+past
+interim
+acting
+designated
+```
+
+Temporal words MUST NOT be folded into the predicate name. Encode
+"the new CEO of X is Y" as `predicate=has_ceo, temporal_signal=new` — one
+predicate, not a family of `new_ceo` / `current_ceo` / `former_ceo` terms.
 
 Registered `claim_type` values (closed vocabulary; the LLM may not invent types):
 

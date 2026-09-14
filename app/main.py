@@ -268,7 +268,9 @@ async def correction_plan(payload: CorrectionRequest):
     if intent is None:
         raise HTTPException(503, '模型不可用或未配置，无法解析纠正语句')
     plan = build_plan(payload.text, intent)
-    if plan.relationship == 'new':
+    # An ontology-blocked plan has no predicate to check against; skip the model
+    # pass and return the honest "cannot map to a registered predicate" plan.
+    if plan.relationship == 'new' and not plan.blocked:
         plan = await verify_new_claim(plan)
     return plan.to_dict()
 

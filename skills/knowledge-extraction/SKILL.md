@@ -11,7 +11,9 @@ Core rules:
 - Extract only information explicitly supported by the source.
 - Prefer precision over recall; empty results are valid.
 - Entity, Claim, Event, Idea, and Question are distinct ontology objects.
-- Use only registered entity types and Claim predicates.
+- Use only registered entity types and Claim predicates (closed vocabulary: select, never create).
+- Temporal/evolution words (new, current, former, next) go in `temporal_signal`, never in `predicate`.
+- If no registered predicate fits, omit the claim; never invent one.
 - Do not output Relations; Relations are derived deterministically from Claims.
 - Preserve modality, polarity, conditions, scope, time, and perspective.
 - Every Claim, Event, Idea, and Question needs exact verbatim evidence from its source chunk.

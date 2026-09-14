@@ -21,7 +21,8 @@ from ..chunking import chunk_text
 from ..claim_relations import compare_claim
 from ..db import transaction
 from ..domain.operations import OperationError, OperationRequest, run
-from ..ontology import normalize_predicate
+from ..domain.predicate_resolver import TEMPORAL_SIGNALS, resolve_predicate
+from ..ontology import match_claim_predicates
 from ..repositories import ClaimRepository, DocumentRepository, EntityRepository
 
 # Most significant relationship first (matches app/claim_relations._PRIORITY).
@@ -32,10 +33,13 @@ _PRIORITY = {'duplicate': 0, 'supersedes': 1, 'contradicts': 2, 'coexists': 3}
 class CorrectionIntent:
     text: str
     subject: str
-    predicate: str
+    predicate: str                       # canonical (empty when unresolved)
     object: str = ''
     polarity: str = 'positive'
     confidence: float | None = None
+    predicate_candidate: str = ''        # what the LLM proposed, verbatim
+    temporal_signal: str | None = None
+    predicate_resolution: dict | None = None
 
 
 @dataclass
@@ -43,12 +47,14 @@ class CorrectionPlan:
     text: str
     intent: CorrectionIntent
     subject_entity_id: str | None
-    relationship: str          # duplicate | contradicts | coexists | supersedes | new
+    relationship: str          # duplicate | contradicts | coexists | supersedes | new | unresolved
     related_claim_id: str | None
     apply_supersede: bool
     candidates: list[dict] = field(default_factory=list)
     summary: str = ''
     verification: dict | None = None
+    predicate_resolution: dict | None = None
+    blocked: bool = False      # ontology gate refused to compile a predicate
 
     def to_dict(self) -> dict:
         return {
@@ -61,17 +67,36 @@ class CorrectionPlan:
             'candidates': self.candidates,
             'summary': self.summary,
             'verification': self.verification,
+            'predicate_resolution': self.predicate_resolution,
+            'blocked': self.blocked,
         }
 
 
-_INTENT_SYSTEM = (
-    'You extract a single factual statement from a user correction sentence and reply with '
-    'JSON only: {"subject": "...", "predicate": "snake_case", "object": "...", '
-    '"polarity": "positive|negative", "confidence": 0.0-1.0}. '
-    'subject is the entity the sentence is about; predicate is a short relation in snake_case; '
-    'object is the value the subject is being related to. '
-    'Never invent facts that are not in the sentence.'
-)
+def _intent_system(text: str) -> str:
+    """Build the intent prompt with a task-relevant vocabulary subset.
+
+    The full predicate registry never enters the prompt: the runtime injects the
+    few registered predicates the sentence plausibly maps to, turning the task
+    from "define a predicate" into "select one of these". The model is also given
+    an explicit failure exit, because a model with no legal way to say "no match"
+    will invent one (ONTOLOGY MUTATION POLICY; ADR-011).
+    """
+    subset = match_claim_predicates(text, limit=8)
+    vocabulary = ', '.join(subset) if subset else '(no registered predicate matched this sentence)'
+    return (
+        'You extract a single factual statement from a user correction sentence and reply with '
+        'JSON only: {"subject": "...", "predicate_candidate": "...", "object": "...", '
+        '"polarity": "positive|negative", "temporal_signal": null, "confidence": 0.0-1.0}. '
+        'The ontology is a CONTROLLED vocabulary. predicate_candidate MUST be selected from: '
+        f'{vocabulary}. '
+        'Do NOT invent or combine predicates; do NOT create a predicate from adjectives, tense, '
+        'time or status. Words describing time or evolution (new, current, former, previous, next, '
+        'successor, ...) are NOT predicates - put them in temporal_signal instead. '
+        'If no listed value expresses the relation, set predicate_candidate to null; an honest '
+        'failure is required and inventing a predicate is not allowed. '
+        'subject is the entity the sentence is about; object is the value the subject is being '
+        'related to. Never invent facts that are not in the sentence.'
+    )
 
 
 _VERIFY_SYSTEM = (
@@ -100,16 +125,25 @@ async def parse_intent(text: str) -> CorrectionIntent | None:
             response = client.chat.completions.create(
                 model=runtime()['openai_model'], temperature=0.0,
                 response_format={'type': 'json_object'},
-                messages=[{'role': 'system', 'content': _INTENT_SYSTEM},
+                messages=[{'role': 'system', 'content': _intent_system(text)},
                           {'role': 'user', 'content': text}])
             data = json.loads(response.choices[0].message.content or '{}')
         except Exception:
             return None
         subject = str(data.get('subject') or '').strip()
-        predicate = normalize_predicate(str(data.get('predicate') or '').strip())
+        candidate = data.get('predicate_candidate')
+        if candidate is None:
+            candidate = data.get('predicate')      # tolerate the older prompt shape
+        candidate = str(candidate or '').strip()
         obj = str(data.get('object') or '').strip()
-        if not subject or not predicate:
+        if not subject:
             return None
+        # The LLM proposed a candidate; the compiler decides. An unresolved
+        # candidate is a legal outcome, not a reason to drop the whole intent.
+        resolution = resolve_predicate(candidate, text=text, limit=8)
+        llm_signal = str(data.get('temporal_signal') or '').strip() or None
+        signal = resolution.temporal_signal or (
+            llm_signal if llm_signal in TEMPORAL_SIGNALS else None)
         polarity = str(data.get('polarity') or 'positive').strip().lower()
         if polarity not in ('positive', 'negative'):
             polarity = 'positive'
@@ -118,8 +152,11 @@ async def parse_intent(text: str) -> CorrectionIntent | None:
             confidence = float(raw) if raw is not None else None
         except (TypeError, ValueError):
             confidence = None
-        return CorrectionIntent(text=text, subject=subject, predicate=predicate,
-                                object=obj, polarity=polarity, confidence=confidence)
+        return CorrectionIntent(text=text, subject=subject,
+                                predicate=resolution.predicate or '',
+                                object=obj, polarity=polarity, confidence=confidence,
+                                predicate_candidate=candidate, temporal_signal=signal,
+                                predicate_resolution=resolution.to_dict())
 
     return await asyncio.to_thread(_call)
 
@@ -140,6 +177,22 @@ def build_plan(text: str, intent: CorrectionIntent) -> CorrectionPlan:
     """
     subject_row = EntityRepository().by_name(intent.subject)
     subject_id = subject_row['id'] if subject_row else None
+
+    # Ontology gate: without a compiled predicate there is no knowledge to plan.
+    # Refusing here is the point — creating a claim with an invented predicate
+    # would contaminate the ontology, which is exactly what must not happen.
+    if not intent.predicate:
+        candidate = intent.predicate_candidate or intent.text
+        suggestions = (intent.predicate_resolution or {}).get('candidates') or []
+        hint = (f' 可考虑：{", ".join(suggestions)}。' if suggestions else '')
+        return CorrectionPlan(
+            text=text, intent=intent, subject_entity_id=subject_id,
+            relationship='unresolved', related_claim_id=None, apply_supersede=False,
+            candidates=[], predicate_resolution=intent.predicate_resolution,
+            blocked=True,
+            summary=(f'无法把「{candidate}」映射到受控谓词表（候选：{intent.predicate_candidate or "无"}）。'
+                     '为避免污染本体，系统不会创建新谓词，也不会写入这条知识。'
+                     f'{hint}请改用已注册的谓词来表达。'))
 
     candidates: list[dict] = []
     if subject_id:
@@ -165,7 +218,8 @@ def build_plan(text: str, intent: CorrectionIntent) -> CorrectionPlan:
     return CorrectionPlan(text=text, intent=intent, subject_entity_id=subject_id,
                           relationship=relationship, related_claim_id=related_id,
                           apply_supersede=relationship == 'supersedes',
-                          candidates=candidates, summary=summary)
+                          candidates=candidates, summary=summary,
+                          predicate_resolution=intent.predicate_resolution)
 
 
 async def verify_new_claim(plan: CorrectionPlan) -> CorrectionPlan:
@@ -309,6 +363,15 @@ def apply_correction(plan: CorrectionPlan, *, relationship: str | None = None,
     carries real provenance (document / chunk / offsets / quote).
     """
     intent = plan.intent
+    if plan.blocked:
+        raise OperationError('谓词未能映射到受控词表，纠正未执行：本体封闭，不允许创建新谓词。')
+    # Defence in depth: re-check even on the /apply path (manual entry included),
+    # so no route can persist an unregistered predicate.
+    resolution = resolve_predicate(intent.predicate)
+    if not resolution.resolved or not resolution.predicate:
+        raise OperationError(
+            f'"{intent.predicate}" 不是已注册的谓词：本体封闭，不允许创建或写入新谓词。')
+    predicate = resolution.predicate
     relationship = plan.relationship if relationship is None else relationship
     related_claim_id = plan.related_claim_id if related_claim_id is None else related_claim_id
     if apply_supersede is None:
@@ -324,7 +387,7 @@ def apply_correction(plan: CorrectionPlan, *, relationship: str | None = None,
             raise OperationError('Correction text produced no chunk')
         chunk = chunks[0]
         payload = {
-            'subject': intent.subject, 'predicate': intent.predicate,
+            'subject': intent.subject, 'predicate': predicate,
             'object': intent.object, 'content': intent.text,
             'polarity': intent.polarity, 'confidence': intent.confidence,
             'source_document_id': document_id, 'source_chunk_id': chunk['id'],
