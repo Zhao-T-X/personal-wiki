@@ -1,0 +1,110 @@
+{
+  "version": "1.0",
+  "description": "Offline QA golden set (task §16/§18). Each case records the answer the system already produced, its citations (same shape as /api/ask) and the cited chunk contents. The inline [doc:.. chunk:..] markers in the answer must reference chunk ids that exist in citations, otherwise coverage is judged incomplete. expected_refusal=true cases must be genuine refusals (see app/evaluation/qa_eval.py for the NO_SUFFICIENT_EVIDENCE contract).",
+  "cases": [
+    {
+      "id": "grounded-single",
+      "note": "One cited chunk, inline-marked in the answer: full coverage and full groundedness.",
+      "question": "What predicate does the Knowledge Compiler use?",
+      "answer": "The Knowledge Compiler uses the predicate registry to map claims to a closed vocabulary. [doc:doc-kc chunk:kc-1]",
+      "citations": [
+        {"document_id": "doc-kc", "chunk_id": "kc-1", "title": "Knowledge Compiler", "start_offset": 0, "end_offset": 62}
+      ],
+      "chunks": {
+        "kc-1": "The Knowledge Compiler uses the predicate registry to map claims to a closed vocabulary."
+      },
+      "expected_answer": "uses the predicate registry",
+      "expected_refusal": false
+    },
+    {
+      "id": "grounded-multi",
+      "note": "Two cited chunks, both inline-marked: coverage stays complete.",
+      "question": "How is evidence assembled for the agent?",
+      "answer": "Retrieval matches chunks by tokens and then reranks them by signals. [doc:doc-retrieval chunk:ret-1] The compiler then fits the evidence into the agent budget. [doc:doc-retrieval chunk:ret-2]",
+      "citations": [
+        {"document_id": "doc-retrieval", "chunk_id": "ret-1", "title": "Retrieval", "start_offset": 0, "end_offset": 58},
+        {"document_id": "doc-retrieval", "chunk_id": "ret-2", "title": "Context Compiler", "start_offset": 0, "end_offset": 60}
+      ],
+      "chunks": {
+        "ret-1": "Retrieval matches chunks by tokens and then reranks them by signals.",
+        "ret-2": "The compiler then fits the evidence into the agent budget."
+      },
+      "expected_answer": "fits the evidence into the agent budget",
+      "expected_refusal": false
+    },
+    {
+      "id": "grounded-chinese",
+      "note": "Chinese question with a full inline citation.",
+      "question": "知识编译器在什么情况下会把断言标记为 unresolved？",
+      "answer": "当候选谓词无法映射到注册表时，编译器会把该断言标记为 unresolved，而不会凭空编造关系。[doc:doc-kc chunk:kc-3]",
+      "citations": [
+        {"document_id": "doc-kc", "chunk_id": "kc-3", "title": "谓词解析", "start_offset": 0, "end_offset": 70}
+      ],
+      "chunks": {
+        "kc-3": "当候选谓词无法映射到注册表时，编译器会把该断言标记为 unresolved，而不会凭空编造关系。"
+      },
+      "expected_answer": "标记为 unresolved",
+      "expected_refusal": false
+    },
+    {
+      "id": "incomplete-coverage",
+      "note": "Five chunks are cited but the answer only inline-marks four: the fifth is uncited evidence, so coverage is deliberately incomplete (0.9). The harness must detect this rather than pass it.",
+      "question": "Summarise how claims are compiled and stored.",
+      "answer": "The Knowledge Compiler uses the predicate registry. [doc:doc-kc chunk:kc-1] Claims are canonicalised through aliases. [doc:doc-kc chunk:kc-2] Unresolved candidates are dropped rather than invented. [doc:doc-kc chunk:kc-3] Every compiled claim keeps its source quote as evidence. [doc:doc-kc chunk:kc-4]",
+      "citations": [
+        {"document_id": "doc-kc", "chunk_id": "kc-1", "title": "Knowledge Compiler", "start_offset": 0, "end_offset": 40},
+        {"document_id": "doc-kc", "chunk_id": "kc-2", "title": "Alias Resolution", "start_offset": 40, "end_offset": 80},
+        {"document_id": "doc-kc", "chunk_id": "kc-3", "title": "Unresolved Candidates", "start_offset": 80, "end_offset": 120},
+        {"document_id": "doc-kc", "chunk_id": "kc-4", "title": "Evidence", "start_offset": 120, "end_offset": 160},
+        {"document_id": "doc-kc", "chunk_id": "kc-5", "title": "Supersession", "start_offset": 160, "end_offset": 200}
+      ],
+      "chunks": {
+        "kc-1": "The Knowledge Compiler uses the predicate registry.",
+        "kc-2": "Claims are canonicalised through aliases.",
+        "kc-3": "Unresolved candidates are dropped rather than invented.",
+        "kc-4": "Every compiled claim keeps its source quote as evidence.",
+        "kc-5": "A superseded claim never has its text rewritten; only its lifecycle status changes."
+      },
+      "expected_answer": "canonicalised through aliases",
+      "expected_refusal": false
+    },
+    {
+      "id": "grounded-supersession",
+      "note": "A second perfect case; asserts the lifecycle rule with a full inline citation.",
+      "question": "What happens to a claim when it is superseded?",
+      "answer": "A superseded claim is never rewritten; only its lifecycle status changes. [doc:doc-claims chunk:claim-1]",
+      "citations": [
+        {"document_id": "doc-claims", "chunk_id": "claim-1", "title": "Claim Lifecycle", "start_offset": 0, "end_offset": 72}
+      ],
+      "chunks": {
+        "claim-1": "A superseded claim is never rewritten; only its lifecycle status changes."
+      },
+      "expected_answer": "only its lifecycle status changes",
+      "expected_refusal": false
+    },
+    {
+      "id": "refusal-no-evidence",
+      "note": "No evidence was retrieved: the answer must be an explicit NO_SUFFICIENT_EVIDENCE refusal with an empty citation list and no substantive conclusion.",
+      "question": "What is the CEO's home address?",
+      "answer": "知识库中没有找到与该问题匹配的证据。请先导入相关文档并建立索引，或换用 Agent 问答让 Agent 尝试检索。",
+      "citations": [],
+      "chunks": {},
+      "expected_answer": "",
+      "expected_refusal": true
+    },
+    {
+      "id": "grounded-chinese-two",
+      "note": "Chinese question, full inline citation; keeps the Chinese path covered twice.",
+      "question": "检索结果在进入上下文前会做哪些处理？",
+      "answer": "检索结果会先去重，再按信号逐级升级证据，最后压缩进上下文预算。[doc:doc-retrieval chunk:ret-3]",
+      "citations": [
+        {"document_id": "doc-retrieval", "chunk_id": "ret-3", "title": "证据升级", "start_offset": 0, "end_offset": 64}
+      ],
+      "chunks": {
+        "ret-3": "检索结果会先去重，再按信号逐级升级证据，最后压缩进上下文预算。"
+      },
+      "expected_answer": "按信号逐级升级证据",
+      "expected_refusal": false
+    }
+  ]
+}

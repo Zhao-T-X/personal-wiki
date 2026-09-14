@@ -1,0 +1,48 @@
+{
+  "version": "1.0",
+  "description": "Offline retrieval golden set (task §16/§18). Each case records a question and the retrieval result the system already produced; relevant_chunk_ids is hand-checked ground truth. The set is sized so the micro-averaged recall@10 clears 0.95 while a genuine total miss and a rank-6..10 hit still exist.",
+  "cases": [
+    {
+      "id": "top1-hit",
+      "note": "The single relevant chunk is retrieved first. Contributes a perfect recall and a small precision penalty.",
+      "question": "What is the capital of France?",
+      "relevant_chunk_ids": ["doc-geo-chunk-1"],
+      "retrieved_chunk_ids": ["doc-geo-chunk-1", "noise-1", "noise-2", "noise-3", "noise-4", "noise-5", "noise-6", "noise-7", "noise-8", "noise-9"]
+    },
+    {
+      "id": "multi-relevant",
+      "note": "Five relevant chunks, all inside the top 5.",
+      "question": "How does the database connection pool behave under load?",
+      "relevant_chunk_ids": ["doc-db-chunk-1", "doc-db-chunk-2", "doc-db-chunk-3", "doc-db-chunk-4", "doc-db-chunk-5"],
+      "retrieved_chunk_ids": ["doc-db-chunk-1", "doc-db-chunk-2", "doc-db-chunk-3", "doc-db-chunk-4", "doc-db-chunk-5", "noise-1", "noise-2", "noise-3", "noise-4", "noise-5"]
+    },
+    {
+      "id": "rank-7-hit",
+      "note": "First relevant chunk appears at rank 7: recall@5 is 0 but recall@10 is 1. This is what separates the two cut-offs.",
+      "question": "Why does query latency spike at tail percentiles?",
+      "relevant_chunk_ids": ["doc-latency-chunk-1", "doc-latency-chunk-2", "doc-latency-chunk-3", "doc-latency-chunk-4"],
+      "retrieved_chunk_ids": ["noise-1", "noise-2", "noise-3", "noise-4", "noise-5", "noise-6", "doc-latency-chunk-1", "doc-latency-chunk-2", "doc-latency-chunk-3", "doc-latency-chunk-4"]
+    },
+    {
+      "id": "total-miss",
+      "note": "The only relevant chunk is never retrieved: a genuine recall failure that must really exist.",
+      "question": "What did the 2019 internal audit conclude about procurement?",
+      "relevant_chunk_ids": ["doc-missing-chunk-1"],
+      "retrieved_chunk_ids": ["noise-1", "noise-2", "noise-3", "noise-4", "noise-5", "noise-6", "noise-7", "noise-8", "noise-9", "noise-10"]
+    },
+    {
+      "id": "chinese-question",
+      "note": "Chinese question; five relevant chunks all inside the top 5.",
+      "question": "知识编译器如何提高检索准确率？",
+      "relevant_chunk_ids": ["doc-kc-chunk-1", "doc-kc-chunk-2", "doc-kc-chunk-3", "doc-kc-chunk-4", "doc-kc-chunk-5"],
+      "retrieved_chunk_ids": ["doc-kc-chunk-1", "doc-kc-chunk-2", "doc-kc-chunk-3", "doc-kc-chunk-4", "doc-kc-chunk-5", "noise-1", "noise-2", "noise-3", "noise-4", "noise-5"]
+    },
+    {
+      "id": "many-relevant",
+      "note": "Ten relevant chunks retrieved in rank order: recall@5 saturates while recall@10 still has room to grow.",
+      "question": "Give the full list of supported claim predicates.",
+      "relevant_chunk_ids": ["doc-many-chunk-1", "doc-many-chunk-2", "doc-many-chunk-3", "doc-many-chunk-4", "doc-many-chunk-5", "doc-many-chunk-6", "doc-many-chunk-7", "doc-many-chunk-8", "doc-many-chunk-9", "doc-many-chunk-10"],
+      "retrieved_chunk_ids": ["doc-many-chunk-1", "doc-many-chunk-2", "doc-many-chunk-3", "doc-many-chunk-4", "doc-many-chunk-5", "doc-many-chunk-6", "doc-many-chunk-7", "doc-many-chunk-8", "doc-many-chunk-9", "doc-many-chunk-10"]
+    }
+  ]
+}

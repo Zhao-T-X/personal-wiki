@@ -21,6 +21,8 @@ from .predicate_resolver import (AMBIGUOUS, RESOLVED, TEMPORAL_SIGNALS,
                                  split_temporal_signal)
 from .quality_gate import (ACCEPT, REJECT, REVIEW, QualityAssessment, QualitySignals,
                            evaluate as evaluate_quality)
+from .query_router import (EVIDENCE_SYNTHESIS, FACT_LOOKUP, RESEARCH, ROUTES,
+                           STRUCTURED_REASONING, QueryPlan, QuerySignals, classify)
 
 __all__ = [
     'SUPERSEDED', 'current', 'history', 'is_current', 'resolve',
@@ -35,4 +37,6 @@ __all__ = [
     'resolve_predicate', 'split_temporal_signal',
     'ACCEPT', 'REVIEW', 'REJECT', 'QualityAssessment', 'QualitySignals',
     'evaluate_quality',
+    'FACT_LOOKUP', 'STRUCTURED_REASONING', 'EVIDENCE_SYNTHESIS', 'RESEARCH', 'ROUTES',
+    'QueryPlan', 'QuerySignals', 'classify',
 ]

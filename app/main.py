@@ -644,9 +644,22 @@ def context_metrics(days:int=14):
     """Token accounting: planned context per agent + provider-reported usage per task."""
     return CatalogRepository().context_metrics(max(1,min(days,90)))
 
+_NO_EVIDENCE_REPLY = ('知识库中没有找到与该问题匹配的证据。请先导入相关文档并建立索引，'
+                      '或换用 Agent 问答让 Agent 尝试检索。')
+# §23: the wiki holds several competing current claims for one (subject, predicate),
+# so there is no single confident answer — refuse instead of picking one of them.
+_NO_CONFIDENT_ANSWER = '知识库中没有足够证据确定唯一答案（存在多条冲突记录），因此不作答。'
+_AMBIGUOUS_REASON = 'ambiguous_multiple_current_claims'
+
+
 @app.post('/api/ask')
 def ask(req:AskRequest):
     """Grounded answer through the Context Runtime.
+
+    Route first (task §19/§20): the Query Router decides whether this question can
+    be answered from stored knowledge at all. A simple fact lookup is answered from
+    its Claim with **0 LLM calls**; an ambiguous one is refused rather than guessed
+    (§23). Everything else keeps the retrieval + generation path below.
 
     Minimum sufficient evidence: dedup the retrieved chunks, escalate each hit only
     as far as its own signals justify (L1 quote by default), add summary-first
@@ -654,11 +667,28 @@ def ask(req:AskRequest):
     """
     from .runlog import record_run
     from .retrieval import entity_summaries, evidence_hits
+    from .domain.query_router import FACT_LOOKUP
+    from .workflows.ask_workflow import ANSWERED, plan_question, try_direct_answer
     from .context import COMPILER, PLANNER
     from .context.providers import (EntitySummary, EvidenceHit, EvidenceProvider,
                                     KnowledgeProvider, ProviderRegistry, apply_escalation,
                                     dedup_hits)
     from .runtime import TaskContext, features_for
+
+    _signals, route_plan = plan_question(req.question)
+    direct = try_direct_answer(req.question) if route_plan.route == FACT_LOOKUP else None
+    if direct is not None and (direct.status == ANSWERED or direct.reason == _AMBIGUOUS_REASON):
+        reply = direct.answer if direct.status == ANSWERED else _NO_CONFIDENT_ANSWER
+        with record_run('ask', agent_role='ask') as run:
+            # No step is recorded: a direct lookup is not a model call, so the
+            # run's step_count stays 0 and the LLM-call accounting stays honest.
+            run.summary={'question':req.question[:200], 'route':direct.route,
+                         'answer_chars':len(reply or ''), 'evidence_count':len(direct.citations),
+                         'llm_calls':0}
+        return {'question':req.question,'answer':reply,'citations':direct.citations,
+                'evidence':direct.evidence,'answer_value':direct.answer_value,
+                'route':direct.route,'status':direct.status,'direct':True,
+                'reason':direct.reason,'llm_expected':False}
 
     raw=evidence_hits(req.question,req.top_k)
     hits,dropped=dedup_hits([EvidenceHit.from_dict(h) for h in raw])
@@ -668,7 +698,9 @@ def ask(req:AskRequest):
             with run.step('answer', input_summary=req.question[:200]) as step:
                 step.output='No matching evidence was found in the knowledge base.'
             run.summary={'question':req.question[:200],'answer_chars':0,'evidence_count':0}
-        return {'question':req.question,'answer':'知识库中没有找到与该问题匹配的证据。请先导入相关文档并建立索引，或换用 Agent 问答让 Agent 尝试检索。','citations':[],'evidence':[]}
+        return {'question':req.question,'answer':_NO_EVIDENCE_REPLY,'citations':[],'evidence':[],
+                'route':route_plan.route,'status':'no_evidence','direct':False,
+                'llm_expected':route_plan.llm_expected}
 
     apply_escalation(hits)
     task=TaskContext(task_type='ask', agent='KnowledgeAgent', goal=req.question,
@@ -683,6 +715,8 @@ def ask(req:AskRequest):
     citations=[{'document_id':h.document_id,'chunk_id':h.chunk_id,'title':h.title,'start_offset':h.start_offset,'end_offset':h.end_offset} for h in hits]
     return {'question':req.question,'answer':response,'citations':citations,
             'evidence':[h.to_response() for h in hits],
+            'route':route_plan.route,'direct':False,
+            'llm_expected':route_plan.llm_expected,
             'context':{'tokens':compiled.total_tokens,'budget':compiled.plan.hard_budget,
                        'withheld':len(compiled.withheld),'saved_tokens':compiled.saved_tokens,
                        'dedup_dropped':len(dropped),

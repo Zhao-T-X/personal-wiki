@@ -39,6 +39,7 @@ ADR 是**追加式、不可改写**的：决策变了不修改旧 ADR，而是�
 | [ADR-010](./ADR-010-DETERMINISTIC-FIRST.md) | 确定性优先于 LLM | CURRENT |
 | [ADR-011](./ADR-011-KNOWLEDGE-COMPILATION-PIPELINE.md) | 知识编译管线与封闭本体 | PARTIAL |
 | [ADR-012](./ADR-012-TWO-STAGE-EXTRACTION.md) | 两阶段抽取与降级 | CURRENT |
+| [ADR-013](./ADR-013-QUERY-ROUTING-AND-ZERO-LLM-LOOKUP.md) | 问答路由与 0-LLM 事实直查 | PARTIAL |
 
 ---
 
