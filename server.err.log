@@ -1,4 +1,4 @@
-E:\test_project\llm-wiki-agentscope-v0.5.2-sqlite-prompts\app\main.py:22: DeprecationWarning: 
+E:\test_project\llm-wiki-agentscope-v0.5.2-sqlite-prompts\app\main.py:28: DeprecationWarning: 
         on_event is deprecated, use lifespan event handlers instead.
 
         Read more about it in the
@@ -12,7 +12,7 @@ E:\test_project\llm-wiki-agentscope-v0.5.2-sqlite-prompts\.venv\Lib\site-package
         [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
         
   return self.router.on_event(event_type)  # ty: ignore[deprecated]
-INFO:     Started server process [4128]
+INFO:     Started server process [28180]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)

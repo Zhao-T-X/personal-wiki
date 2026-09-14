@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import struct
 from urllib.parse import urlparse
@@ -66,6 +67,15 @@ def active_model_name() -> str:
     return runtime()['openai_embedding_model'] if _use_remote() else _local_name()
 
 
+def content_hash(text: str) -> str:
+    """Stable fingerprint of the embedding input (§33).
+
+    Keyed on the *text*, not the chunk id: identical text embeds identically for a
+    given model, so the hash survives re-chunking (which mints new chunk ids).
+    """
+    return hashlib.sha256(text.encode('utf-8')).hexdigest()
+
+
 def pack(vec: list[float]) -> bytes:
     return struct.pack(f'<{len(vec)}f', *vec)
 
@@ -99,8 +109,50 @@ def embed_document(document_id: str) -> dict:
     conn.close()
     if not rows:
         return {'document_id': document_id, 'embedded': 0, 'skipped': True}
-    vectors, model_name = embed_texts([r['content'] for r in rows])
+
+    # The model we *ask* for. embed_texts may fall back to the local model (and
+    # reports which model actually produced the vectors); a vector is only reusable
+    # for the model that made it, so the two names must be kept apart below.
+    query_model = active_model_name()
+    hashes = [content_hash(r['content']) for r in rows]
+
+    # Look the vectors up by (content_hash, model) instead of by chunk id. Text that
+    # is byte-for-byte identical embeds identically for a given model, so re-chunking
+    # a document — which mints fresh chunk ids — no longer throws away usable vectors.
+    conn = connect()
+    cached_vectors: dict[str, list[float]] = {}
+    for h in set(hashes):
+        hit = conn.execute(
+            'SELECT embedding_blob,dims FROM embedding_cache WHERE content_hash=? AND model=?',
+            (h, query_model)).fetchone()
+        if hit is not None:
+            cached_vectors[h] = list(unpack(hit['embedding_blob'], hit['dims']))
+    conn.close()
+
+    # Everything the cache could not answer goes out in a single batch: a miss must
+    # cost one call, never one call per chunk.
+    pending = [(r, h) for r, h in zip(rows, hashes) if h not in cached_vectors]
+    computed_vectors: list[list[float]] = []
+    model_name = query_model
+    if pending:
+        computed_vectors, model_name = embed_texts([r['content'] for r, _ in pending])
+        # embed_texts hands back the model that *actually* served the request. Cache
+        # under that real name: if the remote endpoint failed and we fell back to the
+        # local model, the lookup above (done under `query_model`) simply missed —
+        # which is honest, because vectors from model A are not hits for model B.
+        for (_, h), vec in zip(pending, computed_vectors):
+            cached_vectors[h] = vec
+
+    # One vector per chunk, in chunk order, each either reused or freshly computed.
+    vectors = [cached_vectors[h] for h in hashes]
     with transaction() as conn:
+        for (_, h), vec in zip(pending, computed_vectors):
+            conn.execute(
+                '''INSERT INTO embedding_cache(content_hash,model,dims,embedding_blob)
+                   VALUES(?,?,?,?)
+                   ON CONFLICT(content_hash,model) DO UPDATE SET dims=excluded.dims,embedding_blob=excluded.embedding_blob,created_at=CURRENT_TIMESTAMP''',
+                (h, model_name, len(vec), pack(vec)),
+            )
         for row, vec in zip(rows, vectors):
             conn.execute(
                 '''INSERT INTO chunk_embeddings(chunk_id,model,dims,embedding_blob)
@@ -108,7 +160,9 @@ def embed_document(document_id: str) -> dict:
                    ON CONFLICT(chunk_id) DO UPDATE SET model=excluded.model,dims=excluded.dims,embedding_blob=excluded.embedding_blob,created_at=CURRENT_TIMESTAMP''',
                 (row['id'], model_name, len(vec), pack(vec)),
             )
-    return {'document_id': document_id, 'embedded': len(rows), 'model': model_name, 'dims': len(vectors[0])}
+    return {'document_id': document_id, 'embedded': len(rows), 'model': model_name,
+            'dims': len(vectors[0]), 'cached': len(rows) - len(pending),
+            'computed': len(pending)}
 
 
 def backfill_embeddings() -> dict:

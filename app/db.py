@@ -33,10 +33,17 @@ CREATE TABLE IF NOT EXISTS chunks (
   chunk_index INTEGER NOT NULL,
   start_offset INTEGER NOT NULL,
   end_offset INTEGER NOT NULL,
+  -- Incremental processing (§32): the content fingerprint tells us whether a
+  -- chunk changed, and extraction_version records which extractor + ontology
+  -- produced the knowledge derived from it, so an unchanged chunk is not
+  -- re-extracted (and its Claims/Evidence are not thrown away).
+  content_hash TEXT,
+  extraction_version TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(document_id, chunk_index)
 );
 CREATE INDEX IF NOT EXISTS idx_chunks_document ON chunks(document_id);
+CREATE INDEX IF NOT EXISTS idx_chunks_content_hash ON chunks(content_hash);
 
 CREATE TABLE IF NOT EXISTS entities (
   id TEXT PRIMARY KEY,
@@ -344,6 +351,19 @@ CREATE TABLE IF NOT EXISTS chunk_embeddings (
 );
 CREATE INDEX IF NOT EXISTS idx_embeddings_model ON chunk_embeddings(model);
 
+-- Embedding cache (§33): keyed by *content*, not by chunk id. Re-chunking a
+-- document gives its chunks new ids, so an id-keyed store throws away vectors
+-- that are still perfectly valid; the same text always embeds to the same
+-- vector for a given model.
+CREATE TABLE IF NOT EXISTS embedding_cache (
+  content_hash TEXT NOT NULL,
+  model TEXT NOT NULL,
+  dims INTEGER NOT NULL,
+  embedding_blob BLOB NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (content_hash, model)
+);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts USING fts5(
   title,
   content,
@@ -411,6 +431,21 @@ def _migrate_legacy_claims(conn: sqlite3.Connection) -> None:
         # Which ontology was in force when this claim was compiled (ADR-015), so a
         # claim that later becomes unrecognisable can be explained, not guessed at.
         conn.execute("ALTER TABLE claims ADD COLUMN ontology_version TEXT")
+
+
+def _ensure_chunk_columns(conn: sqlite3.Connection) -> None:
+    """Add the incremental-processing fingerprints to databases that predate them.
+
+    Existing chunks keep NULL: a NULL hash means "unknown", so the next index run
+    treats them as changed and re-extracts once. That is the safe direction —
+    guessing "unchanged" would silently keep stale knowledge.
+    """
+    cols = {r['name'] for r in conn.execute('PRAGMA table_info(chunks)').fetchall()}
+    if 'content_hash' not in cols:
+        conn.execute('ALTER TABLE chunks ADD COLUMN content_hash TEXT')
+    if 'extraction_version' not in cols:
+        conn.execute('ALTER TABLE chunks ADD COLUMN extraction_version TEXT')
+    conn.execute('CREATE INDEX IF NOT EXISTS idx_chunks_content_hash ON chunks(content_hash)')
 
 def _table_ddl(table: str) -> str:
     """The CREATE TABLE statement for a table, taken from SCHEMA (without IF NOT EXISTS)."""
@@ -561,6 +596,7 @@ def init_db() -> None:
     try:
         _migrate_legacy_entities(conn)
         _migrate_legacy_claims(conn)
+        _ensure_chunk_columns(conn)
         _migrate_nullable_sources(conn)
         _ensure_token_columns(conn)
         _ensure_claim_relation_columns(conn)

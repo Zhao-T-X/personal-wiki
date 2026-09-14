@@ -44,6 +44,15 @@ class QuestionRepository(Repository):
         with self.write() as conn:
             conn.execute('DELETE FROM questions WHERE source_document_id=?', (document_id,))
 
+    def delete_for_chunks(self, chunk_ids: list[str]) -> int:
+        """Delete questions sourced from any of ``chunk_ids`` (incremental §32); empty list is a no-op."""
+        ids = list(chunk_ids)
+        if not ids:
+            return 0
+        marks = ','.join('?' for _ in ids)
+        with self.write() as conn:
+            return conn.execute(f'DELETE FROM questions WHERE source_chunk_id IN ({marks})', ids).rowcount
+
     def open_count(self) -> int:
         with self.read() as conn:
             return one(conn.execute("SELECT COUNT(*) c FROM questions WHERE status='open'"), 'c')

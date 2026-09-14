@@ -54,3 +54,12 @@ class EventRepository(Repository):
     def delete_for_document(self, document_id: str) -> None:
         with self.write() as conn:
             conn.execute('DELETE FROM events WHERE source_document_id=?', (document_id,))
+
+    def delete_for_chunks(self, chunk_ids: list[str]) -> int:
+        """Delete events sourced from any of ``chunk_ids`` (incremental §32); empty list is a no-op."""
+        ids = list(chunk_ids)
+        if not ids:
+            return 0
+        marks = ','.join('?' for _ in ids)
+        with self.write() as conn:
+            return conn.execute(f'DELETE FROM events WHERE source_chunk_id IN ({marks})', ids).rowcount

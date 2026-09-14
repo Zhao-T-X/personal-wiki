@@ -16,9 +16,53 @@ _LIST_SQL = '''SELECT d.id,d.title,d.source_type,d.source_uri,d.created_at,d.upd
 _CHUNK_DOC_SQL = '''SELECT c.id,c.document_id,c.content,c.chunk_index,c.start_offset,c.end_offset,d.title,d.source_type
                     FROM chunks c JOIN documents d ON d.id=c.document_id WHERE c.id=?'''
 
+# Incremental processing (§32) needs the two fingerprint columns that ``chunks()``
+# (a public, stable shape) deliberately omits.
+_CHUNK_FINGERPRINTS_SQL = '''SELECT id,document_id,content,chunk_index,start_offset,end_offset,
+                                    content_hash,extraction_version,created_at
+                             FROM chunks WHERE document_id=? ORDER BY chunk_index'''
+
 
 def _hash(content: str) -> str:
     return hashlib.sha256(content.encode('utf-8')).hexdigest()
+
+
+def _normalize_targets(chunks) -> list[tuple]:
+    """Coerce an iterable of ``(content, index, start, end)`` into a list."""
+    return [(content, int(index), int(start_offset), int(end_offset))
+            for content, index, start_offset, end_offset in chunks]
+
+
+def _diff_chunks(existing: list[dict], targets: list[tuple]) -> dict:
+    """Classify ``targets`` against the stored chunks by content fingerprint.
+
+    A chunk is *unchanged* when the stored ``content_hash`` equals the hash of the
+    incoming content at the same ``chunk_index``; its row — and therefore its id,
+    embeddings and ``extraction_version`` — is reused. A NULL stored hash means
+    "unknown" (a row predating the fingerprint column), so it is treated as
+    changed and re-extracted once: guessing "unchanged" would silently keep stale
+    knowledge, so the safe direction is to redo it.
+
+    Returns index/id classifications, never touching the database.
+    """
+    by_index = {row['chunk_index']: row for row in existing}
+    wanted = {index for _, index, _, _ in targets}
+    removed = [row['id'] for index, row in sorted(by_index.items()) if index not in wanted]
+    unchanged: list[str] = []
+    created: list[int] = []
+    changed: list[int] = []
+    replaced: list[str] = []
+    for content, index, _, _ in sorted(targets, key=lambda t: t[1]):
+        row = by_index.get(index)
+        if row is None:
+            created.append(index)
+        elif row['content_hash'] == _hash(content):
+            unchanged.append(row['id'])
+        else:
+            changed.append(index)
+            replaced.append(row['id'])
+    return {'unchanged': unchanged, 'created': created, 'changed': changed,
+            'replaced': replaced, 'removed': removed}
 
 
 class DocumentRepository(Repository):
@@ -80,23 +124,97 @@ class DocumentRepository(Repository):
         with self.read() as conn:
             return row(conn.execute(_CHUNK_DOC_SQL, (chunk_id,)))
 
-    def replace_chunks(self, document_id: str, chunks) -> list[dict]:
-        """Replace all chunks (and their embeddings) for a document.
+    def plan_chunks(self, document_id: str, chunks) -> dict:
+        """Read-only diff of a document's stored chunks against ``chunks``.
 
         ``chunks`` is an iterable of ``(content, chunk_index, start_offset, end_offset)``.
+        Nothing is written; the caller uses the result to clear only the derived
+        rows whose chunks are about to disappear (foreign keys must be satisfied
+        *before* :meth:`sync_chunks` deletes the chunk rows).
         """
-        out: list[dict] = []
+        targets = _normalize_targets(chunks)
+        with self.read() as conn:
+            existing = rows(conn.execute(_CHUNK_FINGERPRINTS_SQL, (document_id,)))
+        diff = _diff_chunks(existing, targets)
+        return {
+            'unchanged': diff['unchanged'],            # existing ids kept as-is
+            'created': diff['created'],                # indexes with no existing row
+            'changed': diff['changed'],                # indexes whose content changed
+            'replaced': diff['replaced'],              # existing ids discarded (content changed)
+            'removed': diff['removed'],                # existing ids discarded (index gone)
+            'dropped': [*diff['replaced'], *diff['removed']],
+        }
+
+    def sync_chunks(self, document_id: str, chunks) -> dict:
+        """Reconcile a document's chunks with ``chunks``, reusing unchanged rows.
+
+        ``chunks`` is an iterable of ``(content, chunk_index, start_offset, end_offset)``.
+
+        Rows whose content hash is unchanged keep their id, their
+        ``extraction_version`` and their embeddings, so knowledge derived from them
+        is never thrown away. Rows whose content changed (or whose index no longer
+        exists) are replaced by fresh rows with a NULL ``extraction_version``.
+
+        The caller must first clear the derived claims/relations/events/ideas/
+        questions that point at ``plan_chunks(...)['dropped']``: those chunk rows
+        are deleted here and a live reference would fail the foreign-key check.
+
+        Returns ``{'chunks', 'unchanged', 'created', 'changed', 'replaced',
+        'removed', 'stale', 'dropped'}`` where ``stale`` is ``created + changed``
+        (the chunk ids that need extraction) and ``dropped`` is ``replaced +
+        removed`` (the ids that were discarded).
+        """
+        targets = _normalize_targets(chunks)
         with self.write() as conn:
-            conn.execute('DELETE FROM chunk_embeddings WHERE chunk_id IN '
-                         '(SELECT id FROM chunks WHERE document_id=?)', (document_id,))
-            conn.execute('DELETE FROM chunks WHERE document_id=?', (document_id,))
-            for content, index, start_offset, end_offset in chunks:
+            diff = _diff_chunks(rows(conn.execute(_CHUNK_FINGERPRINTS_SQL, (document_id,))), targets)
+            for old_id in (*diff['replaced'], *diff['removed']):
+                # chunk_embeddings cascades with the chunk row; derived knowledge
+                # referencing it was cleared by the caller beforehand.
+                conn.execute('DELETE FROM chunks WHERE id=?', (old_id,))
+            created: list[str] = []
+            changed: list[str] = []
+            for content, index, start_offset, end_offset in sorted(targets, key=lambda t: t[1]):
+                if index not in diff['created'] and index not in diff['changed']:
+                    continue
                 cid = str(uuid.uuid4())
-                conn.execute('''INSERT INTO chunks(id,document_id,content,chunk_index,start_offset,end_offset)
-                                VALUES(?,?,?,?,?,?)''', (cid, document_id, content, index, start_offset, end_offset))
-                out.append({'id': cid, 'content': content, 'chunk_index': index,
-                            'start_offset': start_offset, 'end_offset': end_offset})
-        return out
+                conn.execute(
+                    '''INSERT INTO chunks(id,document_id,content,chunk_index,start_offset,end_offset,
+                                          content_hash,extraction_version)
+                       VALUES(?,?,?,?,?,?,?,NULL)''',
+                    (cid, document_id, content, index, start_offset, end_offset, _hash(content)))
+                (created if index in diff['created'] else changed).append(cid)
+            return {
+                'chunks': rows(conn.execute(_CHUNK_FINGERPRINTS_SQL, (document_id,))),
+                'unchanged': diff['unchanged'],
+                'created': created,
+                'changed': changed,
+                'replaced': diff['replaced'],
+                'removed': diff['removed'],
+                'stale': [*created, *changed],
+                'dropped': [*diff['replaced'], *diff['removed']],
+            }
+
+    def replace_chunks(self, document_id: str, chunks) -> list[dict]:
+        """Replace the chunks for a document; returns the resulting chunk rows.
+
+        Kept as the stable entry point for existing callers: it now delegates to
+        :meth:`sync_chunks`, so an identical chunk keeps its row (and its
+        embeddings) instead of always being dropped and re-created. Changed and
+        removed chunks are still replaced, and their embeddings cascade away with
+        them.
+        """
+        return self.sync_chunks(document_id, chunks)['chunks']
+
+    def set_extraction_version(self, chunk_ids, version: str) -> int:
+        """Stamp the extractor+ontology version onto the chunks that were just extracted."""
+        ids = list(chunk_ids)
+        if not ids:
+            return 0
+        marks = ','.join('?' for _ in ids)
+        with self.write() as conn:
+            return conn.execute(
+                f'UPDATE chunks SET extraction_version=? WHERE id IN ({marks})',
+                (version, *ids)).rowcount
 
     # -- lexical search ----------------------------------------------------
     def search_fts(self, match: str, cap: int) -> list[dict]:

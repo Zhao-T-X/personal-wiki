@@ -13,6 +13,7 @@ from typing import Iterator
 
 import sqlite3
 
+from ..cache import bump_data_epoch
 from ..db import connect
 
 
@@ -33,19 +34,26 @@ class Repository:
 
     @contextmanager
     def write(self) -> Iterator[sqlite3.Connection]:
-        if self._conn is not None:
-            # The caller owns the transaction: never commit or close here.
-            yield self._conn
-            return
-        conn = connect()
+        # Every write may invalidate something derived from the database, so the
+        # data epoch is bumped on the way out of every write — including a
+        # caller-owned transaction, whose commit happens later. Over-invalidating
+        # costs a cache miss; under-invalidating would serve superseded knowledge.
         try:
-            yield conn
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
+            if self._conn is not None:
+                # The caller owns the transaction: never commit or close here.
+                yield self._conn
+                return
+            conn = connect()
+            try:
+                yield conn
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.close()
         finally:
-            conn.close()
+            bump_data_epoch()
 
 
 def rows(cursor) -> list[dict]:

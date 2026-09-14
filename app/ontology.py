@@ -5,6 +5,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,6 +21,14 @@ LEGACY_ENTITY_TYPES = {'person':'Person','organization':'Organization','place':'
 
 def _load_registry(name: str) -> dict[str, Any]:
     return json.loads((SCHEMA_DIR / name).read_text(encoding='utf-8'))
+
+
+_registry_version_lock = Lock()
+_registry_version_cache: tuple[tuple, str] | None = None
+
+
+def _schema_paths() -> list[Path]:
+    return sorted(SCHEMA_DIR.glob('*.json'))
 
 
 RELATION_REGISTRY = _load_registry('relation-predicate-registry.json')
@@ -362,9 +371,39 @@ def registry_version() -> str:
     depend on (Context Cache invalidation, spec §10). Any edit to the
     vocabularies or the extraction schema changes this fingerprint, which
     changes every cache key - invalidation by construction.
+
+    Cached by file fingerprint (§33): this runs on *every* prompt build, and
+    re-reading six JSON files each time was pure I/O. The fingerprint is a stat
+    per file, so an edit is still detected immediately.
     """
+    global _registry_version_cache
+    paths = _schema_paths()
+    fingerprint = tuple((p.name, p.stat().st_size, p.stat().st_mtime_ns) for p in paths)
+    cached = _registry_version_cache
+    if cached is not None and cached[0] == fingerprint:
+        return cached[1]
     digest = hashlib.sha1()
-    for path in sorted(SCHEMA_DIR.glob('*.json')):
+    for path in paths:
         digest.update(path.name.encode('utf-8'))
         digest.update(path.read_bytes())
-    return digest.hexdigest()[:12]
+    version = digest.hexdigest()[:12]
+    with _registry_version_lock:
+        _registry_version_cache = (fingerprint, version)
+    return version
+
+
+def ontology_snapshot() -> dict:
+    """What the in-memory ontology cache holds, for diagnostics (§33).
+
+    The registries are loaded once at import and never re-read at runtime, which
+    is exactly why this reports sizes and versions rather than contents: it is
+    the observable surface of a cache, not a way to mutate one.
+    """
+    return {
+        'claim_registry_version': claim_registry_version(),
+        'registry_version': registry_version(),
+        'claim_predicates': len(CLAIM_PREDICATES),
+        'relation_predicates': len(RELATION_TYPES),
+        'entity_types': len(ENTITY_TYPES),
+        'write_surface': 'schemas/*.json',
+    }

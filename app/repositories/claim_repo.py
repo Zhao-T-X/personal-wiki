@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import uuid
 
+from ..cache import EpochCache
 from ..db import dumps, loads
 from .base import Repository, one, row, rows
 
@@ -22,6 +23,23 @@ FROM claims c
 JOIN entities s ON s.id = c.subject_id
 LEFT JOIN entities o ON o.id = c.object_id
 '''
+
+# Read-through cache for :meth:`ClaimRepository.related` (spec §33). That one
+# query is the hot path for both the direct-fact lookup and the correction
+# planner, and it is asked the same question many times in a row. Entries carry
+# the data epoch they were produced under and die the instant any
+# ``Repository.write()`` bumps it, so a hit can never return knowledge that a
+# write has already superseded — invalidation is guaranteed by construction, not
+# by remembering to clear this cache at every write site.
+_RELATED_CACHE = EpochCache(maxsize=512, name='claim_related')
+
+
+def related_cache_stats() -> dict:
+    """Snapshot of the ``related()`` cache: name/size/maxsize/hits/misses/epoch.
+
+    A read-only observability hook (spec §37 board); calling it changes nothing.
+    """
+    return _RELATED_CACHE.stats()
 
 
 def _decode(claim: dict) -> dict:
@@ -162,12 +180,48 @@ class ClaimRepository(Repository):
         with self.write() as conn:
             conn.execute('DELETE FROM claims WHERE source_document_id=?', (document_id,))
 
+    def delete_for_chunks(self, chunk_ids: list[str]) -> int:
+        """Delete claims sourced from any of ``chunk_ids`` (incremental §32).
+
+        An empty list is a no-op. Incremental re-indexing clears a chunk's
+        knowledge *before* replacing/removing that chunk row, so the
+        ``source_chunk_id`` foreign key stays satisfiable; deleting a claim also
+        cascades its ``claim_relations``.
+        """
+        ids = list(chunk_ids)
+        if not ids:
+            return 0
+        marks = ','.join('?' for _ in ids)
+        with self.write() as conn:
+            return conn.execute(f'DELETE FROM claims WHERE source_chunk_id IN ({marks})', ids).rowcount
+
     # -- claim relations (evolution) --------------------------------------
     def comparison_target(self, claim_id: str) -> dict | None:
         with self.read() as conn:
             return row(conn.execute(_RELATION_SELECT + ' WHERE c.id=?', (claim_id,)))
 
     def related(self, *, subject_id: str, predicate: str, exclude_id: str, limit: int) -> list[dict]:
+        # A repository bound to a caller's connection reads inside that caller's
+        # (still uncommitted) transaction. A rollback erases those rows *without*
+        # moving the data epoch, so caching such a read could strand an entry that
+        # describes a world that never existed. The cache therefore only serves the
+        # standalone case — which is every hot path (direct lookup, correction
+        # planner); the connection-bound caller just pays the query as before.
+        if self._conn is not None:
+            return self._related_rows(subject_id=subject_id, predicate=predicate,
+                                      exclude_id=exclude_id, limit=limit)
+        # Every input that can change the answer is in the key: two different
+        # predicates, limits or exclusions must never share an entry.
+        key = ('related', subject_id, predicate, exclude_id, limit)
+        cached = _RELATED_CACHE.get_or_compute(
+            key, lambda: self._related_rows(subject_id=subject_id, predicate=predicate,
+                                            exclude_id=exclude_id, limit=limit))
+        # Rows are plain, mutable dicts. Hand back fresh copies on every call so a
+        # caller that annotates or edits a row cannot reach back and corrupt the
+        # shared cache entry that the next caller will be served from.
+        return [dict(item) for item in cached]
+
+    def _related_rows(self, *, subject_id: str, predicate: str, exclude_id: str, limit: int) -> list[dict]:
         with self.read() as conn:
             return rows(conn.execute(
                 _RELATION_SELECT
