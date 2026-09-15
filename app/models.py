@@ -82,6 +82,51 @@ class CorrectionRequest(BaseModel):
     text: str = Field(min_length=1)
 
 
+class MergeRequest(BaseModel):
+    """A *confirmed* entity merge: which row survives, which one is absorbed.
+
+    Two ids rather than a direction word, because which way round it goes decides
+    which name the surviving entity keeps — and that is the user's choice, not an
+    inference the backend should make from creation order.
+    """
+    keep_id: str = Field(min_length=1)
+    drop_id: str = Field(min_length=1)
+
+
+class IntentRequest(BaseModel):
+    """One sentence, and whatever the user is currently looking at.
+
+    ``context_claim_id`` is what makes 「这个不对，应该是……」 work: the subject is
+    already on screen, so the sentence does not have to name it — and the user must not
+    have to retype what the app can see.
+    """
+    text: str = ''
+    context_claim_id: str | None = None
+
+
+class CurationDecisionRequest(BaseModel):
+    """A human's decision about an entity pair — currently only "not the same".
+
+    Two ids, not names: the decision has to survive a rename or a new alias, or the
+    system would ask the same question again the next time a name changes.
+    """
+    entity_id_a: str = Field(min_length=1)
+    entity_id_b: str = Field(min_length=1)
+    reason: str = ''
+
+
+class ObjectLinkRequest(BaseModel):
+    """Backfill free-text objects onto entities that already exist.
+
+    ``min_confidence`` gates how much the system is allowed to do: ``high`` means only
+    exact name/alias matches, ``medium`` also accepts the nearest similar name. There
+    is no setting that lets it create an entity — matching a literal to a new entity
+    is a different (and much riskier) operation than linking it to one that exists.
+    """
+    min_confidence: str = 'high'
+    limit: int = 200
+
+
 class CorrectionApplyRequest(BaseModel):
     """A confirmed correction to execute through the CORRECT operation."""
     text: str = Field(min_length=1)

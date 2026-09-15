@@ -7,7 +7,6 @@ predicate become knowledge.
 """
 from __future__ import annotations
 
-import importlib
 import os
 import sys
 
@@ -15,45 +14,12 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-_RELOAD = (
-    'app.repositories.base',
-    'app.repositories.document_repo',
-    'app.repositories.entity_repo',
-    'app.repositories.claim_repo',
-    'app.repositories.relation_repo',
-    'app.repositories.evidence_repo',
-    'app.repositories.event_repo',
-    'app.repositories.idea_repo',
-    'app.repositories.question_repo',
-    'app.repositories.research_repo',
-    'app.repositories.run_repo',
-    'app.repositories.catalog_repo',
-    'app.repositories.operation_repo',
-    'app.resolution',
-    'app.knowledge',
-    'app.claim_relations',
-    'app.service',
-    'app.domain.claim_state',
-    'app.domain.operations',
-    'app.domain.predicate_resolver',
-    'app.domain.compiler',
-    'app.workflows.correction_workflow',
-)
+import claim_entries
 
 
 def _db(tmp_path):
-    os.environ['DATABASE_PATH'] = str(tmp_path / 'test.db')
-    os.environ['SETTINGS_PATH'] = str(tmp_path / 'settings.json')
-    import app.config as config
-    import app.db as db
-    importlib.reload(config)
-    importlib.reload(db)
-    for name in _RELOAD:
-        module = sys.modules.get(name)
-        if module is not None:
-            importlib.reload(module)
-    db.init_db()
-    return db
+    """A fresh database for this file; the shared entries need the same one."""
+    return claim_entries.prepare_database(tmp_path)
 
 
 # --- ONTOLOGY MUTATION POLICY ------------------------------------------------
@@ -260,6 +226,55 @@ def test_correction_plan_is_blocked_when_predicate_is_unresolved(tmp_path):
     assert plan.blocked is True
     assert plan.relationship == 'unresolved'
     assert '受控谓词' in plan.summary
+
+
+# --- Every claim entry agrees on the same draft (ADR-011) ---------------------
+#
+# The entries, the drafts and the database setup live in ``claim_entries``, because
+# ``test_architecture.py`` asserts the same property against the same entries. Two
+# definitions of "an entry" would defeat the purpose of a test that checks there is
+# only one implementation of claim semantics.
+
+@pytest.mark.parametrize('entry', sorted(claim_entries.ENTRIES))
+def test_every_claim_entry_compiles_one_draft_identically(tmp_path, entry):
+    """ADR-011: one implementation of claim semantics, so the routes must converge.
+
+    The same Claim Draft goes through each claim-producing entry, and the canonical
+    claim must come out byte-identical — with the invented ``new_ceo`` resolved to
+    ``has_ceo`` and ``new`` moved into ``temporal_signal``. This fails the moment a
+    route grows its own resolution, temporal handling or defaulting again, which is
+    exactly how the extraction path came to skip the domain/range gate unnoticed.
+    """
+    claim_entries.prepare_database(tmp_path)
+    claim_entries.seed_entities(claim_entries.ENTITIES)
+    from app.domain.compiler import ClaimDraft, KnowledgeCompiler
+
+    draft = claim_entries.DRAFT
+    reference = KnowledgeCompiler().compile_claim(ClaimDraft(**draft)).claim
+    assert reference is not None
+    assert reference.predicate == 'has_ceo'      # the invented predicate is gone
+    assert reference.temporal_signal == 'new'    # the meaning is modelled as time
+
+    assert claim_entries.ENTRIES[entry](draft, claim_entries.ENTITIES) == reference.to_dict()
+
+
+@pytest.mark.parametrize('entry', sorted(claim_entries.ENTRIES))
+def test_every_claim_entry_refuses_one_illegal_pairing(tmp_path, entry):
+    """The domain/range gate is one gate, so every route refuses the same pairing.
+
+    ``苹果公司 has_ceo 加利福尼亚`` resolves to a registered predicate and is still
+    illegal: an Organization's CEO is a Person. Extraction used to compile it
+    without ever asking, because the gate lived only on the paths that happened to
+    call it.
+    """
+    claim_entries.prepare_database(tmp_path)
+    claim_entries.seed_entities(claim_entries.ILLEGAL_ENTITIES)
+
+    with pytest.raises(ValueError) as exc:
+        claim_entries.ENTRIES[entry](claim_entries.ILLEGAL_DRAFT,
+                                     claim_entries.ILLEGAL_ENTITIES)
+    message = str(exc.value).replace('domain/range', 'domain_range')
+    assert 'domain_range' in message
 
 
 # --- Predicate semantics are registry data, not Python literals (task §31) ----

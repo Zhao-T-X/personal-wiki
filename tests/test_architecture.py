@@ -1,11 +1,18 @@
 """Architecture boundary tests (docs/architecture/PUBLIC-ENTRYPOINTS.md, ADR-002/004).
 
-These are cheap, mechanical guards against the architecture silently eroding:
-they read source, not runtime, so they fail loudly the moment a layer starts
-reaching where it should not.
+Most of these are cheap, mechanical guards against the architecture silently
+eroding: they read source, not runtime, so they fail loudly the moment a layer
+starts reaching where it should not.
+
+One section at the bottom is different on purpose. "One owner for claim
+normalisation" is not a property of text — a second implementation can be written
+in a perfectly import-clean way and still disagree with the first — so that
+section runs the pipeline and compares behaviour instead.
 """
 import re
 from pathlib import Path
+
+import claim_entries
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -18,6 +25,7 @@ BUSINESS_MODULES = (
     'app/resolution.py',
     'app/claim_relations.py',
     'app/graph.py',
+    'app/integrity.py',
 )
 
 # The only places allowed to open a connection or execute SQL.
@@ -137,3 +145,73 @@ def test_evaluation_modules_are_pure():
         src = _source(rel)
         bad = pattern.search(src)
         assert bad is None, f'{rel} must not import {EVAL_BANNED_IMPORTS} (matched: {bad.group(0).strip()!r})'
+
+
+# --------------------------------------------------------------------------- #
+# The behavioural guard — the only test here that runs the pipeline instead of
+# reading it. "Single owner for claim normalisation" cannot be proven by import
+# rules: the defect this guards against was never an illegal import, it was two
+# plausible-looking lines in the extraction path resolving predicates on its own.
+# --------------------------------------------------------------------------- #
+
+def test_claim_normalization_has_single_owner(tmp_path):
+    """One Claim Draft must compile identically through every claim entry.
+
+    ``KnowledgeCompiler`` is the single owner of claim semantics (ADR-011). This is
+    that statement executed: the invented predicate ``new_ceo`` — with the change
+    baked into its name, the way a model actually writes it — must come out of
+    Extraction, Correction and Research as the same canonical ``has_ceo``, with
+    ``new`` moved into ``temporal_signal``, and with no other field differing
+    either.
+    """
+    claim_entries.prepare_database(tmp_path)
+    claim_entries.seed_entities(claim_entries.ENTITIES)
+
+    produced = {name: entry(claim_entries.DRAFT, claim_entries.ENTITIES)
+                for name, entry in claim_entries.ENTRIES.items()}
+
+    predicates = {c['predicate'] for c in produced.values()}
+    signals = {c['temporal_signal'] for c in produced.values()}
+    assert predicates == {'has_ceo'}, f'entries disagree on the predicate: {produced}'
+    assert signals == {'new'}, f'entries disagree on the temporal signal: {produced}'
+
+    reference = produced['extraction']
+    for name, claim in produced.items():
+        assert claim == reference, f'{name} produced a different canonical claim'
+
+
+def test_new_ceo_reaches_the_stored_claim_through_every_entry(tmp_path):
+    """The "苹果的新任 CEO" case as a global ontology contract, not a Correction bug.
+
+    Seeded knowledge is ``苹果公司 has_ceo 蒂姆·库克``. The model then reports
+    "苹果的新任 CEO 是约翰·特努斯" and encodes the change as a *predicate*
+    (``new_ceo``). Whichever entry receives that draft, it must not survive: every
+    route has to compile it to the same ``has_ceo`` + ``temporal_signal=new``,
+    because only then does candidate retrieval find the stored claim and offer to
+    supersede it — instead of filing a second, unrelated CEO fact beside the first.
+
+    This began as a Correction-specific failure. Asserting it at the compiler
+    boundary, for all three entries, is what stops it returning through a
+    different door.
+    """
+    claim_entries.prepare_database(tmp_path)
+    claim_entries.seed_entities(claim_entries.ENTITIES + (claim_entries.INCUMBENT_ENTITY,))
+    incumbent_id = claim_entries.seed_claim(claim_entries.INCUMBENT_CLAIM)
+
+    from app.repositories.claim_repo import ClaimRepository
+    from app.repositories.entity_repo import EntityRepository
+
+    apple_id = EntityRepository().by_name('苹果公司')['id']
+    claims = ClaimRepository()
+    assert [c['object_text'] for c in claims.related(
+        subject_id=apple_id, predicate='has_ceo', exclude_id='', limit=10)] == ['蒂姆·库克']
+
+    for name, entry in claim_entries.ENTRIES.items():
+        claim = entry(claim_entries.DRAFT, claim_entries.ENTITIES)
+        assert claim['predicate'] == 'has_ceo', f'{name} kept the invented predicate'
+        assert claim['temporal_signal'] == 'new', f'{name} lost the temporal signal'
+        # The payoff: the resolved predicate addresses the *stored* claim, which is
+        # what makes a supersede plan possible at all.
+        related = claims.related(subject_id=apple_id, predicate=claim['predicate'],
+                                 exclude_id='', limit=10)
+        assert [c['id'] for c in related] == [incumbent_id], f'{name} cannot find the incumbent'

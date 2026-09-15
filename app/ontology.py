@@ -210,6 +210,29 @@ def resolve_claim_predicate(value: str) -> str | None:
     return claim_predicate_alias_index().get(normalized)
 
 
+def canonical_claim_predicate(value: str) -> str:
+    """Fold a value into a registered predicate, or refuse.
+
+    The write-side sibling of :func:`resolve_claim_predicate`, and the same shape
+    as :func:`canonical_claim_type` / :func:`canonical_polarity`: a declared alias
+    is ontology data, so ``CEO`` folds to ``has_ceo``; anything the registry does
+    not declare raises.
+
+    It deliberately does **not** split a temporal variant. ``new_ceo`` is a
+    *candidate*, and turning it into ``has_ceo`` is the ``PredicateResolver``'s
+    job, upstream of any write. A write gate that quietly repaired it would hide
+    the very defect it exists to catch: a route that reached storage without ever
+    being compiled (ONTOLOGY MUTATION POLICY rule 8).
+    """
+    normalized = normalize_predicate(value)
+    resolved = resolve_claim_predicate(normalized)
+    if not resolved:
+        raise ValueError(
+            f'Unregistered claim predicate: {normalized or str(value)!r} - the ontology is closed, '
+            'so a value that is neither registered nor a declared alias cannot be persisted.')
+    return resolved
+
+
 def functional_claim_predicates() -> frozenset[str]:
     """Registered predicates whose subject holds one value at a time."""
     metadata = CLAIM_REGISTRY.get('predicate_metadata') or {}

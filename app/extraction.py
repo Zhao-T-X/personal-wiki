@@ -4,13 +4,9 @@ import json
 from pathlib import Path
 from typing import Any
 from jsonschema import Draft202012Validator
-from .domain.predicate_resolver import TEMPORAL_SIGNALS, resolve_predicate
-from .ontology import (
-    ENTITY_TYPES, match_claim_predicates,
-    EVENT_TYPES, EVENT_STATUSES, QUESTION_TYPES, QUESTION_STATUSES,
-    IDEA_STATUSES, normalize_name, normalize_predicate, canonical_entity_type,
-    canonical_claim_type, canonical_polarity, canonical_modality,
-)
+from .domain.compiler import UNRESOLVED, CompileResult, KnowledgeCompiler
+from .ontology import (canonical_entity_type, claim_predicate_spec,
+                       match_claim_predicates, normalize_name, normalize_predicate)
 
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / 'schemas' / 'extraction.schema.json'
 SCHEMA = json.loads(SCHEMA_PATH.read_text(encoding='utf-8'))
@@ -70,7 +66,86 @@ def _legacy_to_v2(data: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _entity_index(entities: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Normalized name / alias -> entity record, for the compiler's type gate.
+
+    Aliases are indexed too: a claim may name its subject through an alias the
+    entity declared, and the pairing must still be *checked* rather than silently
+    pass as "type unknown".
+    """
+    index: dict[str, dict[str, Any]] = {}
+    for e in entities:
+        index[normalize_name(e['name'])] = e
+        for alias in e.get('aliases', []):
+            index.setdefault(normalize_name(alias), e)
+    return index
+
+
+def _resolution_text(claim: dict[str, Any]) -> str:
+    """Source text the resolver may read for *suggestions* — never for a verdict."""
+    return ' '.join(x for x in (claim.get('content'), claim.get('evidence_quote')) if x)
+
+
+def _unsupported_predicate(claim: dict[str, Any], result: CompileResult) -> ValueError:
+    """The repair-loop contract for a predicate that maps to nothing.
+
+    Registry subset (spec §5): the repair LLM is offered the closest registered
+    predicates, never the full registry, and never gets to keep the invented one.
+    """
+    candidate = claim.get('predicate')
+    subset = list(result.resolution.candidates) or match_claim_predicates(candidate, limit=4)
+    hint = (f' Closest registered predicates: {", ".join(subset)} - use one of these.'
+            if subset else ' Use a predicate from the schema enum.')
+    return ValueError(f'Unsupported claim predicate: {normalize_predicate(candidate)}.{hint}')
+
+
+def _domain_range_rejection(claim: dict[str, Any], predicate: str) -> ValueError:
+    """The predicate is registered but the pairing is illegal (e.g. a CEO who is a place)."""
+    spec = claim_predicate_spec(predicate)
+    declared = (f'domain={", ".join(spec.domain) or "*"}, range={", ".join(spec.range) or "*"}'
+                if spec else 'no declaration')
+    return ValueError(
+        f'Claim violates ontology domain/range: {claim["subject"]} {predicate} '
+        f'{claim.get("object") or "(none)"}. `{predicate}` declares {declared}.')
+
+
+def _compile_claim(claim: dict[str, Any], index: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """One claim through the single compiler, translated into the repair contract.
+
+    What a claim *means* is not decided here. A refusal comes back as the
+    ``ValueError`` the caller's repair loop already knows how to act on.
+    """
+    result = KnowledgeCompiler().compile_extraction_claim(
+        claim, entities=index, resolution_text=_resolution_text(claim))
+    if result.ok and result.claim is not None:
+        return result.claim.to_dict()
+    if result.status == UNRESOLVED:
+        raise _unsupported_predicate(claim, result)
+    if 'domain_range_violation' in result.reasons:
+        raise _domain_range_rejection(claim, result.resolution.predicate or '')
+    # claim_type / polarity / modality are canonicalised in the compiler; an unknown
+    # value is refused with the very message it produced.
+    raise ValueError(result.reasons[0] if result.reasons else 'Claim rejected by the compiler')
+
+
 def normalize_extraction(data: dict[str, Any]) -> dict[str, Any]:
+    """Validate and canonicalise a whole Extraction Envelope.
+
+    This function owns three things and delegates the fourth:
+
+    * the **envelope** — entities, claims, events, ideas, questions;
+    * the **errors** — aggregated into one actionable ``ValueError`` per failure;
+    * the **repair-loop contract** — the message names the offending value *and*
+      the registry candidates worth trying instead, so a repair call fixes the
+      real violation rather than guessing.
+
+    What it does **not** own is claim semantics. Predicate resolution, the temporal
+    signal, claim_type / polarity / modality canonicalisation and the domain/range
+    gate all belong to ``KnowledgeCompiler.compile_extraction_claim`` — the single
+    implementation, which Correction, Research and every future producer reach
+    through the same ingress (ADR-011). Keeping a second copy here is what let the
+    extraction path skip the domain/range gate in the first place.
+    """
     out = _legacy_to_v2(data)
     for e in out['entities']:
         e['name'] = ' '.join(e['name'].split())
@@ -78,28 +153,11 @@ def normalize_extraction(data: dict[str, Any]) -> dict[str, Any]:
         e['aliases'] = list(dict.fromkeys(' '.join(a.split()) for a in e.get('aliases', []) if a.strip()))
         if not e['name'] or not e['types']:
             raise ValueError('Entity requires name and at least one type')
+    index = _entity_index(out['entities'])
     for c in out['claims']:
         c['subject'] = ' '.join(c['subject'].split())
-        candidate = c.get('predicate')
-        # Knowledge Compilation Pipeline (ADR-011): the LLM supplies a candidate,
-        # the resolver decides whether it can become a registered predicate.
-        resolution = resolve_predicate(
-            candidate,
-            text=' '.join(x for x in (c.get('content'), c.get('evidence_quote')) if x),
-            limit=4)
-        if not resolution.resolved:
-            # Registry subset (spec §5): the repair LLM sees the 2-5 closest
-            # registered predicates, never the full registry, and never gets to
-            # keep an invented predicate.
-            subset = list(resolution.candidates) or match_claim_predicates(candidate, limit=4)
-            hint = (f' Closest registered predicates: {", ".join(subset)} - use one of these.'
-                    if subset else ' Use a predicate from the schema enum.')
-            raise ValueError(f'Unsupported claim predicate: {normalize_predicate(candidate)}.{hint}')
-        c['predicate'] = resolution.predicate
-        signal = c.get('temporal_signal') or resolution.temporal_signal
-        c['temporal_signal'] = signal if signal in TEMPORAL_SIGNALS else None
-        c['claim_type'] = canonical_claim_type(c.get('claim_type'))
-        c['polarity'] = canonical_polarity(c.get('polarity'))
-        c['modality'] = canonical_modality(c.get('modality'))
+        # The canonical claim is written back onto the envelope entry: the loop owns
+        # the envelope, the compiler owns every semantic field in it.
+        c.update(_compile_claim(c, index))
     validate_extraction(out)
     return out

@@ -19,7 +19,8 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 
-from ..ontology import KNOWLEDGE_STATUSES, claim_registry_version
+from ..ontology import (KNOWLEDGE_STATUSES, canonical_claim_predicate,
+                        claim_predicate_spec, claim_registry_version)
 from ..repositories import (ClaimRepository, DocumentRepository, EntityRepository,
                             OperationRepository, RelationRepository)
 from ..resolution import resolve_or_create_entity
@@ -102,10 +103,21 @@ def _assert_claims(ctx: _Context, *claim_ids: str) -> None:
 
 
 def _new_claim(ctx: _Context) -> str:
-    """Shared claim creation for CREATE / CORRECT. Provenance is mandatory."""
+    """Shared claim creation for CREATE / CORRECT. Provenance is mandatory.
+
+    This is the last door before storage, so the ontology is re-checked *here* and
+    not only in the compiler upstream: every door may be reached directly (the
+    API, a workflow, a future agent), and a claim carrying an invented predicate
+    would contaminate the registry for every reader afterwards. A declared alias
+    is folded in — ``CEO`` is registry data, not a new predicate — while anything
+    undeclared is refused with a 422 rather than silently rewritten.
+    """
     p = ctx.payload
     subject_id = ctx.entity_for(subject_id=p.get('subject_id'), name=p.get('subject'))
-    predicate = ctx.require('predicate')
+    try:
+        predicate = canonical_claim_predicate(ctx.require('predicate'))
+    except ValueError as exc:
+        raise OperationError(str(exc)) from exc
     object_id = p.get('object_id')
     object_text = p.get('object_text')
     if not object_id and not object_text:
@@ -198,6 +210,52 @@ def _correct(ctx: _Context) -> dict:
             ctx.claims.set_status(related_id, 'superseded')
             result.update({'superseded_claim_id': related_id, 'previous_status': previous})
     return result
+
+
+@register_operation('ACCEPT')
+def _accept(ctx: _Context) -> dict:
+    """Accept a *research candidate* as knowledge: move its lifecycle, nothing else.
+
+    The operation behind 「采纳」 — a user's intent ("add this to my knowledge"), which
+    is why it is a public operation and why its target is strictly bounded. It may only
+    act on a claim that is still a proposal *and* traces back to the research that
+    proposed it:
+
+    * still ``candidate`` — accepting something already accepted (or rejected) is not
+      an intent, it is a mistake;
+    * produced by a research document — so ACCEPT cannot be used to promote arbitrary
+      extracted claims into settled knowledge;
+    * carrying evidence — a proposal nobody could look up is not one;
+    * with a registered predicate — the compiler's mark, and the only thing that makes
+      the statement expressible in the ontology at all.
+
+    It is neither CREATE nor SUPERSEDE: no content is written, and no other claim's
+    lifecycle is touched, so accepting a proposal can never retire knowledge behind the
+    user's back. Whether a disagreement becomes a conflict stays with the machinery
+    that detects it.
+    """
+    claim_id = ctx.require('claim_id')
+    _assert_claims(ctx, claim_id)
+    claim = ctx.claims.get(claim_id) or {}
+    if claim.get('status') != 'candidate':
+        raise OperationError(
+            f'Only a proposed claim can be accepted (status={claim.get("status")})')
+    document = ctx.documents.get(claim.get('source_document_id') or '') or {}
+    if document.get('source_type') != 'research':
+        raise OperationError('ACCEPT applies to research candidates only')
+    if not str(claim.get('source_quote') or '').strip():
+        raise OperationError('A candidate without evidence cannot be accepted')
+    predicate = claim.get('predicate') or ''
+    if claim_predicate_spec(predicate) is None:
+        raise OperationError(f'Unregistered claim predicate: {predicate!r}')
+
+    status = str(ctx.payload.get('status') or 'verified')
+    if status not in KNOWLEDGE_STATUSES:
+        raise OperationError(f'Unsupported claim status: {status}')
+    previous = ctx.claims.status_of(claim_id)
+    ctx.claims.set_status(claim_id, status)
+    return {'claim_id': claim_id, 'status': status, 'previous_status': previous,
+            'research_task_id': str(document.get('source_uri') or '').removeprefix('research:')}
 
 
 @register_operation('MERGE')

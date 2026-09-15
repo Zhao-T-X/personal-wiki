@@ -25,6 +25,9 @@ export interface Claim {
   source_document_id: string; source_chunk_id: string
   source_start_offset: number; source_end_offset: number; source_quote: string | null
   context?: Record<string, any>
+  /** The registry version in force when this claim was compiled (/api/claims/{id}). */
+  ontology_version?: string | null
+  created_at?: string
 }
 
 export interface Relation {

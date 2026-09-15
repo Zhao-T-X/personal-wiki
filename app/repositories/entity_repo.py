@@ -68,16 +68,72 @@ class EntityRepository(Repository):
                 'SELECT entity_id FROM entity_aliases WHERE alias_normalized=? LIMIT 1', (alias_normalized,)),
                 'entity_id')
 
+    def aliases_for(self, entity_ids: list[str]) -> dict[str, list[str]]:
+        """Declared aliases per entity — one query for a whole result set.
+
+        Search matches a claim by the names its entities are *known* by, not only
+        by the canonical one, so it needs the alias table for every entity in the
+        page at once. Batching it is what keeps "Apple CEO" from costing one
+        lookup per candidate.
+        """
+        ids = [i for i in dict.fromkeys(entity_ids) if i]
+        if not ids:
+            return {}
+        marks = ','.join('?' * len(ids))
+        with self.read() as conn:
+            found = rows(conn.execute(
+                f'SELECT entity_id, alias FROM entity_aliases WHERE entity_id IN ({marks})', ids))
+        out: dict[str, list[str]] = {}
+        for item in found:
+            out.setdefault(item['entity_id'], []).append(item['alias'])
+        return out
+
     def resolution_candidates(self, limit: int = 500) -> list[dict]:
         with self.read() as conn:
             return rows(conn.execute(
                 'SELECT id,types_json,name FROM entities ORDER BY updated_at DESC LIMIT ?', (limit,)))
 
-    def similarity_pool(self, exclude_id: str, limit: int = 800) -> list[dict]:
+    def resolve_many(self, names: list[str], limit: int = 500) -> dict[str, list[str]]:
+        """Normalized surface form -> *all* matching entity ids, in two queries.
+
+        The batch form of :func:`app.resolution.find_entity_id`, same order: exact
+        name first, then the alias table.
+
+        It returns every match rather than the best one, because "how many entities
+        claim this text?" is the question both callers actually need. A text two
+        entities both declare as an alias is exactly the case an automatic link must
+        refuse, and that distinction disappears if this collapses to one id.
+        """
+        wanted = [n for n in dict.fromkeys(names) if n][:limit]
+        if not wanted:
+            return {}
+        marks = ','.join('?' * len(wanted))
+        resolved: dict[str, list[str]] = {}
+        with self.read() as conn:
+            for item in rows(conn.execute(
+                    f'SELECT id, name FROM entities WHERE lower(name) IN ({marks})',
+                    [n.lower() for n in wanted])):
+                resolved.setdefault(item['name'].lower(), []).append(item['id'])
+            for item in rows(conn.execute(
+                    f'SELECT entity_id, alias_normalized FROM entity_aliases '
+                    f'WHERE alias_normalized IN ({marks})', wanted)):
+                found = resolved.setdefault(item['alias_normalized'], [])
+                if item['entity_id'] not in found:
+                    found.append(item['entity_id'])
+        return resolved
+
+    def similarity_pool(self, exclude_id: str | None = None, limit: int = 800) -> list[dict]:
+        """Candidate rows for name comparison (id, name, types, status).
+
+        ``exclude_id=None`` returns the whole pool, which is what a workspace-wide
+        duplicate scan needs: it compares every entity against every other one, and
+        must load the pool once rather than once per entity.
+        """
+        where, params = ('WHERE id != ?', [exclude_id]) if exclude_id else ('', [])
         with self.read() as conn:
             return rows(conn.execute(
-                'SELECT id,name,type,types_json,status FROM entities WHERE id != ? '
-                'ORDER BY updated_at DESC LIMIT ?', (exclude_id, limit)))
+                f'SELECT id,name,type,types_json,status FROM entities {where} '
+                'ORDER BY updated_at DESC LIMIT ?', (*params, limit)))
 
     def insert(self, entity_id: str, *, type: str, types: list[str], name: str,
                aliases: list[str], description: str | None, properties: dict,

@@ -76,6 +76,19 @@ class DocumentRepository(Repository):
                          (doc_id, title, content, source_type, source_uri, _hash(content), dumps(metadata or {})))
         return doc_id
 
+    def by_source_uri(self, source_uri: str) -> str | None:
+        """The document a given origin already produced, if any.
+
+        ``source_uri`` is what links a generated document to the thing that generated
+        it — a research task, for instance — so re-running a proposal updates the
+        document instead of piling up copies, and a claim's origin is a lookup rather
+        than a guess.
+        """
+        with self.read() as conn:
+            from .base import one
+            return one(conn.execute('SELECT id FROM documents WHERE source_uri=? LIMIT 1',
+                                    (source_uri,)), 'id')
+
     def get(self, doc_id: str) -> dict | None:
         with self.read() as conn:
             return row(conn.execute('SELECT * FROM documents WHERE id=?', (doc_id,)))

@@ -66,6 +66,34 @@ CREATE TABLE IF NOT EXISTS entity_aliases (
 );
 CREATE INDEX IF NOT EXISTS idx_entity_alias_normalized ON entity_aliases(alias_normalized);
 
+-- Curation decisions about *entity pairs* — what a human has decided about this
+-- wiki's own bookkeeping.
+--
+-- Not knowledge: "苹果 and 苹果公司 are not the same entity" is not a fact about the
+-- world, it is a decision about how this wiki files things, so it must never become
+-- a Claim, a Relation or a business predicate. It gets its own table because it is a
+-- *pair* with a lifecycle — symmetric, revocable, and worth a reason and a timestamp.
+--
+-- The two ids are stored in canonical (sorted) order so A↔B and B↔A are one row, and
+-- the key is the ids rather than the names so renaming or re-aliasing an entity later
+-- cannot lose the decision. ``decision`` deliberately carries no CHECK constraint: the
+-- vocabulary is expected to grow (likely_same, merge_approved), and SQLite cannot
+-- widen a CHECK without rebuilding the table — a rule that silently fails to apply to
+-- an existing database is worse than no rule.
+CREATE TABLE IF NOT EXISTS entity_curation_decisions (
+  id TEXT PRIMARY KEY,
+  entity_id_a TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+  entity_id_b TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+  decision TEXT NOT NULL,
+  reason TEXT,
+  created_by TEXT NOT NULL DEFAULT 'user',
+  trace_id TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(entity_id_a, entity_id_b, decision)
+);
+CREATE INDEX IF NOT EXISTS idx_curation_entity_a ON entity_curation_decisions(entity_id_a);
+CREATE INDEX IF NOT EXISTS idx_curation_entity_b ON entity_curation_decisions(entity_id_b);
+
 CREATE TABLE IF NOT EXISTS claims (
   id TEXT PRIMARY KEY,
   subject_id TEXT NOT NULL REFERENCES entities(id),

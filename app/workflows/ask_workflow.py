@@ -84,6 +84,52 @@ class DirectAnswer:
         }
 
 
+def supporting_knowledge(claim_ids: list[str], *, question: str = '',
+                         limit: int = 3) -> list[dict]:
+    """The few stored claims that justify an answer — the middle layer of the reply.
+
+    QA's goal is not to show how much the wiki knows; it is to make one sentence
+    believable. So this is deliberately small: claims are collapsed to one entry per
+    asserted fact, ranked current-first, and capped. Everything else stays one click
+    away behind 「查看全部依据」.
+
+    The shape is the shared read model, not a QA-specific one: the answer is prose and
+    the support is the same knowledge view Search and the knowledge page render, so the
+    same fact cannot look like two different things depending on where you met it.
+
+    Batched: one read for the claims, one for their open disputes. Never per claim.
+    """
+    from ..readmodels.knowledge_view import (best_per_statement, predicate_keywords,
+                                             rank_key, relevance)
+    from ..retrieval import _terms
+
+    ids = [i for i in dict.fromkeys(claim_ids) if i]
+    if not ids:
+        return []
+    claims_repo = ClaimRepository()
+    claims = claims_repo.by_ids(ids)
+    if not claims:
+        return []
+    disputed = claims_repo.disputed_claim_ids([str(c.get('id')) for c in claims])
+    terms = _terms(question)
+    scores = {
+        str(claim.get('id')): relevance(claim, terms,
+                                        keywords=predicate_keywords(claim.get('predicate') or ''))
+        for claim in claims
+    }
+    views = best_per_statement(claims, disputed_ids=disputed, scores=scores,
+                               evidence={str(c.get('id')): _evidence_for(c) for c in claims})
+    views.sort(key=rank_key)
+    return [v.to_dict() for v in views[:limit]]
+
+
+def _evidence_for(claim: dict) -> dict:
+    """Where a supporting claim came from, so the answer stays traceable."""
+    return {'chunk_id': claim.get('source_chunk_id'),
+            'document_id': claim.get('source_document_id'),
+            'document_title': claim.get('title')}
+
+
 def _resolve_subject(question: str) -> dict | None:
     """The longest known entity name that literally occurs in the question.
 

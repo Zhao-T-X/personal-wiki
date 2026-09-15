@@ -2,16 +2,20 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import cytoscape from 'cytoscape'
-import { api, post, postForm, del } from '../api/client'
+import { api, post, del } from '../api/client'
 import { TYPE_COLORS, DEFAULT_NODE_COLOR } from '../utils/graph'
 import type { DocumentRow, Chunk, Entity, EventRow } from '../api/types'
+import ImportPanel from '../components/ImportPanel.vue'
+import KnowledgeCard from '../components/KnowledgeCard.vue'
 import SegTabs from '../components/SegTabs.vue'
 import StatusTag from '../components/StatusTag.vue'
 import MarkdownView from '../components/MarkdownView.vue'
 import AppDrawer from '../components/AppDrawer.vue'
 import AppModal from '../components/AppModal.vue'
 import EmptyState from '../components/EmptyState.vue'
+import IntegrityPanel from '../components/IntegrityPanel.vue'
 import { useAppStore } from '../stores/app'
+import { toCard } from '../utils/claim'
 import { fmtDateTime } from '../utils/time'
 
 const route = useRoute()
@@ -26,10 +30,17 @@ watch(() => route.query.tab, t => {
 })
 watch(tab, t => { if (t === '图谱') setTimeout(drawGraph, 50) })
 
-/* ---------- global search（接回 /api/search） ---------- */
+/* ---------- 搜索：先给知识，再给原文 ----------
+ *
+ * 召回没有变（FTS5 + 语义 + RRF 仍然找 chunk），变的是呈现顺序：`/api/search/knowledge`
+ * 在同一批召回之上投影出「知识库里现在记着的事」，并带上它的状态与依据。原文仍然
+ * 完整返回在 results 里，只是退到第二层——用户搜到的东西不该是一条片段，而是答案。
+ */
 const searchQ = ref((route.query.q as string) || '')
 const searching = ref(false)
 const searchResults = ref<any[]>([])
+/** Projected claims for the same query — the knowledge layer. */
+const searchKnowledge = ref<any[]>([])
 let searchTimer: number | undefined
 /** Why a result matched — replaces the raw RRF score, which told users nothing. */
 const MATCH_LABEL: Record<string, string> = { title: '标题命中', content: '正文命中', semantic: '语义相近' }
@@ -41,10 +52,13 @@ watch(searchQ, () => {
 
 async function runSearch() {
   const q = searchQ.value.trim()
-  if (!q) { searchResults.value = []; return }
+  if (!q) { searchResults.value = []; searchKnowledge.value = []; return }
   searching.value = true
   try {
-    searchResults.value = await api<any[]>(`/api/search?q=${encodeURIComponent(q)}&limit=20&semantic=true`)
+    const body = await api<{ knowledge: any[]; results: any[] }>(
+      `/api/search/knowledge?q=${encodeURIComponent(q)}&limit=20&semantic=true`)
+    searchKnowledge.value = body.knowledge || []
+    searchResults.value = body.results || []
   } catch (e: any) { store.toast(e.message) } finally { searching.value = false }
 }
 
@@ -65,6 +79,12 @@ const entityOffset = ref(0)
 
 const drawerDoc = ref<DocumentRow | null>(null)
 const drawerChunks = ref<Chunk[]>([])
+const drawerKnowledge = ref<any>(null)
+/** The drawer's rows go through the same normaliser every other surface uses, so
+    there is one answer to "what does a claim look like in this product". */
+const drawerCards = computed(() => (drawerKnowledge.value?.claims || [])
+  .slice(0, 20)
+  .map((c: any) => toCard(c, { documentId: drawerDoc.value?.id })))
 const showNew = ref(false)
 const showNewEntity = ref(false)
 const newTitle = ref(''); const newBody = ref(''); const newType = ref('note')
@@ -110,6 +130,7 @@ const groupedEvents = computed(() => {
 
 async function loadAll() { await Promise.all([loadDocs(), loadEntities(), loadEvents()]) }
 onMounted(async () => {
+  void store.loadPendingReview()
   await loadAll()
   if (searchQ.value) runSearch()
   if (tab.value === '图谱') setTimeout(drawGraph, 50)
@@ -120,6 +141,9 @@ watch(() => route.query.doc, d => { if (d) openSource(d as string, route.query.c
 async function openDoc(d: DocumentRow) {
   drawerDoc.value = await api<DocumentRow>('/api/documents/' + d.id)
   drawerChunks.value = await api<Chunk[]>('/api/documents/' + d.id + '/chunks')
+  // 「这篇产生了什么知识」比原文更该先看到——抽屉的默认内容不该是 raw markdown。
+  try { drawerKnowledge.value = await api<any>('/api/documents/' + d.id + '/knowledge') }
+  catch { drawerKnowledge.value = null }
 }
 
 /* ---------- source jump (?doc=&chunk=) ---------- */
@@ -198,136 +222,16 @@ async function saveEvent() {
   } catch (e: any) { store.toast(e.message) }
 }
 /* ---------- import pipeline ----------
-   导入是产品第一印象：不只 toast 一句「已导入」，而是展示处理到哪一步、最后发现了什么。
-   支持拖拽与多文件；文件串行处理——并发抽取会争抢 SQLite 写锁，也会同时打满模型配额。 */
-type StageState = 'pending' | 'active' | 'done' | 'failed'
-interface ImportStage { key: string; label: string; state: StageState }
-interface ImportItem {
-  title: string
-  documentId: string
-  stages: ImportStage[]
-  counts: Record<string, number> | null
-  chunks: number | null
-  error: string
+   导入是产品第一印象，所以它由 ImportPanel 提供：首页和这里用的是同一个组件、
+   同一条流水线（import → parse → chunk → analyze，串行）。
+   同一件事不能有两套实现、两种行为——这里只负责「抽完之后这一页要跟着更新」。 */
+const importer = ref<any>(null)
+async function onImported(documentId: string) {
+  await loadAll()
+  if (drawerDoc.value?.id === documentId) await openDoc(drawerDoc.value)
 }
-const importQueue = ref<ImportItem[]>([])
-const importing = ref(false)
-const dragOver = ref(false)
-const fileInput = ref<HTMLInputElement | null>(null)
-
-function newStages(): ImportStage[] {
-  return [
-    { key: 'import', label: '读取文件', state: 'pending' },
-    { key: 'parse', label: '解析内容', state: 'pending' },
-    { key: 'chunk', label: '切分片段', state: 'pending' },
-    { key: 'analyze', label: '抽取知识', state: 'pending' },
-  ]
-}
-
-function setStage(item: ImportItem, key: string, state: StageState) {
-  const stage = item.stages.find(s => s.key === key)
-  if (stage) stage.state = state
-}
-
-const IMPORT_COUNTS: { key: string; label: string }[] = [
-  { key: 'entities', label: '实体' },
-  { key: 'claims', label: '断言' },
-  { key: 'relations', label: '关系' },
-  { key: 'events', label: '事件' },
-  { key: 'ideas', label: '想法' },
-  { key: 'questions', label: '问题' },
-]
-/** Only non-zero counts: a row of zeroes is noise, not a result. */
-function foundCounts(item: ImportItem) {
-  const c = item.counts
-  if (!c) return []
-  return IMPORT_COUNTS.map(m => ({ ...m, value: c[m.key] || 0 })).filter(m => m.value > 0)
-}
-function pendingOf(item: ImportItem) {
-  const c = item.counts
-  if (!c) return 0
-  return (c.entities || 0) + (c.claims || 0) + (c.relations || 0)
-}
-const totalPending = computed(() => importQueue.value.reduce((n, i) => n + pendingOf(i), 0))
-const finishedCount = computed(() => importQueue.value.filter(i => i.counts || i.error).length)
-
-/** One file, end to end. Kept separate so the queue can drive them serially. */
-async function processFile(item: ImportItem, file: File) {
-  try {
-    const fd = new FormData(); fd.append('file', file)
-    const doc = await postForm<{ id: string; title: string }>('/api/documents/import', fd)
-    item.documentId = doc.id
-    item.title = doc.title || file.name
-    setStage(item, 'import', 'done')
-    setStage(item, 'parse', 'done')
-
-    // Chunking is local and instant, so it always runs.
-    setStage(item, 'chunk', 'active')
-    const local = await post<{ chunks: number }>(`/api/documents/${doc.id}/index/local`)
-    item.chunks = local.chunks
-    setStage(item, 'chunk', 'done')
-  } catch (e: any) {
-    item.error = e.message
-    const active = item.stages.find(s => s.state === 'active')
-    if (active) active.state = 'failed'
-    return
-  }
-
-  if (!store.health) await store.loadHealth()
-  if (!store.health?.llm_configured) {
-    item.error = '未配置语言模型，已完成分块。配置模型后可运行「Index with LLM」抽取知识。'
-    return
-  }
-
-  // Extraction is the slow step; RunProgress (global) shows the live batch counter.
-  setStage(item, 'analyze', 'active')
-  store.beginExtraction(item.documentId, item.title)
-  try {
-    const r = await post<{ counts: Record<string, number> }>(`/api/documents/${item.documentId}/index`)
-    store.clearExtraction()
-    item.counts = r.counts
-    setStage(item, 'analyze', 'done')
-  } catch (e: any) {
-    store.clearExtraction()
-    setStage(item, 'analyze', 'failed')
-    item.error = e.message
-  }
-  if (drawerDoc.value?.id === item.documentId) await openDoc(drawerDoc.value)
-}
-
-/** Serial by design: parallel extraction fights over the SQLite write lock. */
-async function importFiles(files: File[]) {
-  if (!files.length || importing.value) return
-  const items: ImportItem[] = files.map(f => ({
-    title: f.name, documentId: '', stages: newStages(), counts: null, chunks: null, error: '',
-  }))
-  importQueue.value = items
-  importing.value = true
-  try {
-    for (const [i, file] of files.entries()) {
-      setStage(items[i], 'import', 'active')
-      await processFile(items[i], file)
-    }
-  } finally {
-    importing.value = false
-    await loadAll()
-  }
-}
-
-function onFilePick(ev: Event) {
-  const input = ev.target as HTMLInputElement
-  const files = Array.from(input.files || [])
-  input.value = ''   // allow picking the same file twice
-  void importFiles(files)
-}
-
-function onDrop(ev: DragEvent) {
-  dragOver.value = false
-  void importFiles(Array.from(ev.dataTransfer?.files || []))
-}
-
-function closeQueue() {
-  importQueue.value = []
+function openDocById(documentId: string) {
+  void openDoc({ id: documentId } as DocumentRow)
 }
 
 /* ---------- graph ---------- */
@@ -360,14 +264,41 @@ const showAllDocs = computed(() => docLimit.value >= docTotal.value)
 <template>
   <div class="page">
     <div class="askbox" style="margin-bottom:16px">
-      <input v-model="searchQ" placeholder="全库搜索：正文 / 实体 / 文档（FTS5 + 语义 + RRF）…" />
+      <input v-model="searchQ" placeholder="搜索：知识 / 正文 / 实体 / 文档…" />
       <span v-if="searching" class="tag blue" style="margin-right:6px">搜索中…</span>
       <button class="go" title="转为提问" @click="router.push({ path: '/qa', query: { q: searchQ } })">◎</button>
     </div>
 
-    <!-- search results -->
-    <div v-if="searchQ.trim()" class="panel pad" style="padding:6px;margin-bottom:16px">
-      <div class="sechead" style="margin:4px 6px 8px"><h3>搜索结果</h3><span class="faint" style="font-size:9px">{{ searchResults.length }} 条 · 点击查看来源文档</span></div>
+    <!-- 审核不再是侧栏的一项，但它必须找得到：有事就在知识页说一句，没事就不出现 -->
+    <div v-if="store.pendingReview" class="panel pad dueline" @click="router.push('/review')">
+      <span class="dico">⚠</span>
+      <b>{{ store.pendingReview }} 条候选知识等你确认</b>
+      <span class="faint" style="font-size:10px">确认之后它们才会被当作可信知识</span>
+      <div class="grow"></div>
+      <span class="faint" style="font-size:10px">开始确认 →</span>
+    </div>
+
+    <!-- 知识体检：发现 → 影响 → 确认 → 结果。合并后立即重跑搜索，
+         因为「后台修好了但搜索还显示旧状态」和没修一样糟。 -->
+    <IntegrityPanel @changed="runSearch" />
+
+    <!-- 搜索结果：知识是第一层，原文是它的依据 -->
+    <div v-if="searchQ.trim()" class="panel pad" style="margin-bottom:16px">
+      <template v-if="searchKnowledge.length">
+        <div class="sechead" style="margin:0 0 10px">
+          <h3>知识</h3>
+          <span class="faint" style="font-size:9px">{{ searchKnowledge.length }} 条 · 知识库里现在记着的事</span>
+        </div>
+        <div class="khits">
+          <KnowledgeCard v-for="k in searchKnowledge" :key="k.claim_id" :claim="toCard(k)"
+                         :evidence-count="k.sources" compact />
+        </div>
+      </template>
+
+      <div class="sechead" :style="searchKnowledge.length ? 'margin:16px 0 8px' : 'margin:0 0 8px'">
+        <h3>{{ searchKnowledge.length ? '相关原文' : '搜索结果' }}</h3>
+        <span class="faint" style="font-size:9px">{{ searchResults.length }} 条 · 点击查看来源文档</span>
+      </div>
       <div v-for="(r, i) in searchResults" :key="i" class="item" @click="openResult(r)">
         <div class="ico-badge ib-blue">⌕</div>
         <div class="grow">
@@ -387,64 +318,13 @@ const showAllDocs = computed(() => docLimit.value >= docTotal.value)
 
     <!-- 文档 -->
     <div v-if="tab === '文档'">
-      <!-- 拖拽导入：一次可以拖入多个文件 -->
-      <div v-if="!importQueue.length"
-           class="dropzone" :class="{ over: dragOver }"
-           @dragover.prevent="dragOver = true"
-           @dragleave.prevent="dragOver = false"
-           @drop.prevent="onDrop"
-           @click="fileInput?.click()">
-        <div style="font-size:12.5px;font-weight:650">把文件拖到这里导入</div>
-        <div style="margin-top:6px;line-height:1.7">
-          支持 Markdown / TXT / HTML，可一次拖入多个文件<br />
-          导入后会自动分块并抽取知识，抽完再让你审核
-        </div>
-      </div>
-
-      <!-- 导入队列：每个文件一行，展示处理到哪一步、发现了什么 -->
-      <div v-if="importQueue.length" class="panel pad" style="margin-bottom:16px">
-        <div class="row">
-          <b style="font-size:12px">
-            <template v-if="importing">正在处理 {{ Math.min(finishedCount + 1, importQueue.length) }} / {{ importQueue.length }}</template>
-            <template v-else>已处理 {{ importQueue.length }} 个文件</template>
-          </b>
-          <div class="grow"></div>
-          <button v-if="totalPending" class="btn primary sm" @click="router.push('/review')">
-            去审核这 {{ totalPending }} 项 →
-          </button>
-          <button class="btn sm ghost" :disabled="importing" @click="closeQueue">关闭</button>
-        </div>
-
-        <div v-for="(item, i) in importQueue" :key="i" class="impitem">
-          <div class="ico-badge" :class="item.error ? 'ib-amber' : item.counts ? 'ib-mint' : 'ib-blue'">▤</div>
-          <div class="grow">
-            <b>{{ item.title }}</b>
-            <div class="ifsteps">
-              <div v-for="s in item.stages" :key="s.key" class="ifstep" :class="s.state">
-                <span class="ifdot">{{ s.state === 'done' ? '✓' : s.state === 'failed' ? '×' : s.state === 'active' ? '◌' : '·' }}</span>
-                <span>{{ s.label }}</span>
-                <span v-if="s.key === 'chunk' && item.chunks" class="tag">{{ item.chunks }} 片段</span>
-              </div>
-            </div>
-            <p v-if="item.error" class="muted" style="font-size:9px;margin:9px 0 0">{{ item.error }}</p>
-            <div v-else-if="foundCounts(item).length" class="ifcounts" style="margin-top:11px">
-              <div v-for="c in foundCounts(item)" :key="c.key" class="ifcount">
-                <b>{{ c.value }}</b><span>{{ c.label }}</span>
-              </div>
-            </div>
-            <div v-if="item.documentId && item.counts" style="margin-top:10px">
-              <button class="btn sm" @click="openDoc({ id: item.documentId } as DocumentRow)">查看原文</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <input ref="fileInput" type="file" multiple accept=".md,.markdown,.txt,.html,.htm" style="display:none" @change="onFilePick" />
+      <!-- 导入口与首页是同一个组件、同一份实现 -->
+      <ImportPanel ref="importer" @imported="onImported" @open-document="openDocById" />
 
       <div class="sechead"><h3>Documents <span class="faint" style="font-weight:400;font-size:9px">· {{ docs.length }}/{{ docTotal }}</span></h3>
         <span class="row" style="gap:8px">
           <button class="btn" :disabled="embedding" @click="backfillEmbeddings">{{ embedding ? '嵌入中…' : '⚡ 生成全部嵌入' }}</button>
-          <button class="btn" :disabled="importing" @click="fileInput?.click()">＋ 导入</button>
+          <button class="btn" @click="importer?.pick()">＋ 导入</button>
           <button class="btn primary" @click="showNew = true">＋ 新建文档</button>
         </span>
       </div>
@@ -522,6 +402,20 @@ const showAllDocs = computed(() => docLimit.value >= docTotal.value)
           <button class="btn" @click="actDoc(drawerDoc, 'embed')">Embeddings</button>
           <button class="btn danger" @click="actDoc(drawerDoc, 'delete')">删除</button>
         </div>
+        <!-- 这篇产生的知识。文档抽屉 = 该文档作用域的视图，不是"知识库首页"。 -->
+        <div v-if="drawerKnowledge?.claims?.length" style="margin:14px 0 4px">
+          <div class="sechead" style="margin-top:0">
+            <h3>这篇产生的知识</h3>
+            <span class="tag" style="margin:0">{{ drawerKnowledge.counts.claims }}</span>
+          </div>
+          <div class="dkl">
+            <KnowledgeCard v-for="c in drawerCards" :key="c.id" :claim="c" compact />
+          </div>
+          <p v-if="drawerKnowledge.counts.claims > drawerCards.length" class="faint" style="font-size:9.5px;margin:7px 0 0">
+            另有 {{ drawerKnowledge.counts.claims - drawerCards.length }} 条未在此列出。
+          </p>
+        </div>
+
         <details ref="chunksBox" style="margin:10px 0">
           <summary style="cursor:pointer;font-size:10px;color:var(--sub)">Chunks ({{ drawerChunks.length }})</summary>
           <div v-for="c in drawerChunks" :key="c.id" class="listitem chunk" :class="{ hl: c.id === highlightChunk }" style="margin-top:6px">
@@ -569,27 +463,14 @@ const showAllDocs = computed(() => docLimit.value >= docTotal.value)
 </template>
 
 <style scoped>
+/* 知识层：搜索结果的第二层（原文）是它的依据，所以两张卡之间留出呼吸感 */
+.khits{display:grid;gap:10px}
+.dueline{display:flex;align-items:center;gap:10px;margin-bottom:16px;cursor:pointer}
+.dueline:hover{background:var(--surface2)}
+.dico{color:var(--amber)}
 /* Chunk that a question/answer pointed at via ?doc=&chunk= */
 .chunk.hl{border-color:#bcd0ff;background:var(--tint-blue);box-shadow:0 0 0 3px rgba(91,124,255,.12)}
-/* 导入 pipeline */
-.ifsteps{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
-.ifstep{display:flex;align-items:center;gap:6px;padding:6px 11px;border-radius:10px;background:var(--surface2);font-size:9.5px;color:var(--sub)}
-.ifstep.done{color:#1e8f6b;background:var(--tint-mint)}
-.ifstep.active{color:#4a63e8;background:var(--tint-blue)}
-.ifstep.failed{color:#c8565f;background:#fff0f1}
-.ifdot{font-size:10px;line-height:1}
-.ifcounts{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:10px}
-.ifcount{padding:11px 13px;background:var(--surface2);border-radius:11px}
-.ifcount b{display:block;font-size:20px;letter-spacing:-.03em}
-.ifcount span{font-size:9px;color:var(--sub)}
-/* 拖拽导入区 + 导入队列 */
-.dropzone{
-  border:2px dashed var(--line);border-radius:16px;padding:26px 20px;text-align:center;
-  color:var(--sub);font-size:10px;margin-bottom:16px;cursor:pointer;transition:.16s;
-  background:rgba(255,255,255,.5);
-}
-.dropzone:hover{border-color:#c6d3ee;background:#fafcff}
-.dropzone.over{border-color:#5b7cff;background:var(--tint-blue);color:#4a63e8}
-.impitem{display:flex;gap:11px;padding:13px 0;border-top:1px solid var(--hair)}
-.impitem:first-of-type{border-top:0;padding-top:6px}
+/* 抽屉里的知识卡：竖排、留白收紧，一屏能扫过多条 */
+.dkl{display:grid;gap:8px}
+/* 导入管道相关的样式随组件一起搬到了 ImportPanel.vue（一份实现，一份样式） */
 </style>

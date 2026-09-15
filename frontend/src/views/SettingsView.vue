@@ -101,6 +101,11 @@ async function exportAll() {
 
     <div class="sechead" style="max-width:760px"><h3>高级</h3><span class="faint" style="font-size:9px;font-weight:400">实现细节</span></div>
     <div class="panel pad" style="padding:6px;max-width:760px">
+      <!-- 日常使用不需要它；排障和调 Prompt 时需要。关掉只是不占位置，功能仍在。 -->
+      <div class="setting" style="padding:11px 12px">
+        <div><b>Developer Mode</b><small>在侧栏显示 Agent 工作台与评测</small></div>
+        <div class="switch" :class="{ on: store.developerMode }" @click="store.setDeveloperMode(!store.developerMode)"></div>
+      </div>
       <div class="item" @click="router.push('/settings/database')">
         <div class="ico-badge ib-violet">◉</div>
         <div class="grow"><b>Database</b><p>SQLite · 表计数 · 完整性检查</p></div><span class="faint">→</span>

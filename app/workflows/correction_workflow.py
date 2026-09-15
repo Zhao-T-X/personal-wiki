@@ -21,11 +21,12 @@ from ..chunking import chunk_text
 from ..claim_relations import compare_claim
 from ..db import loads, transaction
 from ..domain.claim_evolution import evolution_reason, supersede_recommended
-from ..domain.compiler import REJECTED, ClaimDraft, KnowledgeCompiler
+from ..domain.compiler import REJECTED, ClaimDraft, CompileResult, KnowledgeCompiler
 from ..domain.operations import OperationError, OperationRequest, run
 from ..domain.predicate_resolver import TEMPORAL_SIGNALS, resolve_predicate
 from ..ontology import match_claim_predicates
 from ..repositories import ClaimRepository, DocumentRepository, EntityRepository
+from ..resolution import find_entity_id
 
 # Most significant relationship first (matches app/claim_relations._PRIORITY).
 _PRIORITY = {'duplicate': 0, 'supersedes': 1, 'contradicts': 2, 'coexists': 3}
@@ -42,6 +43,12 @@ class CorrectionIntent:
     predicate_candidate: str = ''        # what the LLM proposed, verbatim
     temporal_signal: str | None = None
     predicate_resolution: dict | None = None
+    # Carried so a correction can express the *same* draft an extraction would: a
+    # route that silently hardcoded these would compile to a different canonical
+    # claim than the other entries for the very same input.
+    claim_type: str = 'factual'
+    modality: str = 'asserted'
+    context: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -147,7 +154,11 @@ def _intent_from_data(text: str, data: dict) -> CorrectionIntent | None:
                             predicate=resolution.predicate or '',
                             object=obj, polarity=polarity, confidence=confidence,
                             predicate_candidate=candidate, temporal_signal=signal,
-                            predicate_resolution=resolution.to_dict())
+                            predicate_resolution=resolution.to_dict(),
+                            claim_type=str(data.get('claim_type') or 'factual').strip().lower(),
+                            modality=str(data.get('modality') or 'asserted').strip().lower(),
+                            context=(data.get('context') if isinstance(data.get('context'), dict)
+                                     else {}))
 
 
 def intent_from_draft(text: str, draft: dict) -> CorrectionIntent | None:
@@ -184,13 +195,37 @@ async def parse_intent(text: str) -> CorrectionIntent | None:
 
 
 def _entity_types(name: str) -> list[str]:
-    """Declared entity types for a name (empty when unknown — unknown is not illegal)."""
-    if not name:
+    """Declared entity types for a name (empty when unknown — unknown is not illegal).
+
+    Looked up through the shared resolver, alias table included, so a sentence
+    phrased with an alias ("苹果" for "苹果公司") is still checked against the
+    relation's domain/range instead of silently passing as unconstrained.
+    """
+    entity_id = find_entity_id(None, name=name)
+    if not entity_id:
         return []
-    row = EntityRepository().by_name(name)
+    row = EntityRepository().get_raw(entity_id)
     if not row:
         return []
     return [str(t) for t in loads(row.get('types_json') or '[]', [])]
+
+
+def compile_intent(intent: CorrectionIntent) -> CompileResult:
+    """The correction route into the compiler — the same door extraction uses.
+
+    The intent already carries a *resolved* predicate (``intent_from_draft`` ran the
+    resolver), so this compiles the canonical draft and answers, in one place, both
+    "is this claim legal?" and "what exactly is the canonical claim?". Every field
+    the correction eventually writes comes from here, which is what makes a
+    correction and an extraction of the same draft compile to the same claim.
+    """
+    return KnowledgeCompiler().compile_claim(ClaimDraft(
+        subject=intent.subject, predicate_candidate=intent.predicate,
+        object=intent.object, claim_type=intent.claim_type, polarity=intent.polarity,
+        modality=intent.modality, temporal_signal=intent.temporal_signal,
+        context=intent.context, confidence=intent.confidence,
+        subject_types=_entity_types(intent.subject),
+        object_types=_entity_types(intent.object)))
 
 
 def _domain_range_violation(intent: CorrectionIntent) -> str | None:
@@ -203,10 +238,7 @@ def _domain_range_violation(intent: CorrectionIntent) -> str | None:
     """
     if not intent.predicate or not intent.object:
         return None
-    result = KnowledgeCompiler().compile_claim(ClaimDraft(
-        subject=intent.subject, predicate_candidate=intent.predicate,
-        object=intent.object, subject_types=_entity_types(intent.subject),
-        object_types=_entity_types(intent.object)))
+    result = compile_intent(intent)
     if result.status == REJECTED and 'domain_range_violation' in result.reasons:
         return 'domain_range_violation'
     return None
@@ -226,8 +258,11 @@ def build_plan(text: str, intent: CorrectionIntent) -> CorrectionPlan:
     Does not write anything — creating a missing entity is deferred to
     :func:`apply_correction`, so a plan can be shown to the user first.
     """
-    subject_row = EntityRepository().by_name(intent.subject)
-    subject_id = subject_row['id'] if subject_row else None
+    # Resolution, not a name lookup: a subject phrased with an alias ("苹果" for
+    # "苹果公司") must reach the entity's real claims, or the correction looks
+    # brand-new and is filed beside the fact it was meant to correct. Read-only,
+    # so the plan is still safe to show before anything is written.
+    subject_id = find_entity_id(None, name=intent.subject)
 
     # Ontology gate: without a compiled predicate there is no knowledge to plan.
     # Refusing here is the point — creating a claim with an invented predicate
@@ -441,13 +476,17 @@ def apply_correction(plan: CorrectionPlan, *, relationship: str | None = None,
     intent = plan.intent
     if plan.blocked:
         raise OperationError('谓词未能映射到受控词表，纠正未执行：本体封闭，不允许创建新谓词。')
-    # Defence in depth: re-check even on the /apply path (manual entry included),
-    # so no route can persist an unregistered predicate.
-    resolution = resolve_predicate(intent.predicate)
-    if not resolution.resolved or not resolution.predicate:
+    # Defence in depth: re-compile even on the /apply path (manual entry included).
+    # Two things are guaranteed at once — no route can persist an unregistered
+    # predicate, and what is written is the *compiled* claim rather than an
+    # ad-hoc reassembly of the intent's fields.
+    compiled = compile_intent(intent)
+    if not compiled.ok or compiled.claim is None:
         raise OperationError(
-            f'"{intent.predicate}" 不是已注册的谓词：本体封闭，不允许创建或写入新谓词。')
-    predicate = resolution.predicate
+            f'"{intent.predicate or intent.predicate_candidate}" 不是已注册的谓词：'
+            f'本体封闭，不允许创建或写入新谓词（{", ".join(compiled.reasons) or compiled.resolution.reason}）。')
+    claim = compiled.claim
+    predicate = claim.predicate
     relationship = plan.relationship if relationship is None else relationship
     related_claim_id = plan.related_claim_id if related_claim_id is None else related_claim_id
     if apply_supersede is None:
@@ -462,10 +501,23 @@ def apply_correction(plan: CorrectionPlan, *, relationship: str | None = None,
         if not chunks:
             raise OperationError('Correction text produced no chunk')
         chunk = chunks[0]
+        # The temporal signal and the model's raw candidate travel in the claim's
+        # context — the same place the extraction path puts them (app/knowledge.py).
+        # Without this, the reason a supersede happened ("new") would live only in
+        # the plan, which is discarded once it has been applied, and the stored
+        # claim could not explain why it replaced its predecessor. Context is used
+        # rather than a column so the predicate stays canonical with no migration.
+        context = dict(claim.context)
+        if claim.temporal_signal:
+            context.setdefault('temporal_signal', claim.temporal_signal)
+        if intent.predicate_candidate and intent.predicate_candidate != predicate:
+            context.setdefault('predicate_candidate', intent.predicate_candidate)
         payload = {
-            'subject': intent.subject, 'predicate': predicate,
-            'object': intent.object, 'content': intent.text,
-            'polarity': intent.polarity, 'confidence': intent.confidence,
+            'subject': claim.subject, 'predicate': predicate,
+            'object': claim.object, 'content': intent.text,
+            'claim_type': claim.claim_type, 'polarity': claim.polarity,
+            'modality': claim.modality, 'confidence': claim.confidence,
+            'context': context,
             'source_document_id': document_id, 'source_chunk_id': chunk['id'],
             'source_start_offset': chunk['start_offset'], 'source_end_offset': chunk['end_offset'],
             'source_quote': intent.text,

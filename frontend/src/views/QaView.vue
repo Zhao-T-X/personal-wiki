@@ -3,6 +3,9 @@ import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api, post } from '../api/client'
 import type { Run } from '../api/types'
+import CorrectionFlow from '../components/CorrectionFlow.vue'
+import KnowledgeCard from '../components/KnowledgeCard.vue'
+import { toCard } from '../utils/claim'
 import StatusTag from '../components/StatusTag.vue'
 import DataTable from '../components/DataTable.vue'
 import RunDrawer from '../components/RunDrawer.vue'
@@ -22,10 +25,24 @@ const question = ref((route.query.q as string) || '')
 
 /* knowledge mode */
 const loading = ref(false)
-const result = ref<{ answer: string; evidence: any[]; citations: any[] } | null>(null)
+/** 答案 / 支持知识 / 依据 —— 三层，顺序就是可信度的展示顺序。
+ *
+ *  ``knowledge`` 是**佐证**，不是答案：答案是句子，卡片是事实。把答案渲染成卡片会
+ *  让用户自己猜哪一行才是回答。 */
+const result = ref<{ answer: string; evidence: any[]; citations: any[]; knowledge?: any[] } | null>(null)
 /** Citation Validation report for the last answer (POST /api/qa/validate). */
 const validation = ref<any>(null)
 const validating = ref(false)
+
+/* 「这条有问题」：答案旁边的纠正入口。打开后由 CorrectionFlow 负责
+   分析 → 建议 → 确认，这里只负责把它放在答案该在的位置。 */
+const fixOpen = ref(false)
+function onCorrected(r: any) {
+  fixOpen.value = false
+  store.toast('知识已更新 · 再问一次会得到新答案', {
+    label: '看这条知识', run: () => { if (r?.claim_id) router.push('/knowledge/claim/' + r.claim_id) },
+  })
+}
 
 /* agent mode */
 const agentLoading = ref(false)
@@ -223,6 +240,34 @@ const columns = [
           知识库里没有找到支持这个回答的片段。答案可能来自模型的通用知识，请谨慎采信，或先导入相关文档。
         </div>
 
+        <!-- 产品闭环的最后一环：答案不对 → 就地改一句话。
+             用户不会想到「我要去知识纠正」，他只会想「这个回答不对」，
+             所以入口必须长在答案旁边，而不是一个叫 Correction 的页面。 -->
+        <div v-if="result && !loading" class="fixline">
+          <button class="btn sm ghost" @click="fixOpen = !fixOpen">
+            {{ fixOpen ? '收起' : '这条有问题' }}
+          </button>
+          <span v-if="!fixOpen" class="faint" style="font-size:9.5px">答案与事实不符时，直接改掉它</span>
+        </div>
+        <CorrectionFlow v-if="fixOpen" compact :seed="question"
+                        style="margin-top:10px" @applied="onCorrected" />
+
+        <!-- 支持知识：答案下面是「凭什么」，但只给最少的那几条。
+             卡片本身自带 [依据][历史][纠正]，所以每条支持知识都能直接追查或就地纠正
+             —— 而纠正的对象是这条知识，不是那句话。 -->
+        <template v-if="result?.knowledge?.length">
+          <div class="sechead" style="margin-top:16px">
+            <h3>支持知识</h3>
+            <span class="faint" style="font-size:9px;font-weight:400">
+              {{ result?.knowledge?.length }} 条 · 让这个答案站得住的事实
+            </span>
+          </div>
+          <div class="ksupport">
+            <KnowledgeCard v-for="k in (result?.knowledge || [])" :key="k.claim_id"
+                           :claim="toCard(k)" :evidence-count="k.sources" compact />
+          </div>
+        </template>
+
         <div v-if="validation" class="sechead" style="margin-top:14px">
           <h3>引用校验</h3>
           <span class="tag" :class="'g-' + validation.grade" style="margin:0">{{ validation.grade }} · {{ Math.round(validation.overall * 100) }}%</span>
@@ -253,7 +298,7 @@ const columns = [
 
       <div class="grid g2" style="margin-top:16px" v-if="result && mode === 'knowledge'">
         <div>
-          <div class="sechead"><h3>证据 <span class="faint" style="font-weight:400;font-size:9px">· {{ result.evidence.length }} sources</span></h3></div>
+          <div class="sechead"><h3>全部依据 <span class="faint" style="font-weight:400;font-size:9px">· {{ result.evidence.length }} sources · 需要深入时再看</span></h3></div>
           <div class="panel pad" style="padding:6px">
             <div v-for="(e, i) in result.evidence" :key="i" class="item" style="cursor:pointer" title="打开来源文档并定位到该片段" @click="openEvidence(e)">
               <span class="tag blue" style="flex:none">{{ i + 1 }}</span>
@@ -338,4 +383,8 @@ const columns = [
 .glist li em{font-style:normal;margin-left:6px;font-size:9px}
 .g-A{background:#3aa76d;color:#fff}.g-B{background:#5b9bd5;color:#fff}
 .g-C{background:#e0a93b;color:#fff}.g-D{background:#d9695a;color:#fff}
+/* 答案 → 纠正：一个动作，不是一次跳转 */
+.fixline{display:flex;align-items:center;gap:10px;margin-top:12px;padding-top:11px;border-top:1px solid var(--hair)}
+/* 支持知识：几张卡，不是一面墙 */
+.ksupport{display:grid;gap:9px}
 </style>

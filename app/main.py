@@ -9,13 +9,18 @@ from .config import runtime, save_settings
 from .db import init_db, loads, dumps, transaction
 from .models import (AskRequest, DocumentCreate, StatusUpdate, SearchRequest, EntityUpdate,
                      EntityCreate, IdeaCreate, QuestionCreate, EventCreate, ResearchCreate,
-                     CorrectionRequest, CorrectionApplyRequest, CitationValidateRequest)
+                     CorrectionRequest, CorrectionApplyRequest, CitationValidateRequest,
+                     MergeRequest, ObjectLinkRequest, CurationDecisionRequest,
+                     IntentRequest)
 from .service import create_document, index_document, embed_document, delete_document
-from .retrieval import evidence_pack, format_evidence, search, lexical_search
+from .retrieval import (evidence_pack, format_evidence, lexical_search, search,
+                        search_knowledge)
 from .llm import answer
-from .ontology import (KNOWLEDGE_STATUSES, IDEA_STATUSES, QUESTION_STATUSES,
-                       canonical_entity_type, normalize_name)
+from .ontology import (CLAIM_PREDICATES, KNOWLEDGE_STATUSES, IDEA_STATUSES,
+                       QUESTION_STATUSES, canonical_entity_type, claim_predicate_spec,
+                       claim_registry_version, normalize_name)
 from .importer import SUPPORTED
+from .domain.claim_history import order_chain
 from .graph import neighborhood
 from .resolution import find_similar_entities
 from .prompt_profiles import list_profiles, get_profile, update_profile, reset_profile, restore_version
@@ -201,6 +206,54 @@ def claim_relations_for(claim_id:str):
     expressed — including whether a newer claim supersedes this one.
     """
     return {'claim_id':claim_id,'relations':ClaimRepository().relations_for_claim(claim_id)}
+
+
+@app.get('/api/claims/{claim_id}/history')
+def claim_history(claim_id:str):
+    """One fact's evolution, oldest first — what it used to say, and when that changed.
+
+    Composed entirely from stored facts: the accepted supersede relations give the
+    order *and* the moment each statement stopped holding, and the claim rows give
+    the values plus their evidence. Nothing is inferred or reconstructed — which is
+    only possible because superseding moves a lifecycle status instead of deleting
+    the row (ADR-005). The seed may be any member of the chain, since a caller
+    arriving from search has no idea where in the timeline it landed.
+    """
+    claims = ClaimRepository()
+    claim = claims.get(claim_id)
+    if not claim: raise HTTPException(404,'Claim not found')
+    edges = claims.supersede_edges(claim['subject_id'], claim['predicate'])
+    chain = order_chain(edges, claim_id)
+    superseded_at = {e['target_claim_id']: e['created_at'] for e in edges}
+    superseded_by = {e['target_claim_id']: e['source_claim_id'] for e in edges}
+    corroboration = claims.corroboration_counts(chain.ordered_ids)
+
+    nodes = []
+    for cid in chain.ordered_ids:
+        row = claims.get(cid) or {}
+        nodes.append({
+            'id': cid,
+            'subject': row.get('subject_name') or '',
+            'predicate': row.get('predicate') or '',
+            'predicate_label': _predicate_label(row.get('predicate')),
+            'object': row.get('object_name') or row.get('object_text') or '',
+            'status': row.get('status'),
+            # 生效期间: from when the statement was written until the moment a later
+            # one was accepted. The newest member has no end yet.
+            'effective_from': row.get('created_at'),
+            'effective_to': superseded_at.get(cid),
+            'superseded_by': superseded_by.get(cid),
+            'source_quote': row.get('source_quote'),
+            'source_document_id': row.get('source_document_id'),
+            'source_chunk_id': row.get('source_chunk_id'),
+            # 依据: its own quote, plus every accepted duplicate — the same statement
+            # asserted by another source.
+            'sources': (1 if row.get('source_quote') else 0) + corroboration.get(cid, 0),
+            'corroborating': corroboration.get(cid, 0),
+            'is_current': cid == chain.current_id,
+        })
+    return {'claim_id': claim_id, 'current_id': chain.current_id, 'cycles': chain.cycles,
+            'superseded_count': chain.superseded_count, 'chain': nodes}
 
 @app.get('/api/claim-relations')
 def claim_relations_queue(status:str|None=None,limit:int=100):
@@ -445,6 +498,112 @@ def api_search(q:str,limit:int=10,semantic:bool=True):
 @app.post('/api/search')
 def post_search(req:SearchRequest): return search(req.query,req.limit,req.semantic)
 
+
+@app.get('/api/search/knowledge')
+def api_search_knowledge(q:str,limit:int=8,semantic:bool=True):
+    """Search, presented as knowledge rather than as passages.
+
+    ``/api/search`` is left exactly as it was — a flat list of chunks, which the
+    knowledge space and the command palette both read — and this sits beside it as
+    the product-level view over the same recall: the knowledge first, the passages
+    it came from second. Two shapes, two addresses, so no caller has to special-case
+    the other's format.
+    """
+    if not q.strip(): return {'knowledge':[],'results':[]}
+    return search_knowledge(q,max(1,min(limit,50)),semantic=semantic)
+
+@app.post('/api/onebox/intent')
+def onebox_intent(req:IntentRequest):
+    """One entry point in front of four workflows that already exist.
+
+    Read-only and side-effect free: it returns the intent, how confident the reading
+    is, why, and the *existing* endpoint(s) that would carry it out. Whether to act is
+    the caller's decision — which is what makes a wrong reading cheap to fix: nothing
+    has been written, so the user can re-route without retyping anything.
+
+    Deliberately no model call. The sentence's own shape, plus the registry-driven
+    signals the query router already extracts, decide this — asking a model here would
+    make One Box the slowest way to use the wiki.
+    """
+    from .intent import classify
+    return classify(req.text,context_claim_id=req.context_claim_id).to_dict()
+
+
+@app.get('/api/integrity/scan')
+def integrity_scan(duplicates:int=20,unlinked:int=50):
+    """What looks wrong in the knowledge base right now — candidates, not verdicts.
+
+    Read-only and side-effect free: nothing here changes knowledge, it only reports
+    what a person may want to look at. Both findings are L2 — explained, then
+    confirmed by the user — so this endpoint never repairs anything by itself.
+    """
+    from .integrity import scan as integrity_scan_rows
+    return integrity_scan_rows(duplicate_limit=max(1,min(duplicates,100)),
+                              unlinked_limit=max(1,min(unlinked,200)))
+
+
+@app.get('/api/integrity/merge-impact')
+def integrity_merge_impact(keep:str,drop:str):
+    """Dry run: what merging these two entities would move, and what it would disturb.
+
+    Includes the conflicts that would *appear* as a result. Merging does not reconcile
+    facts, so the user is told before confirming — not after.
+    """
+    from .integrity import merge_impact
+    try: return merge_impact(keep_id=keep,drop_id=drop)
+    except ValueError as exc: raise HTTPException(404,str(exc)) from exc
+
+
+@app.post('/api/integrity/merge')
+def integrity_merge(req:MergeRequest):
+    """Confirm a merge, then report what it disturbed.
+
+    One subject for two rows, nothing else: claims keep their content, status and
+    evidence, and no winner is chosen between conflicting facts. The response carries
+    the post-merge recheck, because the conflicts this creates are a result of the
+    operation rather than a separate thing to remember.
+    """
+    from .integrity import merge_entities
+    try: return merge_entities(keep_id=req.keep_id,drop_id=req.drop_id)
+    except ValueError as exc: raise HTTPException(422,str(exc)) from exc
+
+
+@app.get('/api/integrity/curation')
+def curation_decisions(limit:int=100):
+    """What has been decided about the wiki's own bookkeeping, newest first.
+
+    Not knowledge — see app/repositories/curation_repo.py. Listed so a decision can be
+    seen and taken back: a judgement made once is not permanent truth.
+    """
+    from .integrity import curation_decisions as rows_
+    return rows_(limit=max(1,min(limit,500)))
+
+
+@app.post('/api/integrity/curation')
+def curation_decide(req:CurationDecisionRequest):
+    """Remember that two entities are not the same thing, so the scan stops asking."""
+    from .integrity import record_not_same
+    try:
+        return record_not_same(entity_id_a=req.entity_id_a,entity_id_b=req.entity_id_b,
+                               reason=req.reason or None)
+    except ValueError as exc: raise HTTPException(422,str(exc)) from exc
+
+
+@app.delete('/api/integrity/curation/{decision_id}')
+def curation_revoke(decision_id:str):
+    """Undo a curation decision. The pair goes back to being an ordinary candidate."""
+    from .integrity import revoke_curation
+    try: return revoke_curation(decision_id)
+    except ValueError as exc: raise HTTPException(404,str(exc)) from exc
+
+
+@app.post('/api/integrity/object-links')
+def integrity_object_links(req:ObjectLinkRequest):
+    """Link free-text objects to entities that already exist (never creates one)."""
+    from .integrity import apply_object_links
+    return apply_object_links(min_confidence=req.min_confidence,limit=max(1,min(req.limit,500)))
+
+
 @app.get('/api/documents/{doc_id}/chunks')
 def document_chunks(doc_id: str):
     documents=DocumentRepository()
@@ -453,6 +612,76 @@ def document_chunks(doc_id: str):
         # Distinguish a valid empty/unindexed doc from missing doc.
         raise HTTPException(404,'Document not found')
     return rows
+
+
+def _predicate_label(predicate: str | None) -> str | None:
+    """The registry's label for a predicate, or ``None`` when it declares none.
+
+    ``has_ceo`` renders as 首席执行官 instead of the raw identifier. Predicates
+    without a label stay raw on purpose: inventing a translation in the API layer
+    would be a second vocabulary, and the registry is its only home (ADR-011).
+    """
+    spec = claim_predicate_spec(predicate or '')
+    return spec.label if spec else None
+
+
+@app.get('/api/ontology/predicates')
+def ontology_predicates():
+    """The registry's *display layer*: what each predicate is called in words.
+
+    Any surface that shows a claim needs to name its predicate, and there are many
+    such surfaces. Shipping the labels once — instead of repeating a
+    ``predicate_label`` field on every claim-shaped response — keeps the vocabulary
+    in a single place; a frontend map of its own would be a second ontology, and a
+    per-endpoint copy would drift from the registry one response at a time.
+
+    Labels are display metadata only. Code always branches on the predicate itself.
+    """
+    labels: dict[str, str | None] = {}
+    for predicate in sorted(CLAIM_PREDICATES):
+        spec = claim_predicate_spec(predicate)
+        labels[predicate] = spec.label if spec else None
+    return {'version': claim_registry_version(), 'labels': labels}
+
+
+@app.get('/api/documents/{doc_id}/knowledge')
+def document_knowledge(doc_id: str):
+    """What this document contributed — the answer to "so what did it read out of it?"
+
+    Composed from existing reads only: nothing is inferred, and the names are taken
+    from the claims themselves, so this view can never disagree with the knowledge
+    base — it *is* the knowledge base, filtered to one document.
+
+    ``predicate_label`` is the registry's own label (``None`` when the registry
+    declares none). It travels from the registry so no surface has to keep a
+    second vocabulary of predicate names.
+    """
+    if not DocumentRepository().exists(doc_id):
+        raise HTTPException(404,'Document not found')
+    claims = ClaimRepository().for_document(doc_id, limit=200)
+    names: list[str] = []
+    seen: set[str] = set()
+    for c in claims:
+        for n in (c.get('subject_name'), c.get('object_name')):
+            if n and n not in seen:
+                seen.add(n); names.append(n)
+    return {
+        'document_id': doc_id,
+        'names': names,
+        'claims': [{
+            'id': c.get('id'), 'subject': c.get('subject_name') or '',
+            'predicate': c.get('predicate'),
+            'predicate_label': _predicate_label(c.get('predicate')),
+            'object': c.get('object_name') or c.get('object_text') or '',
+            'status': c.get('status'), 'confidence': c.get('confidence'),
+            'quote': c.get('source_quote'),
+        } for c in claims],
+        'counts': {
+            'claims': len(claims),
+            'names': len(names),
+            'pending': sum(1 for c in claims if c.get('status') == 'candidate'),
+        },
+    }
 
 @app.get('/api/entities')
 def entities(limit:int=100,offset:int=0,status:str|None=None,type:str|None=None,q:str|None=None):
@@ -530,6 +759,40 @@ def create_event(payload:EventCreate):
 @app.get('/api/research')
 def research_list(limit:int=50):
     return ResearchRepository().list(max(1,min(limit,200)))
+
+@app.get('/api/research/{task_id}')
+def research_detail(task_id:str):
+    """One research task, with the knowledge its question bears on.
+
+    Findings stay prose (that is what research produces); ``knowledge`` is the middle
+    layer — the related claims with their state, projected through the shared read
+    model so a card here reads exactly like a card anywhere else. The pending ones are
+    the point: they are what the research is still waiting on, and their cards offer
+    [采纳] rather than [纠正].
+
+    Fetched on demand rather than for every task in the list, so a long list of tasks
+    still costs one request.
+    """
+    from .service import research_candidates
+    task=ResearchRepository().get(task_id)
+    if not task: raise HTTPException(404,'Research task not found')
+    return {**task,'knowledge':research_candidates(task_id)}
+
+
+@app.post('/api/research/{task_id}/candidates')
+async def research_propose_candidates(task_id:str):
+    """Turn a task's findings into proposed knowledge — compiled, not pasted.
+
+    The findings become a document, the extraction pipeline reads it, and whatever it
+    can ground in a quote lands as a ``candidate`` claim: 研究候选, waiting for a human.
+    Nothing writes a claim from prose directly — this is the same path every other
+    document takes, which is exactly why a research candidate can be trusted no further
+    than its evidence.
+    """
+    from .service import propose_research_candidates
+    try: return await propose_research_candidates(task_id)
+    except ValueError as exc: raise HTTPException(422,str(exc)) from exc
+
 
 @app.post('/api/research')
 def research_create(payload:ResearchCreate):
@@ -690,8 +953,8 @@ def ask(req:AskRequest):
     from .runlog import record_run
     from .retrieval import entity_summaries, evidence_hits
     from .domain.query_router import FACT_LOOKUP, STRUCTURED_REASONING
-    from .workflows.ask_workflow import (ANSWERED, plan_question, try_direct_answer,
-                                         try_historical_answer)
+    from .workflows.ask_workflow import (ANSWERED, plan_question, supporting_knowledge,
+                                         try_direct_answer, try_historical_answer)
     from .context import COMPILER, PLANNER
     from .context.providers import (EntitySummary, EvidenceHit, EvidenceProvider,
                                     KnowledgeProvider, ProviderRegistry, apply_escalation,
@@ -716,8 +979,13 @@ def ask(req:AskRequest):
             run.summary={'question':req.question[:200], 'route':direct.route,
                          'lookup':lookup, 'answer_chars':len(reply or ''),
                          'evidence_count':len(direct.citations), 'llm_calls':0}
+        # The answer keeps being prose; the support is the shared knowledge view, so a
+        # 0-LLM lookup states exactly which stored claim it read instead of asking the
+        # reader to trust a sentence with nothing behind it.
+        direct_claims=[direct.claim['claim_id']] if direct.claim else []
         return {'question':req.question,'answer':reply,'citations':direct.citations,
                 'evidence':direct.evidence,'answer_value':direct.answer_value,
+                'knowledge':supporting_knowledge(direct_claims,question=req.question),
                 'route':direct.route,'lookup':lookup,'status':direct.status,'direct':True,
                 'reason':direct.reason,'llm_expected':False}
 
@@ -730,7 +998,7 @@ def ask(req:AskRequest):
                 step.output='No matching evidence was found in the knowledge base.'
             run.summary={'question':req.question[:200],'answer_chars':0,'evidence_count':0}
         return {'question':req.question,'answer':_NO_EVIDENCE_REPLY,'citations':[],'evidence':[],
-                'route':route_plan.route,'status':'no_evidence','direct':False,
+                'knowledge':[],'route':route_plan.route,'status':'no_evidence','direct':False,
                 'llm_expected':route_plan.llm_expected}
 
     apply_escalation(hits)
@@ -744,8 +1012,12 @@ def ask(req:AskRequest):
     try: response=answer(req.question, compiled.context, context=compiled)
     except RuntimeError as exc: raise HTTPException(503,str(exc)) from exc
     citations=[{'document_id':h.document_id,'chunk_id':h.chunk_id,'title':h.title,'start_offset':h.start_offset,'end_offset':h.end_offset} for h in hits]
+    # The claims the retrieved chunks were read for — collapsed to one entry per fact,
+    # current first, and capped. The answer stays the answer; this is what backs it.
+    cited_claims=[str(c.get('id')) for h in raw for c in (h.get('claims') or []) if c.get('id')]
     return {'question':req.question,'answer':response,'citations':citations,
             'evidence':[h.to_response() for h in hits],
+            'knowledge':supporting_knowledge(cited_claims,question=req.question),
             'route':route_plan.route,'direct':False,
             'llm_expected':route_plan.llm_expected,
             'context':{'tokens':compiled.total_tokens,'budget':compiled.plan.hard_budget,

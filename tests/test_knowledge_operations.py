@@ -69,7 +69,7 @@ def test_create_operation_writes_claim_and_audit(tmp_path):
     from app.repositories.operation_repo import OperationRepository
 
     with transaction() as conn:
-        result = _create(conn, doc_id, chunk_id, subject='OpenAI', predicate='ceo_of', obj='Alice')
+        result = _create(conn, doc_id, chunk_id, subject='OpenAI', predicate='has_ceo', obj='Alice')
 
     claim_id = result.affected['claim_id']
     claim = ClaimRepository().get(claim_id)
@@ -105,9 +105,9 @@ def test_supersede_moves_only_lifecycle_and_records_previous_status(tmp_path):
     from app.repositories.claim_repo import ClaimRepository
 
     with transaction() as conn:
-        old = _create(conn, doc_id, chunk_id, subject='OpenAI', predicate='ceo_of', obj='Sam') \
+        old = _create(conn, doc_id, chunk_id, subject='OpenAI', predicate='has_ceo', obj='Sam') \
             .affected['claim_id']
-        new = _create(conn, doc_id, chunk_id, subject='OpenAI', predicate='ceo_of', obj='Alice') \
+        new = _create(conn, doc_id, chunk_id, subject='OpenAI', predicate='has_ceo', obj='Alice') \
             .affected['claim_id']
         result = run(OperationRequest(kind='SUPERSEDE',
                                       payload={'new_claim_id': new, 'old_claim_id': old}), conn)
@@ -129,7 +129,7 @@ def test_archive_and_restore_round_trip(tmp_path):
 
     with transaction() as conn:
         claims = ClaimRepository(conn)
-        claim_id = _create(conn, doc_id, chunk_id, subject='OpenAI', predicate='ceo_of',
+        claim_id = _create(conn, doc_id, chunk_id, subject='OpenAI', predicate='has_ceo',
                            obj='Alice').affected['claim_id']
         run(OperationRequest(kind='ARCHIVE', payload={'claim_id': claim_id}), conn)
         assert claims.status_of(claim_id) == 'archived'
@@ -146,9 +146,9 @@ def test_merge_links_and_archives_the_duplicate(tmp_path):
     from app.repositories.claim_repo import ClaimRepository
 
     with transaction() as conn:
-        keep = _create(conn, doc_id, chunk_id, subject='OpenAI', predicate='ceo_of',
+        keep = _create(conn, doc_id, chunk_id, subject='OpenAI', predicate='has_ceo',
                        obj='Alice').affected['claim_id']
-        drop = _create(conn, doc_id, chunk_id, subject='OpenAI', predicate='ceo_of',
+        drop = _create(conn, doc_id, chunk_id, subject='OpenAI', predicate='has_ceo',
                        obj='Alice').affected['claim_id']
         result = run(OperationRequest(kind='MERGE',
                                       payload={'keep_claim_id': keep, 'merge_claim_id': drop}), conn)
@@ -172,6 +172,52 @@ def test_unknown_operation_is_rejected(tmp_path):
             pass
 
 
+def test_declared_alias_is_canonicalised(tmp_path):
+    """A registry alias is ontology data, so a write may fold it in.
+
+    "CEO" is declared as an alias of `has_ceo`, so accepting it invents nothing —
+    the same way `canonical_claim_type` accepts "definition" for "definitional".
+    """
+    doc_id, chunk_id = _seed(tmp_path)
+    from app.db import transaction
+    from app.repositories.claim_repo import ClaimRepository
+
+    with transaction() as conn:
+        claim_id = _create(conn, doc_id, chunk_id, subject='OpenAI', predicate='CEO',
+                           obj='Alice').affected['claim_id']
+
+    assert ClaimRepository().get(claim_id)['predicate'] == 'has_ceo'
+
+
+def test_unregistered_predicate_never_persists(tmp_path):
+    """The last gate: no route may write a predicate the registry does not declare.
+
+    ``new_ceo`` is not an alias — "new" is a temporal signal, and its fix belongs
+    in the compiler (``PredicateResolver``), not in storage. Reaching an Operation
+    with it means a route skipped compilation, so the write is *refused* rather
+    than quietly repaired: a gate that fixed it up would hide the very defect it
+    exists to catch (ONTOLOGY MUTATION POLICY rule 8).
+    """
+    doc_id, chunk_id = _seed(tmp_path)
+    from app.db import transaction
+    from app.domain.operations import OperationError, OperationRequest, run
+    from app.repositories.claim_repo import ClaimRepository
+    from app.repositories.operation_repo import OperationRepository
+
+    before = ClaimRepository().count()
+    with transaction() as conn:
+        try:
+            run(OperationRequest(kind='CREATE', payload={
+                'subject': '苹果公司', 'predicate': 'new_ceo', 'object': '约翰·特努斯',
+                'source_document_id': doc_id, 'source_chunk_id': chunk_id}), conn)
+            raise AssertionError('an unregistered predicate should be refused')
+        except OperationError as exc:
+            assert 'new_ceo' in str(exc)
+
+    assert ClaimRepository().count() == before
+    assert OperationRepository().count() == 0     # the refusal was not audited as applied
+
+
 def test_failed_operation_leaves_no_trace(tmp_path):
     doc_id, chunk_id = _seed(tmp_path)
     from app.db import transaction
@@ -180,7 +226,7 @@ def test_failed_operation_leaves_no_trace(tmp_path):
     from app.repositories.operation_repo import OperationRepository
 
     with transaction() as conn:
-        old = _create(conn, doc_id, chunk_id, subject='OpenAI', predicate='ceo_of',
+        old = _create(conn, doc_id, chunk_id, subject='OpenAI', predicate='has_ceo',
                       obj='Sam').affected['claim_id']
         try:
             # SUPERSEDE pointing at a claim that does not exist -> raises, transaction rolls back.

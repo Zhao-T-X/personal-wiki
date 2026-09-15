@@ -7,8 +7,9 @@ from ..cache import EpochCache
 from ..db import dumps, loads
 from .base import Repository, one, row, rows
 
-# Retrieval's compact claim shape (with subject/object names).
-_CLAIM_COLUMNS = '''c.content,c.source_quote,c.predicate,c.polarity,c.modality,c.confidence,c.status,
+# Retrieval's compact claim shape (with subject/object names, and its own id so a
+# caller can always link back to the claim it is showing).
+_CLAIM_COLUMNS = '''c.id,c.content,c.source_quote,c.predicate,c.polarity,c.modality,c.confidence,c.status,
                     c.context_json,s.name subject_name,o.name object_name,c.object_text'''
 
 _JOIN_NAMES = '''FROM claims c JOIN entities s ON s.id=c.subject_id
@@ -78,6 +79,170 @@ class ClaimRepository(Repository):
                 f'SELECT {_CLAIM_COLUMNS} {_JOIN_NAMES} '
                 "WHERE c.source_chunk_id=? AND c.status!='rejected' ORDER BY c.confidence DESC LIMIT ?",
                 (chunk_id, limit)))]
+
+    def claims_for_chunks(self, chunk_ids: list[str]) -> list[dict]:
+        """Every claim extracted from these chunks — one query, not one per chunk.
+
+        The batched counterpart of :meth:`for_chunk`. A knowledge search projects a
+        whole page of recalled chunks at once, and asking per chunk would turn a
+        single lookup into ten. What the projection needs is carried explicitly
+        (ids, chunk, timestamp) rather than reused from the compact retrieval shape.
+        """
+        ids = [i for i in dict.fromkeys(chunk_ids) if i]
+        if not ids:
+            return []
+        marks = ','.join('?' * len(ids))
+        with self.read() as conn:
+            return [_decode(c) for c in rows(conn.execute(
+                f'''SELECT c.id,c.subject_id,c.predicate,c.object_id,c.object_text,c.content,
+                           c.source_quote,c.confidence,c.status,c.created_at,
+                           c.source_chunk_id,c.source_document_id,c.context_json,
+                           s.name subject_name,o.name object_name
+                    {_JOIN_NAMES}
+                    WHERE c.source_chunk_id IN ({marks}) AND c.status!='rejected'
+                    ORDER BY c.confidence DESC''', ids))]
+
+    def unlinked_object_claims_for_document(self, document_id: str) -> list[dict]:
+        """This document's claims whose object is still free text.
+
+        The pipeline-scoped form of :meth:`unlinked_object_claims`: an automatic link
+        belongs where its cause is, so it asks about the claims that were just written
+        rather than about the whole wiki.
+        """
+        with self.read() as conn:
+            return rows(conn.execute(
+                '''SELECT c.id,c.subject_id,c.predicate,c.object_text,c.content,
+                          c.source_chunk_id,s.name subject_name
+                   FROM claims c JOIN entities s ON s.id=c.subject_id
+                   WHERE c.source_document_id=? AND c.object_id IS NULL
+                     AND TRIM(COALESCE(c.object_text,'')) != '' AND c.status != 'rejected' ''',
+                (document_id,)))
+
+    def candidates_for_document(self, document_id: str) -> list[dict]:
+        """The still-unaccepted claims that came out of one document.
+
+        Used as *provenance*, not similarity: "which knowledge did this research task
+        propose?" is answered by where the claims came from, so the answer cannot
+        include loosely related knowledge from elsewhere.
+        """
+        with self.read() as conn:
+            return [_decode(c) for c in rows(conn.execute(
+                f'''SELECT c.id,c.subject_id,c.predicate,c.object_id,c.object_text,c.content,
+                           c.source_quote,c.confidence,c.status,c.created_at,c.context_json,
+                           c.source_chunk_id,c.source_document_id,
+                           s.name subject_name,o.name object_name
+                    {_JOIN_NAMES}
+                    WHERE c.source_document_id=? AND c.status='candidate'
+                    ORDER BY c.confidence DESC''', (document_id,)))]
+
+    def by_ids(self, claim_ids: list[str]) -> list[dict]:
+        """Full claim rows (with subject/object names) for many ids, in one query.
+
+        An answer names the claims that justify it; reading them one at a time would
+        make a three-claim answer cost three round trips for no reason.
+        """
+        ids = [i for i in dict.fromkeys(claim_ids) if i]
+        if not ids:
+            return []
+        marks = ','.join('?' * len(ids))
+        with self.read() as conn:
+            return [_decode(c) for c in rows(conn.execute(
+                f'''SELECT c.id,c.subject_id,c.predicate,c.object_id,c.object_text,c.content,
+                           c.source_quote,c.confidence,c.status,c.created_at,c.context_json,
+                           c.source_chunk_id,c.source_document_id,
+                           s.name subject_name,o.name object_name
+                    {_JOIN_NAMES} WHERE c.id IN ({marks})''', ids))]
+
+    def claims_touching(self, entity_ids: list[str]) -> list[dict]:
+        """Claims whose subject *or* object is one of these entities — one query.
+
+        Used to work out what an entity merge would move, so the answer must include
+        both sides: a claim that merely *mentions* the entity is affected too.
+        """
+        ids = [i for i in dict.fromkeys(entity_ids) if i]
+        if not ids:
+            return []
+        marks = ','.join('?' * len(ids))
+        with self.read() as conn:
+            return rows(conn.execute(
+                f'''SELECT c.id,c.subject_id,c.object_id,c.object_text,c.predicate,c.status,
+                           c.confidence,c.content,c.source_quote,c.source_document_id,c.source_chunk_id,
+                           s.name subject_name,o.name object_name
+                    {_JOIN_NAMES}
+                    WHERE c.subject_id IN ({marks}) OR c.object_id IN ({marks})''',
+                (*ids, *ids)))
+
+    def unlinked_object_claims(self, limit: int = 200) -> list[dict]:
+        """Current claims whose object is free text that never resolved to an entity.
+
+        These are the claims that name a thing without *linking* to it — they cannot
+        participate in the graph, cannot be compared to other claims, and cannot be
+        found by entity. Not an error: extraction legitimately produces literals. The
+        question the integrity check asks is narrower — is there an entity this text
+        already refers to?
+        """
+        with self.read() as conn:
+            return rows(conn.execute(
+                '''SELECT c.id,c.subject_id,c.predicate,c.object_text,c.content,c.status,
+                          c.confidence,c.source_document_id,c.source_chunk_id,s.name subject_name
+                   FROM claims c JOIN entities s ON s.id=c.subject_id
+                   WHERE c.object_id IS NULL AND TRIM(COALESCE(c.object_text,'')) != ''
+                     AND c.status != 'rejected'
+                   ORDER BY c.created_at DESC LIMIT ?''', (max(1, limit),)))
+
+    def claim_counts_by_entity(self, entity_ids: list[str]) -> dict[str, int]:
+        """How many claims reference each entity (either end), in one query.
+
+        The number that tells an integrity scan which of two similar names is worth
+        looking at: merging two entities nobody has said anything about changes no
+        knowledge, and reporting such a pair is the fastest way to teach someone to
+        ignore the report.
+        """
+        ids = [i for i in dict.fromkeys(entity_ids) if i]
+        if not ids:
+            return {}
+        marks = ','.join('?' * len(ids))
+        with self.read() as conn:
+            found = rows(conn.execute(
+                f'''SELECT entity_id, COUNT(*) n FROM (
+                        SELECT subject_id AS entity_id FROM claims
+                         WHERE subject_id IN ({marks}) AND status != 'rejected'
+                        UNION ALL
+                        SELECT object_id AS entity_id FROM claims
+                         WHERE object_id IN ({marks}) AND status != 'rejected')
+                    GROUP BY entity_id''', (*ids, *ids)))
+        return {r['entity_id']: r['n'] for r in found}
+
+    def repoint_entity(self, from_id: str, to_id: str) -> int:
+        """Move every reference to one entity onto another. Returns rows touched.
+
+        Claims are *not* rewritten in meaning: only the id they point at changes, so a
+        merge can never alter what the wiki asserts — it changes which subject the
+        statement is filed under. That separation is why merging two entities can
+        surface a conflict but can never resolve one.
+        """
+        with self.write() as conn:
+            moved = conn.execute('UPDATE claims SET subject_id=? WHERE subject_id=?',
+                                 (to_id, from_id)).rowcount
+            moved += conn.execute('UPDATE claims SET object_id=? WHERE object_id=?',
+                                  (to_id, from_id)).rowcount
+            return moved
+
+    def link_objects(self, links: list[tuple[str, str]]) -> int:
+        """Attach free-text objects to entities that already exist, in one write.
+
+        ``object_text`` is deliberately left in place: this records *what the text
+        referred to*, it does not rewrite what was written. Only claims that are still
+        unlinked are touched (``object_id IS NULL``), so a second confirmation cannot
+        overwrite a link a human chose in between.
+        """
+        if not links:
+            return 0
+        with self.write() as conn:
+            return sum(
+                conn.execute('UPDATE claims SET object_id=? WHERE id=? AND object_id IS NULL',
+                             (entity_id, claim_id)).rowcount
+                for claim_id, entity_id in links)
 
     def for_document(self, document_id: str, limit: int = 40) -> list[dict]:
         with self.read() as conn:
@@ -256,6 +421,64 @@ class ClaimRepository(Repository):
                    WHERE r.source_claim_id=? OR r.target_claim_id=?
                    ORDER BY r.created_at DESC''', (claim_id, claim_id, claim_id)))
 
+    # -- evolution ---------------------------------------------------------
+    def supersede_edges(self, subject_id: str, predicate: str) -> list[dict]:
+        """Accepted SUPERSEDE pairs for one ``(subject, predicate)`` — a chain's edges.
+
+        Scoped to a single fact on purpose: a supersede chain *is* one relation
+        evolving over time, so bounding the query this way keeps the walk small and
+        avoids dragging in relations that merely happen to touch the claim.
+        """
+        with self.read() as conn:
+            return rows(conn.execute(
+                '''SELECT r.source_claim_id, r.target_claim_id, r.created_at
+                   FROM claim_relations r JOIN claims sc ON sc.id = r.source_claim_id
+                   WHERE r.relationship='supersedes' AND r.status='accepted'
+                     AND sc.subject_id=? AND sc.predicate=?''', (subject_id, predicate)))
+
+    def corroboration_counts(self, claim_ids: list[str]) -> dict[str, int]:
+        """Accepted DUPLICATE relations per claim — the same assertion, other sources.
+
+        A duplicate relation means "the same statement, asserted again", so counting
+        them answers "how many sources back this claim?" without the claim gaining a
+        column it would then have to keep in sync with the relations table.
+        """
+        ids = [i for i in claim_ids if i]
+        if not ids:
+            return {}
+        marks = ','.join('?' * len(ids))
+        with self.read() as conn:
+            found = rows(conn.execute(
+                f'''SELECT CASE WHEN source_claim_id IN ({marks}) THEN source_claim_id
+                                ELSE target_claim_id END AS claim_id, COUNT(*) n
+                    FROM claim_relations
+                    WHERE relationship='duplicate' AND status='accepted'
+                      AND (source_claim_id IN ({marks}) OR target_claim_id IN ({marks}))
+                    GROUP BY claim_id''', (*ids, *ids, *ids)))
+        return {r['claim_id']: r['n'] for r in found}
+
+    def disputed_claim_ids(self, claim_ids: list[str]) -> set[str]:
+        """Claims carrying an *unadjudicated* contradiction — "we are not sure yet".
+
+        Only ``candidate`` relations count. A contradiction a human accepted is a
+        judgement that the two statements really do conflict, and both stay
+        presentable; a pending one means the question is still open, which is
+        precisely what a reader has to be warned about before trusting the row.
+        """
+        ids = [i for i in dict.fromkeys(claim_ids) if i]
+        if not ids:
+            return set()
+        marks = ','.join('?' * len(ids))
+        with self.read() as conn:
+            found = rows(conn.execute(
+                f'''SELECT DISTINCT CASE WHEN source_claim_id IN ({marks}) THEN source_claim_id
+                                         ELSE target_claim_id END AS id
+                    FROM claim_relations
+                    WHERE relationship='contradicts' AND status='candidate'
+                      AND (source_claim_id IN ({marks}) OR target_claim_id IN ({marks}))''',
+                (*ids, *ids, *ids)))
+        return {r['id'] for r in found}
+
     def relation_queue(self, status: str | None, limit: int) -> list[dict]:
         sql = '''SELECT r.id,r.relationship,r.confidence,r.reason,r.suggested_action,r.status,r.created_by,r.created_at,
                         ns.id new_id,ns.predicate new_predicate,ns.content new_content,ns.object_text new_object_text,
@@ -333,3 +556,38 @@ class ClaimRepository(Repository):
                           c.source_document_id,c.source_chunk_id,s.name subject_name,o.name object_name
                    FROM claims c JOIN entities s ON s.id=c.subject_id LEFT JOIN entities o ON o.id=c.object_id
                    WHERE c.subject_id=? OR c.object_id=? LIMIT ?''', (entity_id, entity_id, limit)))
+
+    # -- registry migration (a vocabulary fix, not a knowledge edit) -------
+    #
+    # The domain forbids editing a claim's content (ADR-009): a correction creates a
+    # *new* claim and a relation. Moving a legacy claim onto the predicate it always
+    # meant is a different act — the subject, object, polarity, evidence and
+    # lifecycle are untouched, and the move is recorded in the audit trail. These
+    # three methods exist only for that, and no domain rule may call them.
+
+    def predicate_census(self) -> dict[str, int]:
+        """How many claims are stored under each predicate value."""
+        with self.read() as conn:
+            return {r['predicate']: r['n'] for r in rows(conn.execute(
+                'SELECT predicate, COUNT(*) n FROM claims GROUP BY predicate'))}
+
+    def claims_with_predicate(self, predicate: str) -> list[dict]:
+        """Every claim recorded under one predicate value, oldest first."""
+        with self.read() as conn:
+            return rows(conn.execute(
+                'SELECT id, context_json FROM claims WHERE predicate=? ORDER BY created_at',
+                (predicate,)))
+
+    def set_predicate(self, claim_id: str, predicate: str, *,
+                      context: dict | None = None) -> int:
+        """Point one claim at a registered predicate. Migration only.
+
+        Passing ``context`` replaces ``context_json`` — the caller owns the merge,
+        because only the caller knows which signal it is preserving.
+        """
+        with self.write() as conn:
+            if context is None:
+                return conn.execute('UPDATE claims SET predicate=? WHERE id=?',
+                                    (predicate, claim_id)).rowcount
+            return conn.execute('UPDATE claims SET predicate=?, context_json=? WHERE id=?',
+                                (predicate, dumps(context or {}), claim_id)).rowcount

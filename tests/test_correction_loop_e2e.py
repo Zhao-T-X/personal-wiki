@@ -142,6 +142,12 @@ def test_e2e_new_ceo_supersedes_and_qa_reflects_it(tmp_path):
     assert new['predicate'] == 'has_ceo'
     assert claims.status_of(new_id) == 'candidate'
 
+    # The decision that drove the supersede is stored *with* the claim, so it can
+    # still be explained after the plan is gone. It is recorded as context — never
+    # smuggled back into the predicate name, which stays canonical.
+    assert new['context']['temporal_signal'] == 'new'
+    assert new['context']['predicate_candidate'] == 'new_ceo'
+
     # 9. State resolver: history kept, exactly one current value.
     rows = claims.related(subject_id=seed['apple'], predicate='has_ceo',
                           exclude_id='', limit=10)

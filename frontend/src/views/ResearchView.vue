@@ -9,7 +9,9 @@ import KpiStrip from '../components/KpiStrip.vue'
 import FlowSteps from '../components/FlowSteps.vue'
 import EmptyState from '../components/EmptyState.vue'
 import MarkdownView from '../components/MarkdownView.vue'
+import KnowledgeCard from '../components/KnowledgeCard.vue'
 import { useAppStore } from '../stores/app'
+import { toCard } from '../utils/claim'
 import { fmtDateTime } from '../utils/time'
 
 const route = useRoute()
@@ -47,6 +49,63 @@ async function load() {
   health.value = await api('/api/knowledge/health')
 }
 onMounted(load)
+
+/** 研究任务 → 它的候选知识。
+ *
+ *  结论是散文，而「还没被采纳的知识」才是研究真正要处理的东西——所以按需拉取
+ *  （展开时一次请求），而不是给每个任务预取一遍。 */
+const taskKnowledge = ref<Record<string, any[]>>({})
+/** 正在整理成候选的任务 id —— 一次只处理一个，避免重复提交。 */
+const proposing = ref<string | null>(null)
+
+async function loadTaskKnowledge(t: any) {
+  if (taskKnowledge.value[t.id]) return
+  try {
+    const body = await api<any>(`/api/research/${t.id}`)
+    taskKnowledge.value = { ...taskKnowledge.value, [t.id]: body.knowledge || [] }
+  } catch { taskKnowledge.value = { ...taskKnowledge.value, [t.id]: [] } }
+}
+
+/** 采纳之后重新读一次，让卡片反映新状态而不是留在旧状态上。 */
+async function reloadTaskKnowledge(t: any) {
+  const next = { ...taskKnowledge.value }
+  delete next[t.id]
+  taskKnowledge.value = next
+  await loadTaskKnowledge(t)
+}
+
+/** 把结论整理成候选知识：结论 → 文档 → 抽取管线 → 候选。
+ *  这里不直接写 claim——散文变成知识必须经过编译，否则这是全产品唯一一处
+ *  「没被检查就成立」的知识。 */
+async function proposeCandidates(t: any) {
+  proposing.value = t.id
+  try {
+    const body = await post<any>(`/api/research/${t.id}/candidates`)
+    store.toast(body.knowledge?.length
+      ? `已整理出 ${body.knowledge.length} 条研究候选`
+      : '结论里没有可落成知识的断言')
+    await reloadTaskKnowledge(t)
+  } catch (e: any) { store.toast(e.message) } finally { proposing.value = null }
+}
+
+/** 采纳后的反馈：不是一句「成功」，而是这条知识现在是什么、以及要不要处理它引起的冲突。 */
+async function onCandidateChanged(t: any, change: any) {
+  if (change?.status !== 'verified') { await reloadTaskKnowledge(t); return }
+  try {
+    const relations = (await api<any>(`/api/claims/${change.id}/relations`)).relations || []
+    const conflict = relations.find((r: any) => r.relationship === 'contradicts')
+    if (conflict) {
+      store.toast('已加入知识库，同时发现与现有知识冲突', {
+        label: '处理冲突', run: () => router.push({ path: '/research', query: { tab: 'conflicts' } }),
+      })
+    } else {
+      store.toast('已加入知识库', {
+        label: '查看知识', run: () => router.push('/knowledge/claim/' + change.id),
+      })
+    }
+  } catch { store.toast('已加入知识库') }
+  await reloadTaskKnowledge(t)
+}
 
 async function runResearchTask(t: any) {
   try {
@@ -189,9 +248,33 @@ async function resolveQuestion(q: QuestionRow) {
           <div class="grow">
             <b>{{ t.question_text }}</b>
             <p>{{ fmtDateTime(t.created_at) }} · <StatusTag :status="t.status" /></p>
-            <details v-if="t.findings" style="margin-top:6px">
-              <summary style="cursor:pointer;font-size:9px;color:var(--sub)">Findings</summary>
+            <details v-if="t.findings" style="margin-top:6px"
+                     @toggle="(e: any) => e.target.open && loadTaskKnowledge(t)">
+              <summary style="cursor:pointer;font-size:9px;color:var(--sub)">Findings 与候选知识</summary>
               <MarkdownView :content="t.findings" style="margin-top:8px" />
+              <!-- 研究发现问题，但不替用户决定哪些成立：候选知识以卡片出现，
+                   每张卡自带 [采纳][拒绝][依据]。 -->
+              <template v-if="taskKnowledge[t.id]?.length">
+                <div class="sechead" style="margin:12px 0 8px">
+                  <h3>研究候选</h3>
+                  <span class="faint" style="font-size:9px;font-weight:400">
+                    {{ taskKnowledge[t.id].length }} 条 · 采纳后才成为知识
+                  </span>
+                </div>
+                <div class="kcand">
+                  <KnowledgeCard v-for="k in taskKnowledge[t.id]" :key="k.claim_id"
+                                 :claim="toCard(k)" :evidence-count="k.sources" compact
+                                 @changed="onCandidateChanged(t, $event)" />
+                </div>
+              </template>
+              <div v-else-if="taskKnowledge[t.id]" style="margin-top:10px">
+                <p class="faint" style="font-size:9.5px;margin:0 0 8px">
+                  这份结论还没有落成候选知识。结论里能被引文支撑的断言才会变成候选。
+                </p>
+                <button class="btn sm" :disabled="proposing === t.id" @click="proposeCandidates(t)">
+                  {{ proposing === t.id ? '整理中…' : '把结论整理成研究候选' }}
+                </button>
+              </div>
             </details>
           </div>
           <button class="btn sm" :disabled="t.status === 'running'" @click="runResearchTask(t)">
@@ -311,6 +394,8 @@ async function resolveQuestion(q: QuestionRow) {
 </template>
 
 <style scoped>
+/* 候选知识：研究的产出以卡片收尾，而不是以一段散文收尾 */
+.kcand{display:grid;gap:9px}
 /* 研究执行过程：真实 agent 阶段，替代写死的假进度 */
 .rphases{display:flex;flex-direction:column;gap:7px}
 .rphase{display:flex;align-items:center;gap:9px;padding:9px 12px;border-radius:11px;background:var(--surface2);font-size:10px;color:var(--sub)}

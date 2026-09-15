@@ -29,6 +29,20 @@ class RelationRepository(Repository):
                    WHERE r.source_id=? OR r.target_id=? ORDER BY r.created_at DESC''',
                 (entity_id, entity_id)))
 
+    def repoint_entity(self, from_id: str, to_id: str) -> int:
+        """Move every relation endpoint from one entity onto another.
+
+        The counterpart of ``ClaimRepository.repoint_entity``: both sides of a merge
+        have to move together, or a relation would end up pointing at an entity that
+        no longer carries the claims that justified it.
+        """
+        with self.write() as conn:
+            moved = conn.execute('UPDATE relations SET source_id=? WHERE source_id=?',
+                                 (to_id, from_id)).rowcount
+            moved += conn.execute('UPDATE relations SET target_id=? WHERE target_id=?',
+                                  (to_id, from_id)).rowcount
+            return moved
+
     def for_documents(self, document_ids: list[str], limit: int = 50) -> list[dict]:
         if not document_ids:
             return []

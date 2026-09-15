@@ -7,6 +7,7 @@ transaction (unit-of-work) or own its own connection.
 from .base import Repository
 from .catalog_repo import CatalogRepository
 from .claim_repo import ClaimRepository
+from .curation_repo import CurationRepository
 from .document_repo import DocumentRepository
 from .entity_repo import EntityRepository
 from .event_repo import EventRepository
@@ -22,6 +23,7 @@ __all__ = [
     'Repository',
     'CatalogRepository',
     'ClaimRepository',
+    'CurationRepository',
     'DocumentRepository',
     'EntityRepository',
     'EventRepository',

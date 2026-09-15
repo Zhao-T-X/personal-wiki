@@ -33,6 +33,36 @@ def _same_type_score(name: str, candidate_name: str, requested_types: set[str], 
     return SequenceMatcher(None, a, b).ratio()
 
 
+def name_similarity(a: str, b: str) -> float:
+    """How much two entity names *look* like the same thing (0-1) — for review only.
+
+    Deliberately looser than the score ``resolve_or_create_entity`` merges on by
+    itself (0.93, computed on ``normalize_name``). This one exists to show a human a
+    candidate pair, so it strips legal suffixes and accepts containment: 苹果 and
+    苹果公司 must be *offered*, even though they would never be auto-merged.
+
+    Both the per-entity endpoint and the workspace-wide scan call this one function,
+    so the pair a scan surfaces cannot drift from the pair a detail page shows.
+    """
+    x, y = _loose_name(a), _loose_name(b)
+    if not x or not y:
+        return 0.0
+    # Containment first: "apple" vs "apple computer" must not be missed just because
+    # the longer name drags the ratio down.
+    if x in y or y in x:
+        return 1.0
+    return SequenceMatcher(None, x, y).ratio()
+
+
+def types_compatible(a: set[str], b: set[str]) -> bool:
+    """Whether two entities could be the same thing at all.
+
+    An empty type set counts as compatible: "unknown type" is not evidence against,
+    and treating it as a mismatch would hide exactly the pairs worth reviewing.
+    """
+    return not (a and b) or bool(set(a) & set(b))
+
+
 def resolve_or_create_entity(conn, *, name: str, entity_types: list[str] | None = None,
                              entity_type: str | None = None, aliases: list[str],
                              description: str | None, properties: dict) -> str:
@@ -71,6 +101,29 @@ def resolve_or_create_entity(conn, *, name: str, entity_types: list[str] | None 
     return entity_id
 
 
+def find_entity_id(conn, *, name: str) -> str | None:
+    """Read-only resolution: which entity does this name refer to (or ``None``)?
+
+    The same lookup order as :func:`resolve_or_create_entity` — exact name first,
+    then the alias table — minus the creation. That matters for planners, which
+    must be able to answer "where would this land?" *without* writing anything.
+
+    Routing candidate retrieval through this (instead of a bare name lookup) is
+    what makes "苹果" and "苹果公司" one subject *before* the search: otherwise a
+    correction phrased with an alias finds no existing claim at all and is filed
+    as brand-new knowledge, which is precisely the corruption the alias table
+    exists to prevent.
+    """
+    needle = str(name or '').strip()
+    if not needle:
+        return None
+    entities = EntityRepository(conn)
+    existing = entities.by_name(needle)
+    if existing:
+        return existing['id']
+    return entities.by_alias(normalize_name(needle))
+
+
 def find_similar_entities(conn, entity_id: str, *, limit: int = 5, threshold: float = 0.65) -> list[dict]:
     """Near-duplicates that resolution deliberately left alone.
 
@@ -83,27 +136,48 @@ def find_similar_entities(conn, entity_id: str, *, limit: int = 5, threshold: fl
     row = entities.get_raw(entity_id)
     if not row:
         return []
-    target = _loose_name(row['name'])
-    if not target:
-        return []
     target_types = set(loads(row['types_json'], [])) or ({row['type']} if row['type'] else set())
 
     out = []
     for cand in entities.similarity_pool(entity_id, 800):
         cand_types = set(loads(cand['types_json'], [])) or ({cand['type']} if cand['type'] else set())
-        if target_types and cand_types and not target_types.intersection(cand_types):
+        if not types_compatible(target_types, cand_types):
             continue
-        name = _loose_name(cand['name'])
-        if not name:
-            continue
-        # Containment first: "apple" vs "apple computer" must not be missed just
-        # because the longer name drags the ratio down.
-        if target in name or name in target:
-            score = 1.0
-        else:
-            score = SequenceMatcher(None, target, name).ratio()
+        score = name_similarity(row['name'], cand['name'])
         if score >= threshold:
             out.append({'id': cand['id'], 'name': cand['name'], 'type': cand['type'],
                         'status': cand['status'], 'similarity': round(score, 3)})
     out.sort(key=lambda x: x['similarity'], reverse=True)
     return out[:limit]
+
+
+def scan_duplicate_entities(conn, *, threshold: float = 0.65, entity_limit: int = 500,
+                            pair_limit: int = 20) -> list[dict]:
+    """Near-duplicate pairs across the whole workspace, in one pass.
+
+    ``find_similar_entities`` answers "what looks like *this* entity?" and costs a
+    query per call; a workspace scan cannot become one of those per entity. So the
+    pool is loaded once and compared in memory — with the same scoring rules, so a
+    pair found here is the pair the detail page would have shown.
+
+    Bounded by ``entity_limit`` because the comparison is quadratic: a personal wiki
+    holds hundreds of entities, and this is an explicit action rather than a hot path.
+    Archived entities are skipped — a row kept as a merge tombstone would otherwise
+    keep proposing the merge that already happened.
+    """
+    pool = EntityRepository(conn).similarity_pool(None, entity_limit)
+    rows_ = [(r['id'], r['name'], set(loads(r['types_json'], [])) or {r['type']})
+             for r in pool if r.get('status') != 'archived']
+
+    pairs: list[dict] = []
+    for i, (a_id, a_name, a_types) in enumerate(rows_):
+        for b_id, b_name, b_types in rows_[i + 1:]:
+            if not types_compatible(a_types, b_types):
+                continue
+            score = name_similarity(a_name, b_name)
+            if score >= threshold:
+                pairs.append({'entity_a': {'id': a_id, 'name': a_name},
+                              'entity_b': {'id': b_id, 'name': b_name},
+                              'similarity': round(score, 3)})
+    pairs.sort(key=lambda p: p['similarity'], reverse=True)
+    return pairs[:pair_limit]

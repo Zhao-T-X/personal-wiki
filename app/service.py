@@ -7,9 +7,11 @@ from .config import runtime
 from .extraction import normalize_extraction
 from .knowledge import persist_extraction
 from .claim_relations import detect_claim_relations
+from .integrity import autolink_object_literals
 from .ontology import registry_version
 from .repositories import (ClaimRepository, DocumentRepository, EventRepository,
-                           IdeaRepository, QuestionRepository, RelationRepository)
+                           IdeaRepository, QuestionRepository, RelationRepository,
+                           ResearchRepository)
 
 
 def create_document(*, title, content, source_type='note', source_uri=None, metadata=None):
@@ -127,6 +129,12 @@ async def index_document(document_id: str, *, use_llm=True):
             # Relationship detection shares this transaction so a claim can never be
             # committed without the relation explaining how it fits what we knew.
             counts['claim_relations'] = detect_claim_relations(conn, document_id=document_id)
+            # L1 object linking shares this transaction, so a literal that exactly
+            # matches an entity we already have is attached where its cause is — the
+            # extraction that produced it — rather than by a scan at start-up. The
+            # ambiguous ones are deliberately left for the suggestion path, and every
+            # automatic link is audited like any other knowledge write.
+            counts['object_links'] = autolink_object_literals(conn, document_id=document_id)['linked']
             # Record which extractor+ontology produced this chunk's knowledge, so a
             # registry change makes it stale again on the next index run.
             DocumentRepository(conn).set_extraction_version(stale_ids, version)
@@ -134,6 +142,82 @@ async def index_document(document_id: str, *, use_llm=True):
         report.update(llm='success', counts=counts, extracted_chunks=len(stale_rows),
                       embedded=await _maybe_embed(document_id))
         return report
+
+
+def research_document_id(task_id: str) -> str | None:
+    """The document holding this task's findings, once it has been recorded.
+
+    One document per task, linked by ``source_uri``. That link is what makes a
+    candidate traceable back to the research that proposed it, and what makes "which
+    knowledge came from this task?" a lookup instead of a similarity guess.
+    """
+    return DocumentRepository().by_source_uri(f'research:{task_id}')
+
+
+def research_candidates(task_id: str, *, limit: int = 6) -> list[dict]:
+    """The knowledge this research task has *proposed* and nobody has accepted yet.
+
+    Read from provenance: the pending claims that came out of the task's own findings
+    document. So 「这条从哪来」 always has an answer, and a task that proposed nothing
+    returns an empty list instead of a pile of loosely related knowledge.
+    """
+    from .readmodels.knowledge_view import (RESEARCH_CANDIDATE, best_per_statement,
+                                            rank_key)
+
+    doc_id = research_document_id(task_id)
+    if not doc_id:
+        return []
+    claims_repo = ClaimRepository()
+    claims = claims_repo.candidates_for_document(doc_id)
+    if not claims:
+        return []
+    evidence = {str(c['id']): {'chunk_id': c.get('source_chunk_id'),
+                               'document_id': c.get('source_document_id'),
+                               'document_title': None} for c in claims}
+    views = best_per_statement(claims, evidence=evidence, origin=RESEARCH_CANDIDATE,
+                               disputed_ids=claims_repo.disputed_claim_ids(
+                                   [str(c['id']) for c in claims]))
+    views.sort(key=rank_key)
+    return [v.to_dict() for v in views[:limit]]
+
+
+async def propose_research_candidates(task_id: str) -> dict:
+    """Record a task's findings, then let the normal pipeline propose knowledge from them.
+
+    Research produces prose; knowledge is a claim with evidence. The bridge is the one
+    every other document takes — the findings become a document, the extraction
+    pipeline reads it, the compiler decides what the statements mean — so a research
+    candidate is compiled exactly like any other claim and can carry no more than its
+    evidence supports. Nothing here writes a claim directly: that would be the one
+    place in the product where prose became knowledge without being compiled.
+
+    Candidates land as ``candidate`` claims awaiting a human, and their document
+    linkage is what the research page reads back.
+    """
+    research = ResearchRepository()
+    task = research.get(task_id)
+    if not task:
+        raise ValueError('Research task not found')
+    findings = str(task.get('findings') or '').strip()
+    if not findings:
+        # Findings are the only source a candidate may come from. Proposing from
+        # nothing would be inventing knowledge, not compiling it.
+        raise ValueError('Research has no findings yet')
+
+    documents = DocumentRepository()
+    title = f"研究：{str(task['question_text'])[:60]}"
+    uri = f'research:{task_id}'
+    metadata = {'research_task_id': task_id}
+    doc_id = research_document_id(task_id)
+    if doc_id:
+        documents.update(doc_id, title=title, content=findings, source_type='research',
+                         source_uri=uri, metadata=metadata)
+    else:
+        doc_id = documents.create(title=title, content=findings, source_type='research',
+                                  source_uri=uri, metadata=metadata)
+    report = await index_document(doc_id, use_llm=True)
+    return {'task_id': task_id, 'document_id': doc_id, 'report': report,
+            'knowledge': research_candidates(task_id)}
 
 
 def embed_document(document_id: str):

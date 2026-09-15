@@ -2,6 +2,8 @@ from __future__ import annotations
 import re
 
 from .config import runtime
+from .readmodels.knowledge_view import (best_per_statement, predicate_keywords,
+                                        rank_key, relevance)
 from .repositories import ClaimRepository, DocumentRepository, EntityRepository
 
 # FTS5's trigram tokenizer indexes overlapping 3-character windows, so a query
@@ -140,6 +142,83 @@ def search(q: str, limit: int = 10, semantic: bool = True) -> list[dict]:
     for item in results:
         item['matched_in'] = _matched_in(item, terms)
     return results
+
+
+def _evidence(chunk: dict) -> dict:
+    """Where a piece of knowledge came from — enough to open the passage itself."""
+    return {
+        'chunk_id': chunk.get('id'),
+        'document_id': chunk.get('document_id'),
+        'document_title': chunk.get('title'),
+        'chunk_index': chunk.get('chunk_index'),
+        'start_offset': chunk.get('start_offset'),
+        'end_offset': chunk.get('end_offset'),
+    }
+
+
+def search_knowledge(q: str, limit: int = 8, *, semantic: bool = True,
+                     chunk_limit: int | None = None, claims_per_chunk: int = 3) -> dict:
+    """Knowledge first, then the passages it came from.
+
+    Recall is unchanged — chunks are still found by FTS / embedding / RRF, and that
+    stays the floor. What this adds is the projection on top: the recalled chunks'
+    claims, resolved into a readable statement with its state and its evidence, and
+    ranked current-first.
+
+    History is never filtered out. Search answers "where is this mentioned", which is
+    a different question from Knowledge QA's "what is true now" — so a superseded
+    claim is ranked lower rather than hidden. Searching "Tim Cook Apple CEO" must
+    still find the company's former CEO.
+
+    Three queries beyond recall — the chunks' claims, their entities' aliases, their
+    open disputes — all batched. A page of chunks must never cost one lookup per
+    chunk (§11), which is the same discipline the evidence count already follows.
+    """
+    terms = _terms(q)
+    chunk_results = search(q, chunk_limit if chunk_limit is not None else max(limit, 10),
+                           semantic=semantic)
+    if not chunk_results:
+        return {'knowledge': [], 'results': []}
+    by_chunk = {c['id']: c for c in chunk_results if c.get('id')}
+
+    claims_repo = ClaimRepository()
+    claims = claims_repo.claims_for_chunks(list(by_chunk))
+    if not claims:
+        return {'knowledge': [], 'results': chunk_results}
+
+    entity_ids = [c.get('subject_id') for c in claims] + [c.get('object_id') for c in claims]
+    aliases = EntityRepository().aliases_for([i for i in entity_ids if i])
+    disputed = claims_repo.disputed_claim_ids([str(c.get('id')) for c in claims])
+
+    # Score first, then keep only the most relevant few per chunk: a chunk that
+    # yielded ten claims must not push ten items into the answer.
+    scored = []
+    for claim in claims:
+        chunk = by_chunk.get(claim.get('source_chunk_id') or '')
+        if chunk is None:
+            continue
+        names = aliases.get(claim.get('subject_id'), []) + aliases.get(claim.get('object_id') or '', [])
+        keywords = predicate_keywords(claim.get('predicate') or '')
+        scored.append((relevance(claim, terms, aliases=names, keywords=keywords), claim, chunk))
+    scored.sort(key=lambda x: -x[0])
+
+    per_chunk: dict[str, int] = {}
+    candidates: list[tuple[int, dict, dict]] = []
+    for hit in scored:
+        chunk_id = str(hit[2].get('id') or '')
+        if per_chunk.get(chunk_id, 0) >= claims_per_chunk:
+            continue
+        per_chunk[chunk_id] = per_chunk.get(chunk_id, 0) + 1
+        candidates.append(hit)
+
+    # One result per *fact* — the same rule Knowledge QA uses, from one definition.
+    views = best_per_statement(
+        [claim for _, claim, _ in candidates],
+        disputed_ids=disputed,
+        scores={str(claim.get('id')): score for score, claim, _ in candidates},
+        evidence={str(claim.get('id')): _evidence(chunk) for _, claim, chunk in candidates})
+    views.sort(key=rank_key)
+    return {'knowledge': [v.to_dict() for v in views[:limit]], 'results': chunk_results}
 
 
 def _claim_relevance(claim: dict, terms: list[str]) -> int:

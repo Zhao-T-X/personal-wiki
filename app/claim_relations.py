@@ -132,6 +132,39 @@ def find_related_claims(conn, claim_id: str, *, limit: int = 10) -> list[dict]:
                           exclude_id=claim_id, limit=max(1, min(limit, 50)))
 
 
+def relation_status(suggested_action: str) -> str:
+    """Recording a link (duplicate) or a coexistence is safe to automate — neither
+    changes what the wiki asserts. Anything that could (a contradiction) waits for a
+    human, so it is written as a candidate."""
+    return 'accepted' if suggested_action in ('link_evidence', 'keep_both') else 'candidate'
+
+
+def record_relations(claims, claim: dict, verdicts: list[dict]) -> list[dict]:
+    """Write the verdicts for one claim that are not on record yet.
+
+    Returns the ones actually written, so a caller can *report* what changed instead
+    of guessing. Shared by import-time detection and the post-merge integrity
+    recheck: a contradiction a merge surfaced has to be recorded exactly the way one
+    found during import is, or the Conflict Center would show two kinds of conflict.
+    """
+    written: list[dict] = []
+    for verdict in verdicts:
+        if verdict['relationship'] == 'unclear':
+            continue
+        # One row per pair: whichever direction was detected first wins, so a
+        # duplicate is not reported twice from both sides.
+        if claims.relation_exists(verdict['related_claim_id'], claim['id']):
+            continue
+        relation_id = claims.insert_relation(
+            source_claim_id=claim['id'], target_claim_id=verdict['related_claim_id'],
+            relationship=verdict['relationship'], confidence=verdict['confidence'],
+            reason=verdict['reason'], suggested_action=verdict['suggested_action'],
+            status=relation_status(verdict['suggested_action']), created_by='system')
+        if relation_id:
+            written.append({**verdict, 'relation_id': relation_id, 'claim_id': claim['id']})
+    return written
+
+
 def detect_claim_relations(conn, *, document_id: str) -> int:
     """Record relationships between this document's claims and earlier ones.
 
@@ -143,26 +176,11 @@ def detect_claim_relations(conn, *, document_id: str) -> int:
     Returns the number of relationships written.
     """
     claims = ClaimRepository(conn)
-    new_claims = claims.for_document_chronological(document_id)
     written = 0
-    for claim in new_claims:
+    for claim in claims.for_document_chronological(document_id):
         try:
-            for verdict in compare_with_related(claim, find_related_claims(conn, claim['id'])):
-                if verdict['relationship'] == 'unclear':
-                    continue
-                # One row per pair: whichever direction was detected first wins,
-                # so a duplicate is not reported twice from both sides.
-                if claims.relation_exists(verdict['related_claim_id'], claim['id']):
-                    continue
-                # Linking a duplicate and recording two facts side by side are both
-                # safe to automate — neither changes what the wiki asserts. Anything
-                # that could change it (a contradiction) waits for a human.
-                status = 'accepted' if verdict['suggested_action'] in ('link_evidence', 'keep_both') else 'candidate'
-                written += 1 if claims.insert_relation(
-                    source_claim_id=claim['id'], target_claim_id=verdict['related_claim_id'],
-                    relationship=verdict['relationship'], confidence=verdict['confidence'],
-                    reason=verdict['reason'], suggested_action=verdict['suggested_action'],
-                    status=status, created_by='system') else 0
+            written += len(record_relations(
+                claims, claim, compare_with_related(claim, find_related_claims(conn, claim['id']))))
         except Exception:  # noqa: BLE001 - never lose the claim over a relationship
             continue
     return written

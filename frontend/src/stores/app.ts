@@ -87,6 +87,11 @@ async function pollExtraction(store: ExtractionStore) {
   } catch { /* transient failure — keep polling */ }
 }
 
+/** Whether the sidebar shows the surfaces that only make sense while working *on*
+    the system rather than with it. A preference about the person, not about the
+    knowledge base, so it lives in the browser and never in the database. */
+const DEV_MODE_KEY = 'llm-wiki.developer-mode'
+
 export const useAppStore = defineStore('app', {
   state: () => ({
     health: null as Health | null,
@@ -94,10 +99,26 @@ export const useAppStore = defineStore('app', {
     toastAction: null as ToastAction | null,
     searchTerm: '',
     extraction: null as ExtractionProgress | null,
+    developerMode: localStorage.getItem(DEV_MODE_KEY) === '1',
+    /** Candidates waiting on a decision. The sidebar shows this as a *state*
+        ("⚠ 3 条需要你确认"), never as a destination someone has to remember. */
+    pendingReview: 0,
   }),
   actions: {
     async loadHealth() {
       try { this.health = await api<Health>('/api/health') } catch { this.health = null }
+    },
+    setDeveloperMode(on: boolean) {
+      this.developerMode = on
+      localStorage.setItem(DEV_MODE_KEY, on ? '1' : '0')
+    },
+    /** How much is waiting on the user. Shared so every surface that mentions it
+        says the same number. */
+    async loadPendingReview() {
+      try {
+        const rv = await api<any>('/api/review?limit=1')
+        this.pendingReview = (rv.entities?.length || 0) + (rv.claims?.length || 0) + (rv.relations?.length || 0)
+      } catch { this.pendingReview = 0 }
     },
     /**
      * Show a transient message. Pass `action` to make the result reversible —

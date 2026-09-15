@@ -40,14 +40,44 @@ def test_has_ceo_is_a_registered_claim_predicate():
 
 def test_registry_version_was_bumped_and_is_readable():
     from app.ontology import claim_registry_version
-    assert _registry()['version'] == '1.2'
-    assert claim_registry_version() == '1.2'
+    assert _registry()['version'] == '1.3'
+    assert claim_registry_version() == '1.3'
 
 
 def test_metadata_never_describes_an_unregistered_predicate():
     registry = _registry()
     registered = set(registry['claim_predicates'])
     assert set(registry.get('predicate_metadata') or {}) <= registered
+
+
+# --- labels are the display layer, and nothing else ---------------------------
+
+def test_every_registered_predicate_has_a_human_readable_label():
+    """A predicate without a label renders as ``use_of_the_word`` in the UI.
+
+    The import panel and the correction flow read ``label`` straight from here, so a
+    predicate added without one silently shows the user an identifier. The rule the
+    registry states in its ``_note`` is that a label is display metadata: it never
+    participates in a semantic judgement, and code always uses the predicate itself.
+    """
+    registry = _registry()
+    missing = [p for p in registry['claim_predicates']
+               if not (registry['predicate_metadata'].get(p) or {}).get('label')]
+    assert missing == [], f'predicates without a label: {missing}'
+
+
+def test_labels_are_display_only_and_did_not_move_the_semantics():
+    """Filling in labels must not drag ``functional`` / ``temporal`` / ``evolution`` along.
+
+    ``functional`` drives conflict detection (``compare_claim``) and ``evolution``
+    drives supersede advice, so a label pass that touched them would quietly change
+    what the product *decides*, not merely what it shows.
+    """
+    metadata = _registry()['predicate_metadata']
+    functional = {p for p, m in metadata.items() if m.get('functional')}
+    assert functional == {'is', 'defined_as', 'classified_as', 'has_ceo'}
+    assert {p for p, m in metadata.items() if m.get('temporal')} == functional
+    assert {p for p, m in metadata.items() if m.get('evolution')} == functional
 
 
 # --- the registry drives resolution and constraints --------------------------

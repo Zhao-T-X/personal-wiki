@@ -25,7 +25,8 @@ from typing import Any
 from ..ontology import (canonical_claim_type, canonical_modality, canonical_polarity,
                         claim_predicate_endpoint_allowed, normalize_name,
                         normalize_predicate, relation_endpoint_allowed, relation_spec)
-from .predicate_resolver import PredicateResolution, resolve_predicate
+from .predicate_resolver import (TEMPORAL_SIGNALS, PredicateResolution,
+                                 resolve_predicate)
 from .quality_gate import (REJECT, REVIEW, QualityAssessment, QualitySignals,
                            evaluate as evaluate_quality)
 
@@ -55,6 +56,11 @@ class ClaimDraft:
     confidence: float | None = None
     subject_types: list[str] = field(default_factory=list)
     object_types: list[str] = field(default_factory=list)
+    # Surrounding source text the resolver may read for *suggestions only* when the
+    # candidate is unresolved. A producer that validates a whole envelope passes its
+    # source text here, so a repair call keeps getting the candidates it always did;
+    # ``None`` means "the draft's own fields are the best context available".
+    resolution_text: str | None = None
 
 
 @dataclass(frozen=True)
@@ -112,10 +118,48 @@ class CompileResult:
 
 
 class KnowledgeCompiler:
-    """Compile Drafts into Canonical knowledge, or refuse with a reason."""
+    """Compile Drafts into Canonical knowledge, or refuse with a reason.
+
+    **Single owner of claim semantics.** Nothing else in the system decides what a
+    claim's fields mean. Other modules may build a :class:`ClaimDraft` and read the
+    :class:`CompileResult`; they may not interpret a predicate, default a field or
+    validate a pairing themselves. Concretely, this class owns:
+
+    1. **Predicate resolution** — ``predicate_candidate`` becomes exactly one
+       registered predicate, or a refusal. A declared alias is folded in
+       (``CEO`` -> ``has_ceo``); an undeclared value is never invented.
+    2. **The temporal signal** — ``new`` / ``current`` / ``former`` / ... leave the
+       predicate name and land in ``temporal_signal``, validated against the
+       registry's vocabulary. A value that is not a known signal becomes ``None``,
+       never a half-parsed string.
+    3. **Enum canonicalisation** — ``claim_type``, ``polarity`` and ``modality``,
+       through their declared aliases (``definition`` -> ``definitional``). An
+       undeclared value is refused with the reason attached.
+    4. **Domain / range** — a registered predicate used on an illegal pair of
+       endpoint types is refused (``domain_range_violation``). Legality of the verb
+       does not imply legality of the sentence.
+    5. **The Quality Gate verdict** — when signals are supplied, a deterministic
+       ``reject`` vetoes an otherwise legal claim; ``review`` compiles but is
+       flagged.
+    6. **Building the ``CanonicalClaim``** — the only shape persistence accepts,
+       constructed here and nowhere else.
+
+    What it deliberately does **not** own: transport and orchestration. Building an
+    envelope, aggregating errors, retrying with a repair prompt, choosing a subject
+    entity and writing rows are the caller's business. A caller's only degrees of
+    freedom are *how it builds the draft* and *what it does with the result*.
+
+    The contract this produces (ADR-011): one Claim Draft compiles to one
+    canonical claim, no matter which entry produced it — Extraction, Correction,
+    Research, Curator or Review. :meth:`compile_claim` is the implementation and
+    :meth:`compile_extraction_claim` is the dict-shaped ingress onto it: two
+    shapes, one owner. Guarded behaviourally by
+    ``tests/test_architecture.py::test_claim_normalization_has_single_owner``.
+    """
 
     def compile_claim(self, draft: ClaimDraft, *,
-                      quality: QualitySignals | None = None) -> CompileResult:
+                      quality: QualitySignals | None = None,
+                      suggestion_limit: int = 5) -> CompileResult:
         """Compile one draft, optionally passing a Quality Gate verdict.
 
         When ``quality`` is supplied the deterministic gate is consulted and it
@@ -123,13 +167,18 @@ class KnowledgeCompiler:
         though the ontology was legal (a claim can be well-formed and still not
         be knowledge). A ``review`` verdict still compiles but is flagged, which
         is what sends the claim to human review rather than auto-accept (§14).
+
+        ``suggestion_limit`` bounds how many registry candidates are offered when
+        the predicate cannot be resolved. It is a presentation knob (a repair loop
+        prints them), never a semantic one: changing it can alter the size of the
+        hint but never the verdict.
         """
         assessment = evaluate_quality(quality) if quality is not None else None
 
         resolution = resolve_predicate(
             draft.predicate_candidate,
             text=self._context_text(draft),
-            limit=5,
+            limit=suggestion_limit,
         )
         if not resolution.resolved or not resolution.predicate:
             # No registered predicate: report, do not compile, do not invent.
@@ -171,6 +220,12 @@ class KnowledgeCompiler:
                                  quality=assessment)
 
         signal = draft.temporal_signal or resolution.temporal_signal
+        if signal not in TEMPORAL_SIGNALS:
+            # The temporal axis is registry-shaped vocabulary, not free text. A
+            # producer does not get to invent this one either: anything that is not
+            # a known signal is not time, so it is dropped rather than carried into
+            # the claim where it would look like modelled semantics.
+            signal = None
         claim = CanonicalClaim(
             subject=' '.join(str(draft.subject).split()),
             predicate=resolution.predicate,
@@ -189,20 +244,36 @@ class KnowledgeCompiler:
 
     def compile_extraction_claim(self, raw: dict[str, Any],
                                  *, entities: dict[str, dict] | None = None,
-                                 quality: QualitySignals | None = None) -> CompileResult:
-        """Compile one claim from an extraction payload (the extraction path).
+                                 quality: QualitySignals | None = None,
+                                 resolution_text: str | None = None,
+                                 suggestion_limit: int = 5) -> CompileResult:
+        """Compile one claim from a dict-shaped draft — the single implementation.
 
-        ``entities`` optionally maps a normalized entity name to its record so
-        the domain/range gate can run with the declared types.
+        Every agent that produces ontology values (Extraction / Research /
+        Correction / Curator / Review — ADR-011) belongs here. The payload shape is
+        deliberately the same for all of them, because a Claim Draft is
+        source-agnostic: delegating to this method *is* what guarantees one
+        definition of "what does this predicate mean" instead of one per transport.
+        A producer only decides how its own dict is built.
+
+        ``entities`` maps a normalized entity name (or alias) to its record, so the
+        domain/range gate can run with the declared types. ``resolution_text`` is
+        the surrounding source text the resolver may read for *suggestions only* —
+        it can never change the verdict, only the hint a repair loop prints.
         """
         index = entities or {}
         subject = str(raw.get('subject') or '').strip()
         object_text = raw.get('object')
         subject_record = index.get(normalize_name(subject), {})
         object_record = index.get(normalize_name(object_text or ''), {}) if object_text else {}
+        # Accept the canonical draft naming as well as the envelope's: the same
+        # ingress then serves a payload that never passed through extraction.
+        candidate = raw.get('predicate_candidate')
+        if candidate is None:
+            candidate = raw.get('predicate')
         draft = ClaimDraft(
             subject=subject,
-            predicate_candidate=raw.get('predicate'),
+            predicate_candidate=candidate,
             object=object_text,
             claim_type=raw.get('claim_type') or 'factual',
             polarity=raw.get('polarity') or 'positive',
@@ -212,12 +283,22 @@ class KnowledgeCompiler:
             confidence=raw.get('confidence'),
             subject_types=list(subject_record.get('types') or []),
             object_types=list(object_record.get('types') or []),
+            resolution_text=resolution_text,
         )
-        return self.compile_claim(draft, quality=quality)
+        return self.compile_claim(draft, quality=quality,
+                                  suggestion_limit=suggestion_limit)
 
     @staticmethod
     def _context_text(draft: ClaimDraft) -> str:
-        """Context offered to the resolver for *suggestions only*."""
+        """Context offered to the resolver for *suggestions only*.
+
+        A producer that validates a whole envelope supplies ``resolution_text``
+        (its source text), so a repair call keeps being offered the same
+        candidates it always was. Otherwise the draft's own fields are the best
+        context available.
+        """
+        if draft.resolution_text:
+            return draft.resolution_text
         parts = [draft.subject, draft.predicate_candidate or '', draft.object or '']
         note = draft.context.get('note') if isinstance(draft.context, dict) else None
         if note:
