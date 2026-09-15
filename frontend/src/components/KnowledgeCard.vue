@@ -21,6 +21,7 @@ import CorrectionFlow from './CorrectionFlow.vue'
 import StatusTag from './StatusTag.vue'
 import { useAppStore } from '../stores/app'
 import { labelOf, type KnowledgeCardClaim } from '../utils/claim'
+import { reportIssues } from '../utils/issues'
 
 /** The host is told when the card changed something, so it can refresh — and, when it
     was an adoption, so it can say what the new knowledge is and whether it collided
@@ -52,9 +53,14 @@ async function adopt() {
   if (!props.claim.id) return
   busy.value = true
   try {
-    await post('/api/knowledge/operations', { kind: 'ACCEPT', payload: { claim_id: props.claim.id } })
-    store.toast('已采纳为知识')
+    const result = await post<any>('/api/knowledge/operations',
+      { kind: 'ACCEPT', payload: { claim_id: props.claim.id } })
     emit('changed', { id: props.claim.id, status: 'verified' })
+    // 采纳可能让两条本来各说各话的陈述突然互相矛盾。后端在同一个响应里说明它弄坏了
+    // 什么，这里统一报告；页面不再自己回头查一遍关系——那是同一个判断的第二份实现，
+    // 而且那份实现曾经指向一个不会显示这条冲突的界面。
+    if (!reportIssues(result?.issues, store, router)) store.toast('已采纳为知识')
+    void store.loadPendingReview()
   } catch (e: any) { store.toast(e.message) } finally { busy.value = false }
 }
 

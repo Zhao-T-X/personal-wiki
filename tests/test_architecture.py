@@ -26,6 +26,7 @@ BUSINESS_MODULES = (
     'app/claim_relations.py',
     'app/graph.py',
     'app/integrity.py',
+    'app/review.py',
 )
 
 # The only places allowed to open a connection or execute SQL.

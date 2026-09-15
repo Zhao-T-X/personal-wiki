@@ -18,6 +18,7 @@ from .question_repo import QuestionRepository
 from .relation_repo import RelationRepository
 from .research_repo import ResearchRepository
 from .run_repo import RunRepository
+from .suppression_repo import SuppressionRepository
 
 __all__ = [
     'Repository',
@@ -34,4 +35,5 @@ __all__ = [
     'RelationRepository',
     'ResearchRepository',
     'RunRepository',
+    'SuppressionRepository',
 ]

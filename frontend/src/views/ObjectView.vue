@@ -9,8 +9,10 @@ import StatusTag from '../components/StatusTag.vue'
 import TypeDecision from '../components/TypeDecision.vue'
 import EmptyState from '../components/EmptyState.vue'
 import AppModal from '../components/AppModal.vue'
+import KnowledgeCard from '../components/KnowledgeCard.vue'
 import { useAppStore } from '../stores/app'
 import { fmtDateTime } from '../utils/time'
+import { toCard } from '../utils/claim'
 import { TYPE_COLORS, DEFAULT_NODE_COLOR, edgeEndpoints } from '../utils/graph'
 
 const route = useRoute()
@@ -209,8 +211,6 @@ function openEdgeSource() {
 }
 
 watch(tab, t => { if (t === 'Graph') drawLocalGraph() })
-
-const objLabel = (c: Claim) => c.object_name || c.object_text || '—'
 </script>
 
 <template>
@@ -253,13 +253,14 @@ const objLabel = (c: Claim) => c.object_name || c.object_text || '—'
       </div>
       <div>
         <div class="sechead"><h3>Key Claims</h3><span class="more" @click="tab = 'Claims'">全部 {{ counts.claims }} →</span></div>
-        <div class="panel pad" style="padding:6px">
-          <div v-for="c in claims.slice(0, 6)" :key="c.id" class="item" @click="router.push('/knowledge/claim/' + c.id)">
-            <div class="grow"><b>{{ c.subject_name }} → {{ c.predicate }} → {{ objLabel(c) }}</b><p>{{ c.claim_type }} · {{ c.polarity }} · {{ c.modality }}</p></div>
-            <StatusTag :status="c.status" />
-          </div>
-          <EmptyState v-if="!claims.length" text="暂无 Claims" />
+        <!-- 知识在这里也以卡片出现：同一事实在详情页、搜索、问答、研究里是同一个形状，
+             带着同样的状态用词和同样的 [依据][历史][纠正]。之前是原始数据行，
+             还把谓词标识符直接打在了界面上。 -->
+        <div class="kgrid">
+          <KnowledgeCard v-for="c in claims.slice(0, 6)" :key="c.id"
+                         :claim="toCard(c)" compact @changed="load" />
         </div>
+        <EmptyState v-if="!claims.length" text="暂无 Claims" />
         <div class="sechead"><h3>Relations</h3><span class="more" @click="tab = 'Relations'">全部 →</span></div>
         <div class="panel pad" style="padding:6px">
           <div v-for="r in relations.slice(0, 5)" :key="r.id" class="item" style="cursor:default">
@@ -272,11 +273,10 @@ const objLabel = (c: Claim) => c.object_name || c.object_text || '—'
     </div>
 
     <!-- Claims -->
-    <div v-if="tab === 'Claims'" class="panel pad" style="padding:6px">
-      <div v-for="c in claims" :key="c.id" class="item" @click="router.push('/knowledge/claim/' + c.id)">
-        <div class="ico-badge ib-blue">⇢</div>
-        <div class="grow"><b>{{ c.subject_name }} → {{ c.predicate }} → {{ objLabel(c) }}</b><p>{{ c.claim_type }} · {{ c.polarity }} · {{ c.modality }} · confidence {{ c.confidence }}</p></div>
-        <StatusTag :status="c.status" />
+    <div v-if="tab === 'Claims'">
+      <div class="kgrid">
+        <KnowledgeCard v-for="c in claims" :key="c.id"
+                       :claim="toCard(c)" @changed="load" />
       </div>
       <EmptyState v-if="!claims.length" text="暂无 Claims" />
     </div>
@@ -423,3 +423,9 @@ const objLabel = (c: Claim) => c.object_name || c.object_text || '—'
     <EmptyState :text="'找不到这个知识对象（' + loadError + '）——它可能已被删除或合并。'" />
   </div>
 </template>
+
+<style scoped>
+/* 知识以卡片出现（与搜索、问答、研究同一个形状），不再以数据行出现 */
+.kgrid{display:grid;gap:10px;margin-bottom:14px}
+@media (min-width:900px){.kgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>

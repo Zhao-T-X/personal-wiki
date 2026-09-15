@@ -35,7 +35,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ..domain.claim_state import history, resolve, select_current
+from ..domain.claim_state import CANDIDATE, history, resolve, select_current
 from ..domain.query_router import (FACT_LOOKUP, STRUCTURED_REASONING, QueryPlan,
                                    QuerySignals, classify, has_multi_hop_intent,
                                    has_temporal_intent)
@@ -152,6 +152,38 @@ def _related_claims(subject_id: str, predicate: str) -> list[dict]:
     """Non-rejected / non-archived claims for one ``(subject, predicate)`` pair."""
     return ClaimRepository().related(subject_id=subject_id, predicate=predicate,
                                      exclude_id='', limit=_RELATED_LIMIT)
+
+
+def _as_knowledge(claims: list[dict]) -> list[dict]:
+    """The claims an answer may be built from.
+
+    Currentness is :mod:`app.domain.claim_state`'s business; this removes only what the
+    wiki holds as a *proposal* rather than as knowledge. The line is provenance, not
+    lifecycle — both of these carry ``status='candidate'`` and only one of them is a
+    proposal:
+
+    * a **research candidate** is unaccepted by definition. ``ACCEPT`` refuses anything
+      that did not come from a research document, so this is the same boundary the
+      operation itself draws: until it is crossed, the statement is not knowledge, and
+      answering from it would state as fact something nobody accepted — or make a real
+      answer look ambiguous by disagreeing with it.
+    * an **extraction candidate** is knowledge awaiting review: it is searchable, it
+      participates in conflicts, and refusing it would leave a freshly imported wiki
+      unable to answer anything.
+    * a **correction** is the user's own confirmed statement, and the very next question
+      must be answered from it — that promise is asserted in the tests.
+
+    Batched: one document lookup for however many candidates are in play, never one per
+    claim.
+    """
+    pending = [c for c in claims if str(c.get('status') or '') == CANDIDATE]
+    if not pending:
+        return claims
+    research = DocumentRepository().source_types(
+        [str(c.get('source_document_id')) for c in pending if c.get('source_document_id')])
+    return [c for c in claims
+            if str(c.get('status') or '') != CANDIDATE
+            or research.get(str(c.get('source_document_id') or '')) != 'research']
 
 
 def extract_signals(question: str) -> QuerySignals:
@@ -271,8 +303,18 @@ def try_direct_answer(question: str) -> DirectAnswer | None:
         match = _resolve_subject(signals.question)
         if not match:
             return None
-        claims = select_current(_related_claims(match['id'], predicate))
+        # Answers come from knowledge, not from proposals — see `_as_knowledge` for
+        # why that line is provenance rather than a status check.
+        all_current = select_current(_related_claims(match['id'], predicate))
+        claims = _as_knowledge(all_current)
         if not claims:
+            # "Nothing here at all" and "a proposal is waiting on you" are different
+            # situations with different next actions, and a refusal that cannot tell
+            # them apart sends the user looking for evidence that does not exist when
+            # the actual next step is one click in the review inbox.
+            if any(str(c.get('status') or '') == CANDIDATE for c in all_current):
+                return DirectAnswer(status=NO_SUFFICIENT_EVIDENCE, route=plan.route,
+                                    reason='candidate_not_accepted')
             return DirectAnswer(status=NO_SUFFICIENT_EVIDENCE, route=plan.route,
                                 reason='no_current_claim')
         if len(claims) > 1:

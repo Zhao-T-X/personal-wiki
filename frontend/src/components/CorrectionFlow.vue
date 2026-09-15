@@ -13,6 +13,7 @@ import { useRouter } from 'vue-router'
 import { api, post } from '../api/client'
 import { useAppStore } from '../stores/app'
 import { statusStyle } from '../utils/status'
+import { reportIssues } from '../utils/issues'
 
 const props = withDefaults(defineProps<{
   /** 内联用（答案卡片 / 知识卡片）：只留结论与两个按钮。 */
@@ -102,9 +103,12 @@ async function applyPayload(payload: any) {
   error.value = ''
   try {
     const r = await post<any>('/api/knowledge/corrections/apply', payload)
-    store.toast('已更新 · 旧知识保留在历史里')
     plan.value = null
     emit('applied', r)
+    // 纠正成功时先说成功；它若牵连出新问题，那条消息会顶上来（两句话不能同时说，
+    // 但漏掉「改了」或漏掉「弄坏了什么」都是说谎）。
+    if (!reportIssues(r?.issues, store, router)) store.toast('已更新 · 旧知识保留在历史里')
+    void store.loadPendingReview()
     return r
   } catch (e: any) {
     error.value = e.message

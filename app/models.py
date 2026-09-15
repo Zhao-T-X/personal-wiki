@@ -119,12 +119,42 @@ class ObjectLinkRequest(BaseModel):
     """Backfill free-text objects onto entities that already exist.
 
     ``min_confidence`` gates how much the system is allowed to do: ``high`` means only
-    exact name/alias matches, ``medium`` also accepts the nearest similar name. There
-    is no setting that lets it create an entity — matching a literal to a new entity
-    is a different (and much riskier) operation than linking it to one that exists.
+    exact name/alias matches, and that is also where it stops — a ``medium`` proposal
+    carries candidates but deliberately no chosen target, so a batch tool has nothing
+    it could apply for one. Those are confirmed one at a time, by a person, through
+    ``ObjectLinkConfirmRequest``. There is no setting that lets either path create an
+    entity — matching a literal to a new entity is a different (and much riskier)
+    operation than linking it to one that already exists.
     """
     min_confidence: str = 'high'
     limit: int = 200
+
+
+class ObjectLinkConfirmRequest(BaseModel):
+    """A person saying which entity a piece of text refers to.
+
+    The two ids *are* the decision. The suggestion tier reports candidates without a
+    target precisely so that this choice has to come from a human, which means the
+    target is taken as given: nothing is re-matched or re-ranked from the text here,
+    because that would replace the one input the automatic path never had.
+
+    The ontology still has the last word on the pairing, so the request can be refused.
+    """
+    claim_id: str = Field(min_length=1)
+    entity_id: str = Field(min_length=1)
+
+
+class SuppressionRequest(BaseModel):
+    """Stop offering one maintenance suggestion.
+
+    The claim *and* the literal identify the notice, and the literal is sent back as it
+    was shown. The suppression key is derived from it, and the next scan compares that
+    derived key — so an edited literal is correctly treated as a new question instead of
+    staying dismissed under an old one.
+    """
+    claim_id: str = Field(min_length=1)
+    object_text: str = Field(min_length=1)
+    reason: str = ''
 
 
 class CorrectionApplyRequest(BaseModel):

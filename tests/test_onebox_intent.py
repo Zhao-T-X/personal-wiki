@@ -45,6 +45,22 @@ def test_the_four_intents_are_read_from_the_sentence():
     assert classify('苹果 CEO 记错了，现在应该是 John Ternus').intent == CORRECT
 
 
+def test_the_common_import_phrasings_are_recognised():
+    """「把…记进/记入知识库」是导入最常见的说法，落空即是最常用的入口失效。
+
+    It is a *safe* failure — UNKNOWN executes nothing — but the suggestion list is not
+    the same as the box doing what was asked, and this phrasing is how people ask.
+    """
+    from app.intent import KNOWLEDGE, classify
+
+    for sentence in ('把这篇会议纪要记进知识库', '把这条结论记入知识库'):
+        intent = classify(sentence)
+        assert intent.intent == KNOWLEDGE, sentence
+        # A write is offered, never fired: the plan exists, the execution waits.
+        assert intent.needs_confirmation is True
+        assert intent.steps
+
+
 def test_a_bare_entity_is_unknown_and_executes_nothing():
     """The rule the whole entry point rests on: not knowing is an answer."""
     from app.intent import UNKNOWN, classify

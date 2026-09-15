@@ -29,7 +29,7 @@ const loading = ref(false)
  *
  *  ``knowledge`` 是**佐证**，不是答案：答案是句子，卡片是事实。把答案渲染成卡片会
  *  让用户自己猜哪一行才是回答。 */
-const result = ref<{ answer: string; evidence: any[]; citations: any[]; knowledge?: any[] } | null>(null)
+const result = ref<{ answer: string; evidence: any[]; citations: any[]; knowledge?: any[]; reason?: string } | null>(null)
 /** Citation Validation report for the last answer (POST /api/qa/validate). */
 const validation = ref<any>(null)
 const validating = ref(false)
@@ -236,6 +236,16 @@ const columns = [
         <div v-if="loading" class="faint" style="font-size:10px;margin-top:10px">正在检索你的知识并整理证据…</div>
         <MarkdownView v-else-if="result" :content="result.answer" style="margin-top:10px" />
         <div v-else class="empty">输入问题开始提问</div>
+
+        <!-- 拒答不说谎，也不把人晾在原地：这条问题知识库里其实「有东西」，
+             只是一条研究提案还没被采纳。说清这一点，并把下一步放在手边——
+             否则「没有足够证据」会让人去找一份并不缺失的文档。 -->
+        <div v-if="result?.reason === 'candidate_not_accepted'" class="notice violet" style="margin-top:12px">
+          知识库里有一条与此相关的研究候选，还没有被采纳为知识——所以现在不能当作事实来回答。
+          <div class="row" style="margin-top:8px;gap:8px">
+            <button class="btn sm primary" @click="router.push('/review')">去审核并采纳 →</button>
+          </div>
+        </div>
         <div v-if="result && !result.evidence.length" class="notice violet" style="margin-top:12px">
           知识库里没有找到支持这个回答的片段。答案可能来自模型的通用知识，请谨慎采信，或先导入相关文档。
         </div>

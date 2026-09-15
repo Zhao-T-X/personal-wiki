@@ -93,6 +93,22 @@ class DocumentRepository(Repository):
         with self.read() as conn:
             return row(conn.execute('SELECT * FROM documents WHERE id=?', (doc_id,)))
 
+    def source_types(self, document_ids: list[str]) -> dict[str, str]:
+        """``source_type`` per document id, in one query — provenance for a batch.
+
+        What several callers need to know about a set of documents when deciding how to
+        treat the claims that came from them (a research proposal is not knowledge yet;
+        an extraction is), and asking one document at a time would turn a three-claim
+        answer into three round trips for one column.
+        """
+        ids = [i for i in dict.fromkeys(document_ids) if i]
+        if not ids:
+            return {}
+        marks = ','.join('?' * len(ids))
+        with self.read() as conn:
+            return {r['id']: r['source_type'] for r in rows(conn.execute(
+                f'SELECT id, source_type FROM documents WHERE id IN ({marks})', ids))}
+
     def exists(self, doc_id: str) -> bool:
         with self.read() as conn:
             return conn.execute('SELECT 1 FROM documents WHERE id=?', (doc_id,)).fetchone() is not None

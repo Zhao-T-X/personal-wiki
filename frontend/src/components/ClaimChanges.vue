@@ -24,24 +24,39 @@ interface ClaimChange {
   new_id: string; new_subject: string; new_predicate: string
   new_object: string | null; new_object_text: string | null
   new_quote: string | null; new_document_id: string | null; new_document_title: string | null
+  /* Lifecycle of both sides: whether this pair is still a live question depends on
+     them, not on this relation's own status (see `pending` below). */
+  new_status: string | null
   old_id: string; old_subject: string; old_predicate: string
   old_object: string | null; old_object_text: string | null
+  old_status: string | null
   old_quote: string | null; old_document_id: string | null; old_document_title: string | null
 }
 
 const changes = ref<ClaimChange[]>([])
+
+/* 不传 limit：窗口大小由后端的默认值决定，Review Inbox 数的是同一个窗口。
+   前端再写一个数字，就又多了一处会和服务端漂移的地方。 */
 const loading = ref(false)
 const busy = ref('')
 
 async function load() {
   loading.value = true
-  try { changes.value = await api<ClaimChange[]>('/api/claim-relations?limit=100') }
+  try { changes.value = await api<ClaimChange[]>('/api/claim-relations') }
   catch (e: any) { store.toast(e.message) }
   finally { loading.value = false }
 }
 onMounted(load)
 
-const pending = computed(() => changes.value.filter(c => c.status === 'candidate'))
+/** 真正还在等你决定的那些——判定规则与后端 `pending_decisions` 保持一致。
+ *
+ *  只按 `status === 'candidate'` 过滤，会让已经有答案的关系继续挂在列表里：对方那条
+ *  已经被取代，这个分歧其实解决了。侧栏角标用的是后端那套规则；两边不一致时，用户先
+ *  怀疑角标，再怀疑整个列表——而这份名单的全部价值就在于它可信。 */
+const pending = computed(() => changes.value.filter(c =>
+  c.status === 'candidate'
+  && c.new_status !== 'rejected' && c.old_status !== 'rejected'
+  && c.old_status !== 'superseded'))
 
 /* ---------- 批量处理 ----------
    确认「取代」会逐条改变知识库当前的说法，所以它必须显式确认且可撤销；

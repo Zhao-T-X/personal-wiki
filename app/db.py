@@ -94,6 +94,33 @@ CREATE TABLE IF NOT EXISTS entity_curation_decisions (
 CREATE INDEX IF NOT EXISTS idx_curation_entity_a ON entity_curation_decisions(entity_id_a);
 CREATE INDEX IF NOT EXISTS idx_curation_entity_b ON entity_curation_decisions(entity_id_b);
 
+-- "Stop showing me this maintenance suggestion."
+--
+-- Deliberately not the table above. 苹果 ≠ 苹果公司 is a judgement about how this wiki
+-- files things and is expected to keep holding; "I have read this object-link
+-- suggestion and I am not acting on it" is a preference about a *notice*, and the
+-- whole point of keeping it is that it can be lifted later. Sharing one table would
+-- give the second the weight of the first and lose that distinction.
+--
+-- The key is structured rather than a sentence: kind + source + a stable key derived
+-- from the thing the suggestion was about (for object links, which claim and which
+-- normalised literal). A rescan therefore recognises the same suggestion, while an
+-- edited literal is a *new* question instead of a silently suppressed one.
+CREATE TABLE IF NOT EXISTS maintenance_suppressions (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  source_type TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  candidate_key TEXT NOT NULL,
+  reason TEXT,
+  created_by TEXT NOT NULL DEFAULT 'user',
+  trace_id TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(kind, source_type, source_id, candidate_key)
+);
+CREATE INDEX IF NOT EXISTS idx_suppression_lookup
+  ON maintenance_suppressions(kind, source_type, source_id);
+
 CREATE TABLE IF NOT EXISTS claims (
   id TEXT PRIMARY KEY,
   subject_id TEXT NOT NULL REFERENCES entities(id),

@@ -113,11 +113,16 @@ export const useAppStore = defineStore('app', {
       localStorage.setItem(DEV_MODE_KEY, on ? '1' : '0')
     },
     /** How much is waiting on the user. Shared so every surface that mentions it
-        says the same number. */
+        says the same number.
+     *
+     *  It reads the Review Inbox rather than counting `/api/review`'s three lists by
+     *  hand. The old sum left out claim-level conflicts entirely, so the badge could
+     *  say 2 while the page it opened listed 3 — a mismatch that costs more than the
+     *  count is worth. The inbox is the server's single answer to this question. */
     async loadPendingReview() {
       try {
-        const rv = await api<any>('/api/review?limit=1')
-        this.pendingReview = (rv.entities?.length || 0) + (rv.claims?.length || 0) + (rv.relations?.length || 0)
+        const inbox = await api<{ total: number }>('/api/review/inbox')
+        this.pendingReview = inbox.total || 0
       } catch { this.pendingReview = 0 }
     },
     /**

@@ -10,8 +10,8 @@ from .db import init_db, loads, dumps, transaction
 from .models import (AskRequest, DocumentCreate, StatusUpdate, SearchRequest, EntityUpdate,
                      EntityCreate, IdeaCreate, QuestionCreate, EventCreate, ResearchCreate,
                      CorrectionRequest, CorrectionApplyRequest, CitationValidateRequest,
-                     MergeRequest, ObjectLinkRequest, CurationDecisionRequest,
-                     IntentRequest)
+                     MergeRequest, ObjectLinkRequest, ObjectLinkConfirmRequest,
+                     CurationDecisionRequest, SuppressionRequest, IntentRequest)
 from .service import create_document, index_document, embed_document, delete_document
 from .retrieval import (evidence_pack, format_evidence, lexical_search, search,
                         search_knowledge)
@@ -256,7 +256,7 @@ def claim_history(claim_id:str):
             'superseded_count': chain.superseded_count, 'chain': nodes}
 
 @app.get('/api/claim-relations')
-def claim_relations_queue(status:str|None=None,limit:int=100):
+def claim_relations_queue(status:str|None=None,limit:int=200):
     """Claim-to-claim relationships awaiting a decision, newest first."""
     return ClaimRepository().relation_queue(status,max(1,min(limit,500)))
 
@@ -341,11 +341,18 @@ def correction_apply(payload: CorrectionApplyRequest):
                               polarity=payload.polarity, confidence=payload.confidence)
     plan = build_plan(payload.text, intent)
     try:
-        return apply_correction(plan, relationship=payload.relationship,
-                                related_claim_id=payload.related_claim_id,
-                                apply_supersede=payload.apply_supersede or None)
+        result = apply_correction(plan, relationship=payload.relationship,
+                                  related_claim_id=payload.related_claim_id,
+                                  apply_supersede=payload.apply_supersede or None)
     except OperationError as exc:
         raise HTTPException(422, str(exc)) from exc
+    # Same post-operation check as every other path that produces knowledge: a
+    # correction that lands beside a disagreeing current claim reports it here, so the
+    # discovery arrives with the change instead of waiting to be stumbled upon.
+    from .review import issues_for_claims
+    touched = [str(result[k]) for k in ('claim_id', 'superseded_claim_id', 'related_claim_id')
+               if result.get(k)]
+    return {**result, 'issues': issues_for_claims(touched)}
 
 @app.get('/api/knowledge/claims/{claim_id}/quality')
 def claim_quality(claim_id:str):
@@ -392,7 +399,16 @@ def knowledge_operation(payload: dict):
                                           reason=body.get('reason', '')), conn)
     except OperationError as exc:
         raise HTTPException(422, str(exc)) from exc
-    return {'operation_id': result.operation_id, 'kind': result.kind, 'affected': result.affected}
+    # Post-operation integrity check, reported with the thing that caused it. An
+    # operation that produced or moved knowledge is exactly when a new disagreement can
+    # appear, and telling the user at that moment is the difference between a fix and a
+    # silent break. Only the claims the operation touched are examined — the same
+    # bounded recheck a merge performs, not a workspace scan.
+    from .review import issues_for_claims
+    touched = [str(v) for k, v in (result.affected or {}).items()
+               if v and 'claim' in str(k)]
+    return {'operation_id': result.operation_id, 'kind': result.kind,
+            'affected': result.affected, 'issues': issues_for_claims(touched)}
 
 @app.get('/api/entities/{entity_id}/object')
 def entity_object(entity_id:str):
@@ -530,16 +546,21 @@ def onebox_intent(req:IntentRequest):
 
 
 @app.get('/api/integrity/scan')
-def integrity_scan(duplicates:int=20,unlinked:int=50):
+def integrity_scan(duplicates:int=200,unlinked:int=200):
     """What looks wrong in the knowledge base right now — candidates, not verdicts.
 
     Read-only and side-effect free: nothing here changes knowledge, it only reports
     what a person may want to look at. Both findings are L2 — explained, then
     confirmed by the user — so this endpoint never repairs anything by itself.
+
+    The defaults are the window the Review Inbox counts (app/review.py), so the badge
+    and this list can never disagree about the same backlog. They are generous on
+    purpose: the backlog is real, and a window small enough to look tidy would hide
+    the part of it nobody can see.
     """
     from .integrity import scan as integrity_scan_rows
-    return integrity_scan_rows(duplicate_limit=max(1,min(duplicates,100)),
-                              unlinked_limit=max(1,min(unlinked,200)))
+    return integrity_scan_rows(duplicate_limit=max(1,min(duplicates,500)),
+                              unlinked_limit=max(1,min(unlinked,500)))
 
 
 @app.get('/api/integrity/merge-impact')
@@ -602,6 +623,48 @@ def integrity_object_links(req:ObjectLinkRequest):
     """Link free-text objects to entities that already exist (never creates one)."""
     from .integrity import apply_object_links
     return apply_object_links(min_confidence=req.min_confidence,limit=max(1,min(req.limit,500)))
+
+
+@app.post('/api/integrity/object-links/confirm')
+def integrity_confirm_object_link(req:ObjectLinkConfirmRequest):
+    """Confirm one suggestion by hand: this text refers to that entity.
+
+    The half of the L2 tier a batch tool cannot do. A suggestion with several
+    candidates has no target until a person picks one, so this is the only path that
+    can act on it — and it is audited as a human decision rather than a system match.
+    """
+    from .integrity import confirm_object_link
+    try: return confirm_object_link(claim_id=req.claim_id,entity_id=req.entity_id)
+    except ValueError as exc: raise HTTPException(422,str(exc)) from exc
+
+
+@app.get('/api/integrity/suppressions')
+def integrity_suppressions(limit:int=100):
+    """Suggestions the user has dismissed, so the decision can be read back and undone.
+
+    Not knowledge and not a curation decision — see
+    app/repositories/suppression_repo.py for why the two are kept apart.
+    """
+    from .integrity import dismissals
+    return dismissals(limit=max(1,min(limit,500)))
+
+
+@app.post('/api/integrity/suppressions')
+def integrity_suppress(req:SuppressionRequest):
+    """Stop offering one suggestion. Keyed on the claim and the literal it was about."""
+    from .integrity import dismiss_suggestion
+    try:
+        return dismiss_suggestion(claim_id=req.claim_id,object_text=req.object_text,
+                                  reason=req.reason or None)
+    except ValueError as exc: raise HTTPException(422,str(exc)) from exc
+
+
+@app.delete('/api/integrity/suppressions/{suppression_id}')
+def integrity_revoke_suppression(suppression_id:str):
+    """Un-ignore: the suggestion becomes an ordinary candidate again."""
+    from .integrity import revoke_dismissal
+    try: return revoke_dismissal(suppression_id)
+    except ValueError as exc: raise HTTPException(404,str(exc)) from exc
 
 
 @app.get('/api/documents/{doc_id}/chunks')
@@ -846,8 +909,31 @@ def claims(limit:int=100,status:str|None=None):
 def relations(limit:int=100,status:str|None=None):
     return RelationRepository().list(max(1,min(limit,500)),status)
 
+@app.get('/api/review/inbox')
+def review_inbox():
+    """How much is waiting for a decision, by kind — the number the sidebar shows.
+
+    ``/api/review`` below stays exactly as it was: raw unreviewed rows, one list per
+    table, which the Review page renders. This answers the product question instead —
+    "how much work is waiting for me" — and they are deliberately two endpoints so
+    neither has to grow a flag to serve the other (P2.5 §3).
+
+    The total is the sum of its groups, and every group is filtered to something a
+    person can still act on: a sidebar count and the page it opens must not disagree,
+    and a queue that can never be emptied is one nobody reads.
+    """
+    from .review import inbox
+    return inbox()
+
+
 @app.get('/api/review')
-def review(limit:int=100):
+def review(limit:int=200):
+    """Raw unreviewed rows, one list per table — what the Review page renders.
+
+    The default is the window the Review Inbox counts (app/review.py): a badge and the
+    list it opens must describe the same set, so the page calls this without a limit
+    and both read the same number from the same place.
+    """
     limit=max(1,min(limit,500))
     return {'entities':EntityRepository().candidates(limit),
             'claims':ClaimRepository().candidates(limit),
@@ -931,6 +1017,12 @@ _DIRECT_REFUSALS = {
     # hallucination, so the endpoint and the evaluator must agree (ADR-014).
     'no_current_claim':
         '知识库中没有当前有效值：关于该问题的记录已被取代或过时，因此不作答。',
+    # A proposal is not knowledge: the wiki *does* hold something about this fact, but
+    # it is waiting for the user, so the honest answer names that instead of implying
+    # there is nothing. Wording stays inside the insufficient-evidence family so the
+    # evaluator recognises it as a refusal rather than scoring it as a hallucination.
+    'candidate_not_accepted':
+        '知识库中没有当前有效值：相关的陈述目前只是研究候选，尚未被采纳为知识，因此不作答。',
     'ambiguous_multiple_historical_claims':
         '知识库中没有足够证据确定唯一的历史值（存在多条历史记录），因此不作答。',
 }

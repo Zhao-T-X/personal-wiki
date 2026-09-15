@@ -29,7 +29,9 @@ const KIND_META: Record<Kind, { label: string; idKey: string }> = {
 }
 
 async function load() {
-  data.value = await api('/api/review?limit=200')
+  /* 不传 limit：窗口由后端默认值决定，Review Inbox 数的是同一个窗口——
+     角标和它打开的这一页必须描述同一批东西。 */
+  data.value = await api('/api/review')
   expanded.value = new Set()
 }
 onMounted(load)

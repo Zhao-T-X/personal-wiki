@@ -207,6 +207,9 @@ def test_merge_previews_impact_and_stays_a_dry_run(tmp_path):
     conflict = impact['new_conflicts'][0]
     assert conflict['predicate'] == 'has_ceo' and conflict['functional'] is True
     assert sorted(conflict['objects']) == ['约翰·特努斯', '蒂姆·库克']
+    # Reported against the subject that will exist *after* the merge, since this is
+    # the sentence the user is being asked to act on.
+    assert conflict['subject_name'] == '苹果'
 
     # …and nothing was written by looking.
     assert client.get(f"/api/claims/{ids['ceo_inc']}").json() == before
@@ -504,3 +507,393 @@ def test_not_same_does_not_block_a_later_merge(tmp_path):
     result = client.post('/api/integrity/merge',
                          json={'keep_id': 'e-apple', 'drop_id': 'e-apple-inc'}).json()
     assert result['merged']['moved_claims'] >= 1
+
+
+# --- L2: the tier a person has to decide --------------------------------------
+#
+# The suggestion tier is reported with candidates and **no chosen target**. That is
+# only a coherent design if something can act on the candidates, and the batch tool
+# cannot: it applies what the registry already settled. Without the confirmation
+# below, every suggestion is found, stored, sent to the UI — and then dropped,
+# because nothing is allowed to pick. These three tests are that other half.
+
+def test_confirming_a_suggestion_applies_exactly_what_the_user_chose(tmp_path):
+    db, ids, _ = _seed(tmp_path)
+    client = _client(db)
+
+    scan = client.get('/api/integrity/scan').json()
+    suggestion = next(p for p in scan['unlinked_claims'] if p['claim_id'] == ids['includes_medium'])
+    assert suggestion['confidence'] == 'medium'
+    # The point of the tier: an ambiguous or merely similar match arrives with
+    # candidates and *no* target, so no caller can apply it by accident.
+    assert suggestion['target'] is None
+    assert suggestion['candidates']
+    chosen = suggestion['candidates'][0]
+
+    # Looking at it changed nothing.
+    assert client.get(f"/api/claims/{ids['includes_medium']}").json()['object_id'] is None
+
+    confirmed = client.post('/api/integrity/object-links/confirm',
+                            json={'claim_id': ids['includes_medium'],
+                                  'entity_id': chosen['id']}).json()
+    assert confirmed['linked'] == 1
+    assert client.get(f"/api/claims/{ids['includes_medium']}").json()['object_id'] == chosen['id']
+
+    # A human decision is audited as one — not filed as a system match, which is
+    # what the pipeline's own links are.
+    audit = client.get('/api/knowledge/operations?kind=LINK_OBJECT&limit=20').json()
+    confirmed_rows = [a for a in audit if a['payload']['matched_by'] == 'confirmed']
+    assert len(confirmed_rows) == 1
+    assert confirmed_rows[0]['actor'] == 'user'
+
+    # And it leaves the queue, which is the feedback the user actually sees.
+    after = client.get('/api/integrity/scan').json()
+    assert ids['includes_medium'] not in {p['claim_id'] for p in after['unlinked_claims']}
+
+
+def test_a_confirmation_cannot_break_the_registry_range(tmp_path):
+    """The ontology has the last word even when a person asks: has_ceo takes a Person."""
+    db, ids, _ = _seed(tmp_path)
+    client = _client(db)
+
+    refused = client.post('/api/integrity/object-links/confirm',
+                          json={'claim_id': ids['ceo_inc'], 'entity_id': 'e-apple-inc'})
+    assert refused.status_code == 422
+    assert client.get(f"/api/claims/{ids['ceo_inc']}").json()['object_id'] is None
+
+    # The same slot accepts the right kind of thing.
+    accepted = client.post('/api/integrity/object-links/confirm',
+                           json={'claim_id': ids['ceo_inc'], 'entity_id': 'e-john'})
+    assert accepted.status_code == 200 and accepted.json()['linked'] == 1
+
+
+def test_a_confirmation_cannot_take_a_link_away_from_an_entity(tmp_path):
+    """Confirming twice must not re-point a claim that is already attached."""
+    db, ids, _ = _seed(tmp_path)
+    client = _client(db)
+    client.post('/api/integrity/object-links', json={'min_confidence': 'high'})
+    assert client.get(f"/api/claims/{ids['is_jobs']}").json()['object_id'] == 'e-jobs'
+
+    again = client.post('/api/integrity/object-links/confirm',
+                        json={'claim_id': ids['is_jobs'], 'entity_id': 'e-john'})
+    assert again.status_code == 422
+    assert client.get(f"/api/claims/{ids['is_jobs']}").json()['object_id'] == 'e-jobs'
+
+
+# --- the whole chain ----------------------------------------------------------
+
+def test_the_whole_repair_chain_ends_with_search_and_qa_agreeing(tmp_path):
+    """合并 → 新冲突 → 用既有能力处置 → 搜索与 QA 同时反映最终状态。
+
+    Every link is covered on its own above. What is checked here is that they
+    *compose*, end to end and against a real database — because "the background is
+    fixed but the answer still shows the old state" is the one outcome that makes a
+    repair worse than the problem it repaired.
+    """
+    db, ids, _ = _seed(tmp_path)
+    client = _client(db)
+
+    def knowledge():
+        body = client.get('/api/search/knowledge?q=%E9%A6%96%E5%B8%AD%E6%89%A7%E8%A1%8C%E5%AE%98'
+                          '&limit=10').json()
+        return {(k['subject_label'], k['object_label'], k['state']) for k in body['knowledge']}
+
+    def ask(question: str):
+        return client.post('/api/ask', json={'question': question}).json()
+
+    # 1. Two subjects, each holding its own CEO: the split that hid a disagreement.
+    assert ('苹果', '约翰·特努斯', 'current') in knowledge()
+    assert ('苹果公司', '蒂姆·库克', 'current') in knowledge()
+
+    # 2. Merge. One subject for two rows — and the disagreement becomes explicit.
+    merged = client.post('/api/integrity/merge',
+                         json={'keep_id': 'e-apple', 'drop_id': 'e-apple-inc'}).json()
+    assert len(merged['recheck']['conflicts']) == 1
+    assert {subject for subject, _, _ in knowledge()} == {'苹果'}
+
+    # 2b. And it lands in the work count, not only in the merge response. This is the
+    #     defect the count used to have: the conflict was on the Review page while the
+    #     badge stayed silent, so the two disagreed about how much was outstanding.
+    assert merged['issues'][0]['kind'] == 'claim_conflict'
+    assert merged['issues'][0]['affected_ids']
+    assert client.get('/api/review/inbox').json()['groups']['claim_conflicts'] == 1
+
+    # 3. QA refuses rather than choosing a side, which is the honest answer while
+    #    two current claims disagree.
+    assert ask('苹果现在的 CEO 是谁？')['reason'] == 'ambiguous_multiple_current_claims'
+
+    # 4. Disposal through the machinery that already exists. `supersedes` means the
+    #    relation's *target* stops being current, so the row's direction carries the
+    #    decision — and the queue states both sides so it can be made knowingly.
+    queue = client.get('/api/claim-relations?status=candidate&limit=50').json()
+    conflict = next(r for r in queue if r['relationship'] == 'contradicts')
+    assert conflict['old_object_text'] == '蒂姆·库克'
+    assert conflict['new_object_text'] == '约翰·特努斯'
+    client.patch(f"/api/claim-relations/{conflict['id']}",
+                 json={'status': 'accepted', 'relationship': 'supersedes'})
+
+    # 5. Both surfaces agree immediately — current state, and the history that
+    #    makes the past answerable.
+    after = knowledge()
+    assert ('苹果', '约翰·特努斯', 'current') in after
+    assert ('苹果', '蒂姆·库克', 'historical') in after
+    assert ask('苹果现在的 CEO 是谁？')['answer_value'] == '约翰·特努斯'
+    assert ask('苹果之前的 CEO 是谁？')['answer_value'] == '蒂姆·库克'
+
+    # 6. The inbox empties as a *consequence* of the decision rather than by
+    #    bookkeeping: the target is no longer current, so there is nothing left to
+    #    decide. A count that needed a separate "mark as read" would drift from the
+    #    knowledge it claims to describe.
+    assert client.get('/api/review/inbox').json()['groups']['claim_conflicts'] == 0
+
+
+# --- maintenance memory: dismissing a suggestion ------------------------------
+#
+# The entity pair has "not the same" (a curation decision, answerable forever). A
+# literal suggestion needs a lighter cousin: "I have seen this, stop showing it",
+# which is a preference about a notice and exists in order to be lifted. Without it the
+# only options are acting on the suggestion or reading it every single scan.
+
+def _suggestion(client, claim_id: str) -> dict:
+    body = client.get('/api/integrity/scan').json()
+    return next(p for p in body['unlinked_claims'] if p['claim_id'] == claim_id)
+
+
+def _dismiss(client, proposal: dict) -> dict:
+    return client.post('/api/integrity/suppressions',
+                       json={'claim_id': proposal['claim_id'],
+                             'object_text': proposal['object_text']}).json()
+
+
+def test_dismissing_a_suggestion_is_remembered_and_silences_it(tmp_path):
+    db, ids, _ = _seed(tmp_path)
+    client = _client(db)
+    proposal = _suggestion(client, ids['includes_medium'])
+
+    saved = _dismiss(client, proposal)
+    assert saved['kind'] == 'object_link' and saved['source_type'] == 'claim'
+    assert saved['source_id'] == ids['includes_medium']
+
+    after = client.get('/api/integrity/scan').json()
+    assert ids['includes_medium'] not in {p['claim_id'] for p in after['unlinked_claims']}
+    # Reported, not silently dropped: a person who dismissed something should be able
+    # to see that the system remembered, and how much it is holding back.
+    assert after['counts']['hidden_dismissed'] >= 1
+    # Ignoring changed nothing about the claim itself.
+    assert client.get(f"/api/claims/{ids['includes_medium']}").json()['object_id'] is None
+
+
+def test_a_dismissal_is_listed_with_context_and_can_be_lifted(tmp_path):
+    db, ids, _ = _seed(tmp_path)
+    client = _client(db)
+    saved = _dismiss(client, _suggestion(client, ids['includes_medium']))
+
+    listed = client.get('/api/integrity/suppressions').json()
+    assert len(listed) == 1
+    # Enough context to be read back: which claim, about which literal.
+    assert listed[0]['subject_name'] == '苹果公司'
+    assert listed[0]['object_text'] == '苹果公司集团'
+
+    assert client.delete(f"/api/integrity/suppressions/{saved['id']}").json()['revoked'] == 1
+    assert ids['includes_medium'] in {p['claim_id']
+                                      for p in client.get('/api/integrity/scan').json()['unlinked_claims']}
+    assert client.delete('/api/integrity/suppressions/missing').status_code == 404
+
+
+def test_a_dismissal_lasts_until_you_say_otherwise(tmp_path):
+    """Idempotent, and it never expires on its own — that is what makes it worth clicking."""
+    db, ids, _ = _seed(tmp_path)
+    client = _client(db)
+    proposal = _suggestion(client, ids['includes_medium'])
+    first = _dismiss(client, proposal)
+    again = _dismiss(client, proposal)
+    assert again['id'] == first['id']            # one row, not two
+    assert len(client.get('/api/integrity/suppressions').json()) == 1
+
+
+def test_an_edited_literal_is_a_new_question(tmp_path):
+    """The key is the text, so changing the text un-suppresses it.
+
+    A dismissal answers one specific notice. If the claim's free text later changes,
+    matching the old dismissal would silently swallow a question nobody has seen.
+    """
+    db, ids, _ = _seed(tmp_path)
+    client = _client(db)
+    _dismiss(client, _suggestion(client, ids['includes_medium']))
+
+    conn = db.connect()
+    conn.execute('UPDATE claims SET object_text=? WHERE id=?',
+                 ('苹果公司集团控股', ids['includes_medium']))
+    conn.commit()
+    conn.close()
+
+    raised = {p['claim_id'] for p in client.get('/api/integrity/scan').json()['unlinked_claims']}
+    assert ids['includes_medium'] in raised
+
+
+def test_a_dismissal_is_not_knowledge_and_not_a_curation_decision(tmp_path):
+    """It records a preference about a notice — nothing about the world."""
+    db, ids, _ = _seed(tmp_path)
+    client = _client(db)
+    claims_before = len(client.get('/api/claims?limit=200').json())
+    relations_before = client.get('/api/claim-relations?limit=200').json()
+
+    _dismiss(client, _suggestion(client, ids['includes_medium']))
+
+    assert len(client.get('/api/claims?limit=200').json()) == claims_before
+    assert client.get('/api/claim-relations?limit=200').json() == relations_before
+    # …and not a curation decision either: 「不是同一个」 is about entities and holds
+    # forever; this is about a suggestion and is meant to be lifted.
+    assert client.get('/api/integrity/curation').json() == []
+    assert 'object_link' not in client.get('/api/ontology/predicates').json()['labels']
+
+
+# --- the Review Inbox ---------------------------------------------------------
+
+def test_inbox_total_is_the_sum_of_its_groups(tmp_path):
+    db, _, _ = _seed(tmp_path)
+    body = _client(db).get('/api/review/inbox').json()
+
+    assert body['total'] == sum(body['groups'].values())
+    assert body['groups']['entity_duplicates'] == 1
+    assert body['groups']['claim_conflicts'] == 0
+    # Suggestions are reported beside the total, never inside it: sixteen notices are
+    # not sixteen decisions, and counting them would make this a daily work list.
+    assert body['maintenance']['object_link_suggestions'] > 0
+    assert 'object_link_suggestions' not in body['groups']
+
+
+def test_inbox_keeps_counting_what_the_review_page_still_lists(tmp_path):
+    """The invariant that matters: the badge and the page it opens agree.
+
+    The defect this replaces: claim-level conflicts were listed on Review while the
+    sidebar counted only entity/claim/relation candidates, so the number and the page
+    disagreed about how much was outstanding.
+    """
+    from app.repositories import ClaimRepository
+
+    db, _, _ = _seed(tmp_path)
+    client = _client(db)
+    client.post('/api/integrity/merge', json={'keep_id': 'e-apple', 'drop_id': 'e-apple-inc'})
+
+    body = client.get('/api/review/inbox').json()
+    listed = client.get('/api/claim-relations?limit=50').json()
+    assert body['groups']['claim_conflicts'] == 1
+    assert len([r for r in listed if r['relationship'] == 'contradicts'
+                and r['status'] == 'candidate']) == body['groups']['claim_conflicts']
+    # And the count is "disposable rows", not "rows in the table".
+    assert len(ClaimRepository().pending_decisions(50)) == body['groups']['claim_conflicts']
+
+
+def test_the_inbox_counts_the_window_the_page_renders(tmp_path):
+    """One backlog, one number: the badge and the list it opens must agree.
+
+    Learned by running it against a real wiki: with independent limits the badge
+    reported 51 duplicate pairs while the panel listed 20, so the other 31 could not
+    be acted on from where the user had been sent. This compares the two *calls*
+    rather than trusting two constants to stay equal.
+    """
+    db, _, _ = _seed(tmp_path)
+    client = _client(db)
+    panel = client.get('/api/integrity/scan').json()
+    queues = client.get('/api/review').json()
+    inbox = client.get('/api/review/inbox').json()
+
+    assert inbox['groups']['entity_duplicates'] == panel['counts']['duplicate_entities']
+    assert inbox['maintenance']['object_link_suggestions'] == panel['counts']['unlinked_claims']
+    assert inbox['groups']['entities'] == len(queues['entities'])
+    assert inbox['groups']['claims'] == len(queues['claims'])
+    assert inbox['groups']['relations'] == len(queues['relations'])
+
+
+def test_inbox_drops_rows_nobody_can_act_on(tmp_path):
+    """A decision already made must not keep the number up."""
+    db, _, _ = _seed(tmp_path)
+    client = _client(db)
+    client.post('/api/integrity/merge', json={'keep_id': 'e-apple', 'drop_id': 'e-apple-inc'})
+    conflict = next(r for r in client.get('/api/claim-relations?status=candidate&limit=50').json()
+                    if r['relationship'] == 'contradicts')
+    assert client.get('/api/review/inbox').json()['groups']['claim_conflicts'] == 1
+
+    client.patch(f"/api/claim-relations/{conflict['id']}",
+                 json={'status': 'accepted', 'relationship': 'supersedes'})
+
+    body = client.get('/api/review/inbox').json()
+    assert body['groups']['claim_conflicts'] == 0
+    assert body['total'] == sum(body['groups'].values())
+
+
+# --- post-operation issues, one vocabulary ------------------------------------
+
+def _research_candidate(db, *, subject_id: str, object_text: str) -> str:
+    """A pending research candidate that disagrees with what is already current.
+
+    ACCEPT is bounded to research candidates on purpose, so exercising the real path
+    means producing one the way the pipeline does: a document with
+    ``source_type='research'`` and a candidate claim quoting it.
+    """
+    from app.service import create_document, write_chunks
+
+    text = f'{subject_id} has_ceo {object_text}.'
+    doc_id = create_document(title='研究结论', content=text, source_type='research',
+                             source_uri='research:test-issues', metadata={})
+    chunk = write_chunks(doc_id, text)[0]
+    conn = db.connect()
+    cid = str(uuid.uuid4())
+    conn.execute(
+        '''INSERT INTO claims(id,subject_id,predicate,object_id,object_text,content,context_json,
+               claim_type,polarity,modality,confidence,status,created_by,source_document_id,
+               source_chunk_id,source_start_offset,source_end_offset,source_quote)
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+        (cid, subject_id, 'has_ceo', None, object_text, text, '{}', 'factual', 'positive',
+         'asserted', 0.9, 'candidate', 'llm', doc_id, chunk['id'],
+         chunk['start_offset'], chunk['end_offset'], text))
+    conn.commit()
+    conn.close()
+    return cid
+
+
+def test_accepting_a_candidate_reports_the_conflict_it_creates(tmp_path):
+    """ACCEPT is the other way knowledge appears, so it must report in the same shape.
+
+    Otherwise the user learns the warning from one entry point and not from another,
+    and 「系统会告诉我它弄坏了什么」 stops being true.
+    """
+    db, _, _ = _seed(tmp_path)
+    client = _client(db)
+    candidate = _research_candidate(db, subject_id='e-apple', object_text='蒂姆·库克')
+
+    body = client.post('/api/knowledge/operations',
+                       json={'kind': 'ACCEPT', 'payload': {'claim_id': candidate}}).json()
+
+    assert body['issues'], 'accepting a disagreeing statement must report the disagreement'
+    issue = body['issues'][0]
+    assert issue['kind'] == 'claim_conflict'
+    assert issue['severity'] == 'warning'
+    assert set(issue['affected_ids']) >= {candidate}
+    assert 'has_ceo' not in issue['title']          # never the canonical identifier
+    # A merge reports the identical shape, because it is built by the same code.
+    merged = client.post('/api/integrity/merge',
+                         json={'keep_id': 'e-apple-inc', 'drop_id': 'e-apple'}).json()
+    assert merged['issues'][0].keys() == issue.keys()
+
+
+def test_an_ordinary_write_reports_nothing(tmp_path):
+    """The check must not cry wolf: a statement that agrees with the wiki is silent."""
+    db, _, _ = _seed(tmp_path)
+    client = _client(db)
+    conn = db.connect()
+    chunk = conn.execute(
+        'SELECT id,document_id,start_offset,end_offset FROM chunks LIMIT 1').fetchone()
+    conn.close()
+
+    # 苹果 already records 乔布斯; asserting the same value again is a duplicate, and a
+    # duplicate is not a problem to fix.
+    body = client.post('/api/knowledge/operations', json={
+        'kind': 'CREATE', 'payload': {
+            'subject': '苹果', 'predicate': 'is', 'object': '乔布斯',
+            'content': '苹果 是 乔布斯。',
+            'source_document_id': chunk[1], 'source_chunk_id': chunk[0],
+            'source_start_offset': chunk[2], 'source_end_offset': chunk[3],
+            'source_quote': '苹果 是 乔布斯。'}}).json()
+    assert body['issues'] == []

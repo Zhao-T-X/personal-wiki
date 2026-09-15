@@ -88,23 +88,17 @@ async function proposeCandidates(t: any) {
   } catch (e: any) { store.toast(e.message) } finally { proposing.value = null }
 }
 
-/** 采纳后的反馈：不是一句「成功」，而是这条知识现在是什么、以及要不要处理它引起的冲突。 */
+/** 采纳之后的刷新。
+ *
+ *  采纳动作和它引起的后果由 KnowledgeCard 统一报告——它拿到的就是操作返回的 `issues`。
+ *  这里曾经自己回头查一遍关系来判断「有没有冲突」，于是同一个发现有第二份实现，
+ *  并且指向的是冲突中心：那里收的是极性相反的冲突，而采纳产生的这条根本不在里面。
+ *  一个判断只该有一处实现，一个发现也只该有一套说法。 */
 async function onCandidateChanged(t: any, change: any) {
   if (change?.status !== 'verified') { await reloadTaskKnowledge(t); return }
-  try {
-    const relations = (await api<any>(`/api/claims/${change.id}/relations`)).relations || []
-    const conflict = relations.find((r: any) => r.relationship === 'contradicts')
-    if (conflict) {
-      store.toast('已加入知识库，同时发现与现有知识冲突', {
-        label: '处理冲突', run: () => router.push({ path: '/research', query: { tab: 'conflicts' } }),
-      })
-    } else {
-      store.toast('已加入知识库', {
-        label: '查看知识', run: () => router.push('/knowledge/claim/' + change.id),
-      })
-    }
-  } catch { store.toast('已加入知识库') }
   await reloadTaskKnowledge(t)
+  // 采纳可能新增一条待处理的问题，角标要跟着变——否则它刚刚被报告，数字却还没动。
+  await store.loadPendingReview()
 }
 
 async function runResearchTask(t: any) {

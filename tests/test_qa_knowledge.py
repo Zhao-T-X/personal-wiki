@@ -149,6 +149,98 @@ def _no_llm(monkeypatch):
     monkeypatch.setattr(app.llm, '_client', _boom, raising=False)
 
 
+def _pending_proposal(db, *, object_id: str, text: str) -> str:
+    """A research proposal about the same fact — proposed by nobody-accepted-yet.
+
+    Built the way the pipeline builds one: a ``research`` document and a candidate
+    claim quoting it, which is exactly what ACCEPT is allowed to promote.
+    """
+    from app.service import create_document, write_chunks
+
+    doc_id = create_document(title='研究结论', content=text, source_type='research',
+                             source_uri='research:qa-proposal', metadata={})
+    chunk = write_chunks(doc_id, text)[0]
+    conn = db.connect()
+    cid = str(uuid.uuid4())
+    conn.execute(
+        '''INSERT INTO claims(id,subject_id,predicate,object_id,object_text,content,context_json,
+               claim_type,polarity,modality,confidence,status,created_by,source_document_id,
+               source_chunk_id,source_start_offset,source_end_offset,source_quote)
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+        (cid, 'e-apple', 'has_ceo', object_id, None, text, '{}', 'factual', 'positive',
+         'asserted', 0.9, 'candidate', 'llm', doc_id, chunk['id'],
+         chunk['start_offset'], chunk['end_offset'], text))
+    conn.commit()
+    conn.close()
+    return cid
+
+
+# --- a proposal is not an answer ----------------------------------------------
+
+def test_a_pending_proposal_cannot_make_a_real_answer_look_ambiguous(tmp_path, monkeypatch):
+    """「研究候选」 is not in the knowledge base yet, so it cannot be spoken as one.
+
+    A proposal that disagrees with accepted knowledge is a *finding* (P2.5 records it),
+    not a second opinion the answer must refuse to choose between. Letting it into the
+    candidate set means one unaccepted research task can silence a question the wiki
+    can answer.
+    """
+    db, ids, _ = _seed(tmp_path)
+    _no_llm(monkeypatch)
+    _pending_proposal(db, object_id='e-tim', text='苹果公司 的首席执行官是 蒂姆·库克。')
+
+    answer = _ask(db, QUESTION)
+    assert answer['status'] == 'answered'
+    assert answer['answer_value'] == '约翰·特努斯'
+
+
+def test_a_pending_proposal_is_never_the_answer(tmp_path, monkeypatch):
+    """Only a research proposal → refuse honestly, and say what is actually going on.
+
+    The line is provenance, not lifecycle: an *extraction* candidate is knowledge
+    awaiting review (answering from it is right, and labelled 待确认), while a research
+    proposal is unaccepted by definition — ACCEPT refuses anything that did not come
+    from a research document. So this scenario removes the accepted answer and leaves
+    only the proposal.
+    """
+    db, ids, _ = _seed(tmp_path)
+    _no_llm(monkeypatch)
+    conn = db.connect()
+    conn.execute("UPDATE claims SET status='rejected' WHERE id=?", (ids['now'],))
+    conn.commit()
+    conn.close()
+    _pending_proposal(db, object_id='e-john',
+                      text='根据最新研究，苹果公司 的首席执行官是 约翰·特努斯。')
+
+    answer = _ask(db, QUESTION)
+    assert answer['status'] != 'answered'
+    assert answer['answer_value'] is None
+    # …and the refusal says *why*, in a form the refusal evaluator recognises (ADR-014).
+    assert answer['reason'] == 'candidate_not_accepted'
+    assert '知识库中没有' in answer['answer']
+
+
+def test_an_extraction_candidate_is_still_answerable(tmp_path, monkeypatch):
+    """A claim from an ordinary import is knowledge awaiting review — not a proposal.
+
+    Refusing it would leave a freshly imported wiki unable to answer anything, which
+    is why the filter is about where a claim came from rather than about its status.
+    """
+    db, ids, _ = _seed(tmp_path)
+    _no_llm(monkeypatch)
+    conn = db.connect()
+    conn.execute("UPDATE claims SET status='candidate' WHERE id=?", (ids['now'],))
+    conn.commit()
+    conn.close()
+
+    answer = _ask(db, QUESTION)
+    assert answer['status'] == 'answered'
+    assert answer['answer_value'] == '约翰·特努斯'
+    # …and the support says what is true of it: 待确认, not 当前.
+    support = answer['knowledge'][0]
+    assert support['status_label'] == '待确认'
+
+
 # --- a fact question: one answer, one supporting claim ------------------------
 
 def test_a_fact_question_is_supported_by_exactly_one_claim(tmp_path, monkeypatch):

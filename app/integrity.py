@@ -38,9 +38,12 @@ from .claim_relations import FUNCTIONAL_PREDICATES, compare_claim, record_relati
 from .db import loads, transaction
 from .domain.claim_state import is_current
 from .ontology import claim_predicate_spec, normalize_name
+from .readmodels.integrity_issue import claim_conflict_issue
+from .readmodels.knowledge_view import fold
 from .repositories import (ClaimRepository, CurationRepository, EntityRepository,
                            OperationRepository, RelationRepository)
 from .repositories.curation_repo import NOT_SAME, canonical_pair
+from .repositories.suppression_repo import CLAIM, OBJECT_LINK, SuppressionRepository
 from .resolution import name_similarity, scan_duplicate_entities
 
 # How sure the system is that a free-text object refers to an existing entity.
@@ -103,20 +106,30 @@ def _conflict_key(conflict: dict) -> tuple:
     return (conflict['predicate'], tuple(sorted(conflict['objects'])), conflict['subject_id'])
 
 
-def _after_merge(claims: list[dict], keep_id: str, drop_id: str) -> list[dict]:
+def _after_merge(claims: list[dict], keep_id: str, drop_id: str,
+                 keep_name: str = '') -> list[dict]:
     """The same claims as they would look with the merge applied — nothing written.
 
     A preview has to be a real dry run: recomputing conflicts on rewritten *copies*
     is what lets the preview state a number ("this will create 1 conflict") instead of
     warning vaguely, which is the only version of the warning a user can act on.
+
+    The *name* is rewritten along with the id. A conflict reported against a subject
+    that will not exist a moment later is a preview describing the wrong world — and
+    the sentence it produces ("苹果公司 首席执行官：…") is the one the user is being
+    asked to act on.
     """
     out = []
     for claim in claims:
         rewritten = {**claim}
         if rewritten.get('subject_id') == drop_id:
             rewritten['subject_id'] = keep_id
+            if keep_name:
+                rewritten['subject_name'] = keep_name
         if rewritten.get('object_id') == drop_id:
             rewritten['object_id'] = keep_id
+            if keep_name:
+                rewritten['object_name'] = keep_name
         out.append(rewritten)
     return out
 
@@ -142,6 +155,21 @@ def entity_pool() -> list[dict]:
     return [{'id': r['id'], 'name': r['name'], 'status': r.get('status'),
              'types': set(loads(r.get('types_json') or '[]', []) or ([r['type']] if r.get('type') else []))}
             for r in EntityRepository().similarity_pool(None, 500)]
+
+
+def object_link_candidate_key(object_text: str) -> str:
+    """Stable identity of the *text* one suggestion is about.
+
+    Pure, and computed in exactly one place: the suppression written when a person
+    dismisses a suggestion and the lookup that hides it from the next scan have to
+    agree character for character, or a dismissed suggestion comes back — which is the
+    whole defect this exists to prevent.
+
+    Case and spacing are folded (so a rescan sees the same key); the words are not
+    stemmed, reordered or truncated. An edited literal is therefore a *new* question
+    rather than an old one silently still dismissed.
+    """
+    return fold(object_text)
 
 
 def link_proposal(claim: dict, resolved: dict[str, list[str]], pool: list[dict]) -> dict | None:
@@ -170,6 +198,9 @@ def link_proposal(claim: dict, resolved: dict[str, list[str]], pool: list[dict])
         'predicate': predicate,
         'predicate_label': _predicate_label(predicate),
         'object_text': text,
+        # Carried with the proposal so a caller can dismiss *this* suggestion without
+        # re-deriving its identity — the key is what the suppression is written under.
+        'candidate_key': object_link_candidate_key(text),
         'statement': claim.get('content') or '',
     }
     by_id = {c['id']: c for c in pool}
@@ -202,16 +233,21 @@ def link_proposal(claim: dict, resolved: dict[str, list[str]], pool: list[dict])
             'candidates': [best], 'similarity': best['similarity']}
 
 
-def _audit_links(conn, links: list[dict], *, reason: str) -> None:
+def _audit_links(conn, links: list[dict], *, reason: str, actor: str = 'system') -> None:
     """Record automatic links where every other knowledge write is recorded.
 
     One row per link, so a later question — "why is this claim linked to Tim Cook?" —
     is answered from storage instead of by re-deriving the rules: this extraction
     matched the entity's declared alias exactly, and here is the trace id.
+
+    ``actor`` is the one thing that differs between the two paths that can write a
+    link. "The pipeline matched a declared alias" and "a person chose this candidate"
+    are the same row shape but not the same amount of trust, and an audit trail that
+    cannot tell them apart answers neither question.
     """
     ops = OperationRepository(conn)
     for link in links:
-        ops.record(op_id=str(uuid.uuid4()), kind='LINK_OBJECT', actor='system',
+        ops.record(op_id=str(uuid.uuid4()), kind='LINK_OBJECT', actor=actor,
                    status='applied', reason=reason,
                    payload={'claim_id': link['claim_id'], 'entity_id': link['entity_id'],
                             'object_text': link['object_text'], 'predicate': link['predicate'],
@@ -297,7 +333,13 @@ def scan(*, duplicate_limit: int = 20, unlinked_limit: int = 50) -> dict:
     pool = entity_pool()
     claims = ClaimRepository().unlinked_object_claims(unlinked_limit)
     resolved = EntityRepository().resolve_many([c['object_text'] for c in claims])
-    proposals = [p for p in (link_proposal(c, resolved, pool) for c in claims) if p]
+    raised = [p for p in (link_proposal(c, resolved, pool) for c in claims) if p]
+    # Dismissed suggestions drop out here, and they are counted like the other two
+    # hidden sets: a person who dismissed something should be able to see that the
+    # system remembered, rather than wonder whether the click did anything.
+    dismissed = SuppressionRepository().suppressed_keys(OBJECT_LINK, CLAIM)
+    proposals = [p for p in raised
+                 if (str(p['claim_id']), p['candidate_key']) not in dismissed]
 
     counts = ClaimRepository().claim_counts_by_entity(
         [e['id'] for p in fresh for e in (p['entity_a'], p['entity_b'])])
@@ -318,7 +360,8 @@ def scan(*, duplicate_limit: int = 20, unlinked_limit: int = 50) -> dict:
         'counts': {'duplicate_entities': len(kept[:duplicate_limit]),
                    'unlinked_claims': len(proposals),
                    'hidden_no_knowledge': empty,
-                   'hidden_decided': len(candidates) - len(fresh)},
+                   'hidden_decided': len(candidates) - len(fresh),
+                   'hidden_dismissed': len(raised) - len(proposals)},
     }
 
 
@@ -349,6 +392,47 @@ def revoke_curation(decision_id: str) -> dict:
     return {'revoked': removed, 'decision_id': decision_id}
 
 
+# --- maintenance memory -------------------------------------------------------
+#
+# A second and deliberately lighter kind of remembering. "苹果 ≠ 苹果公司" is a
+# judgement about how this wiki files things and is expected to keep holding; "I am
+# not acting on this object-link suggestion" is a preference about a *notice*, and it
+# exists in order to be lifted again. Keeping them in separate tables is what lets the
+# UI say 已记住 for one and 已忽略（可恢复） for the other without either word being a
+# lie — see app/repositories/suppression_repo.py.
+
+def dismiss_suggestion(*, claim_id: str, object_text: str, reason: str | None = None,
+                       trace_id: str | None = None) -> dict:
+    """Stop offering one object-link suggestion.
+
+    Keyed on the claim *and* the literal, so this dismisses exactly the notice the user
+    was looking at. If the claim's free text changes later the key no longer matches
+    and the suggestion is raised again — which is right: it is a different question,
+    and answering the old one is no answer to it.
+    """
+    if not claim_id:
+        raise ValueError('A suggestion needs the claim it belongs to')
+    key = object_link_candidate_key(object_text)
+    if not key:
+        raise ValueError('A suggestion needs the object text it is about')
+    return SuppressionRepository().suppress(kind=OBJECT_LINK, source_type=CLAIM,
+                                            source_id=claim_id, candidate_key=key,
+                                            reason=reason, trace_id=trace_id)
+
+
+def dismissals(limit: int = 100) -> list[dict]:
+    """What has been ignored, newest first — so it can be read back and taken back."""
+    return SuppressionRepository().list(limit)
+
+
+def revoke_dismissal(suppression_id: str) -> dict:
+    """Un-ignore a suggestion. It becomes an ordinary candidate again."""
+    removed = SuppressionRepository().revoke(suppression_id)
+    if not removed:
+        raise ValueError('Suppression not found')
+    return {'revoked': removed, 'suppression_id': suppression_id}
+
+
 def merge_impact(*, keep_id: str, drop_id: str) -> dict:
     """What a merge would touch, before it touches anything — the dry run.
 
@@ -368,7 +452,8 @@ def merge_impact(*, keep_id: str, drop_id: str) -> dict:
     relations = RelationRepository().incident([keep_id, drop_id], 200)
     existing = potential_conflicts(claims)
     existing_keys = {_conflict_key(c) for c in existing}
-    new = [c for c in potential_conflicts(_after_merge(claims, keep_id, drop_id))
+    new = [c for c in potential_conflicts(
+               _after_merge(claims, keep_id, drop_id, str(keep['name'])))
            if _conflict_key(c) not in existing_keys]
 
     keep_types, drop_types = set(keep.get('types') or []), set(drop.get('types') or [])
@@ -430,6 +515,10 @@ def merge_entities(*, keep_id: str, drop_id: str) -> dict:
         # The findings *after* the merge, not the prediction: the preview can be wrong
         # about which claims were affected, and the user must see what actually happened.
         'recheck': recheck,
+        # The same findings in the shared issue vocabulary (IntegrityIssue), so the
+        # surface that reports a merge and the one that reports a research acceptance
+        # describe what they disturbed in identical words.
+        'issues': [claim_conflict_issue(c).to_dict() for c in recheck['conflicts']],
     }
 
 
@@ -483,3 +572,51 @@ def apply_object_links(*, min_confidence: str = HIGH, limit: int = 200) -> dict:
     return {'applied': applied, 'considered': len(proposals),
             'skipped_unconfirmed': len(proposals) - len(chosen),
             'claim_ids': [p['claim_id'] for p in chosen]}
+
+
+def confirm_object_link(*, claim_id: str, entity_id: str) -> dict:
+    """L2: a person has chosen. Apply exactly that link, and nothing else.
+
+    The other half of :func:`link_proposal`'s ``medium`` tier. A medium proposal is
+    reported *without* a target on purpose — several entities claim the text, or one
+    merely resembles it — so the system refuses to pick and the choosing is a human
+    act. This is where that act is applied, verbatim: the text is not re-matched and
+    no candidate is re-ranked, because re-deciding here would quietly discard the one
+    piece of information the automatic path did not have.
+
+    Two guards stay, and both come from declared data rather than judgement:
+
+    * the ontology's range still has the last word (``has_ceo`` declares Person, so
+      confirming it against an Organization is refused — the same rule the write path
+      enforces, not a second opinion);
+    * the claim must still be unlinked, so a confirmation cannot overwrite a link
+      that was established in between.
+
+    Never creates an entity and never merges: a confirmation resolves *this* literal
+    against something that already exists, which is the only thing the tier claimed.
+    """
+    claim = ClaimRepository().get(claim_id)
+    if not claim:
+        raise ValueError('Claim not found')
+    entity = EntityRepository().get_full(entity_id)
+    if not entity or entity.get('status') == 'archived':
+        raise ValueError('Entity not found')
+    declared = loads(entity.get('types_json') or '[]', []) or []
+    types = set(declared) or ({entity['type']} if entity.get('type') else set())
+    if not _range_accepts(claim.get('predicate') or '', types):
+        raise ValueError('The registry does not allow this predicate to point at that kind of entity')
+    if claim.get('object_id'):
+        raise ValueError('This claim already points at an entity')
+
+    applied = ClaimRepository().link_objects([(claim_id, entity_id)])
+    if applied:
+        with transaction() as conn:
+            _audit_links(conn, [{'claim_id': claim_id, 'entity_id': entity_id,
+                                 'entity_name': entity['name'],
+                                 'object_text': claim.get('object_text'),
+                                 'predicate': claim.get('predicate'),
+                                 'matched_by': 'confirmed',
+                                 'trace_id': f'confirm:{claim_id}'}],
+                         reason='用户确认对象字面量指向的主体', actor='user')
+    return {'linked': applied, 'claim_id': claim_id, 'entity_id': entity_id,
+            'entity_name': entity.get('name')}

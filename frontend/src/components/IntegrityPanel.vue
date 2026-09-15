@@ -8,6 +8,10 @@
  * 最后一条尤其重要。合并只改变「这条知识挂在谁名下」，所以它最好的结果是让一个
  * 原本隐藏的分歧变得可见——那就把它说出来，并把处置交给已经存在的冲突中心，
  * 而不是在这里顺手挑一个赢家。
+ *
+ * 面板里的「字面量未接入主体」分两层，语气必须不同：名称精确命中的可以直接批量接入
+ * （那是一次查表结果），而多个主体声明了同一名称、或只是名称相近的那些，系统明确
+ * 不挑——候选摆出来，由人点一下。少了这一层，扫描出来的疑问就永远停在后台没人看见。
  */
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
@@ -28,6 +32,9 @@ const impact = ref<any>(null)
 const result = ref<any>(null)
 /** Curation decisions already made, so they can be read back and taken back. */
 const decisions = ref<any[]>([])
+/** Suggestions the user has dismissed — a *preference*, not a decision about the
+    world, and the reason it can be taken back at any time. */
+const dismissed = ref<any[]>([])
 /** The pair just ruled out, for the confirmation the user should see. */
 const saved = ref('')
 
@@ -35,15 +42,25 @@ const duplicates = computed(() => scan.value?.duplicate_entities || [])
 const unlinked = computed(() => scan.value?.unlinked_claims || [])
 /** Only the ones the registry's own comparison settles: a lookup, not a guess. */
 const exactLinks = computed(() => unlinked.value.filter((p: any) => p.confidence === 'high' && p.target))
-/** Decisions keep the panel reachable: forgetting is the only way to undo one. */
+/** What the system refuses to decide by itself — several entities claim the text, or
+    one only resembles it. It arrives with candidates and **no chosen target**, so
+    somebody has to pick; until they can, the whole tier is invisible and the system
+    looks like it found nothing while sitting on a queue of open questions. */
+const suggestions = computed(() =>
+  unlinked.value.filter((p: any) => p.confidence === 'medium' && (p.candidates || []).length))
+/** Decisions and dismissals keep the panel reachable: the only way to undo one is to
+    be able to see it. */
 const visible = computed(() =>
-  duplicates.value.length > 0 || exactLinks.value.length > 0 || decisions.value.length > 0)
+  duplicates.value.length > 0 || exactLinks.value.length > 0
+  || suggestions.value.length > 0 || decisions.value.length > 0
+  || dismissed.value.length > 0)
 
 async function load() {
   try { scan.value = await api<any>('/api/integrity/scan') } catch { scan.value = null }
 }
 async function loadDecisions() {
   try { decisions.value = await api<any[]>('/api/integrity/curation?limit=20') } catch { decisions.value = [] }
+  try { dismissed.value = await api<any[]>('/api/integrity/suppressions?limit=20') } catch { dismissed.value = [] }
 }
 onMounted(() => { void load(); void loadDecisions() })
 
@@ -93,6 +110,47 @@ async function applyLinks() {
   } catch (e: any) { store.toast(e.message) } finally { busy.value = false }
 }
 
+/** 确认一条建议：把「这段文字指的就是这个主体」落下来。
+ *
+ * 系统在这一层刻意不挑，所以这里必须由人指定候选；后端不会再按文本重算一遍，
+ * 否则等于把人刚刚给出的那个信息丢掉。确认后重跑扫描——建议从队列里消失本身
+ * 就是反馈。 */
+async function confirmLink(claimId: string, entityId: string) {
+  busy.value = true
+  try {
+    const body = await post<any>('/api/integrity/object-links/confirm',
+      { claim_id: claimId, entity_id: entityId })
+    store.toast(body.linked ? `已接入「${body.entity_name}」` : '这条已经接入过，未重复写入')
+    await load()
+    emit('changed')
+  } catch (e: any) { store.toast(e.message) } finally { busy.value = false }
+}
+
+/** 忽略一条建议：这是「这条别再提醒我」的偏好，不是关于世界的判断。
+ *
+ *  所以它记在 maintenance_suppressions 而不是策展决定里——策展决定要一直成立，
+ *  而这条本来就该能随时收回。忽略不改变任何知识：字面量仍然是字面量，只是不再
+ *  反复占用你的注意力。 */
+async function dismiss(proposal: any) {
+  busy.value = true
+  try {
+    const recorded = await post<any>('/api/integrity/suppressions',
+      { claim_id: proposal.claim_id, object_text: proposal.object_text })
+    store.toast('已忽略这条建议', { label: '撤销', run: () => undoDismissal(recorded.id) })
+    await Promise.all([load(), loadDecisions()])
+  } catch (e: any) { store.toast(e.message) } finally { busy.value = false }
+}
+
+/** 恢复一条被忽略的建议。它重新成为一条普通候选，没有被记住过任何事情。 */
+async function undoDismissal(id: string) {
+  busy.value = true
+  try {
+    await del('/api/integrity/suppressions/' + id)
+    await Promise.all([load(), loadDecisions()])
+    store.toast('已恢复提示')
+  } catch (e: any) { store.toast(e.message) } finally { busy.value = false }
+}
+
 /** 不是同一个：一次策展决定，不是一条知识。
  *
  * 记下来之后，这两个主体不会再出现在可能重复的提示里。它是可撤销的——因为这是
@@ -118,8 +176,14 @@ async function undoDecision(id: string) {
   } catch (e: any) { store.toast(e.message) } finally { busy.value = false }
 }
 
-/** 冲突的处置是既有能力的事，这里只负责把用户送到那里。 */
-function openConflicts() { router.push({ path: '/research', query: { tab: 'conflicts' } }) }
+/** 冲突的处置是既有能力的事，这里只负责把用户送到那里——但「那里」必须是**真的
+ *  会列出这条冲突**的界面。
+ *
+ *  合并产生的是「单值关系上出现了两个不同取值」，两条断言的极性相同；而冲突中心
+ *  收的是「同一断言被说成又真又假」（极性相反）。把用户送去冲突中心，他会在一个
+ *  空列表上找刚才被告知的那条冲突。它在审核页的知识变化清单里，取代 / 两者都保留 /
+ *  撤销都在那儿，所以送到那里。 */
+function openConflicts() { router.push('/review') }
 </script>
 
 <template>
@@ -133,7 +197,7 @@ function openConflicts() { router.push({ path: '/research', query: { tab: 'confl
     </div>
 
     <!-- 1. 发现 -->
-    <div v-if="duplicates.length || exactLinks.length" class="ipbody">
+    <div v-if="duplicates.length || exactLinks.length || suggestions.length" class="ipbody">
       <div v-for="p in duplicates" :key="p.entity_a.id + p.entity_b.id" class="iprow">
         <span class="tag amber">可能重复的主体</span>
         <b>{{ p.entity_a.name }}</b><span class="faint">· {{ p.entity_a.claims }} 条知识</span>
@@ -154,6 +218,25 @@ function openConflicts() { router.push({ path: '/research', query: { tab: 'confl
           接入这 {{ exactLinks.length }} 条（只连接，不新建主体）
         </button>
       </div>
+
+      <!-- 需要人来选的那些：系统给出候选，但不挑。 -->
+      <div v-for="p in suggestions" :key="'s' + p.claim_id" class="iprow">
+        <span class="tag blue">字面量未接入主体</span>
+        <span>{{ p.subject_label }} {{ p.predicate_label || '' }}</span>
+        <b>「{{ p.object_text }}」</b>
+        <span class="faint">{{ p.matched_by === 'ambiguous' ? '指向其中哪一个？' : '是不是指' }}</span>
+        <button v-for="c in p.candidates" :key="c.id" class="btn sm" :disabled="busy"
+                :title="p.matched_by === 'ambiguous'
+                  ? '多个主体都声明了这个名称，需要你选一个'
+                  : `名称相近 ${Math.round((c.similarity || 0) * 100)}%`"
+                @click="confirmLink(p.claim_id, c.id)">{{ c.name }}</button>
+        <button class="btn sm ghost" :disabled="busy" title="不再提示这一条（随时可恢复）"
+                @click="dismiss(p)">忽略</button>
+      </div>
+      <p v-if="suggestions.length" class="faint" style="font-size:9.5px;margin:8px 4px 0">
+        这几条系统不替你做决定——要么多个主体声明了同一个名称，要么只是名称相近。确认后才会接入；
+        接入的是已有的主体，不新建、也不合并。
+      </p>
     </div>
 
     <!-- 2. 解释影响 —— 合并之前先把后果算出来 -->
@@ -213,6 +296,22 @@ function openConflicts() { router.push({ path: '/research', query: { tab: 'confl
         <div class="grow"></div>
         <button class="btn sm ghost" :disabled="busy" @click="undoDecision(d.id)">撤销</button>
       </div>
+    </details>
+
+    <!-- 已忽略的建议：和「已记住的判断」分开列，因为两者不是一回事——
+         一个是关于知识库的判断，一个是关于这条提醒的偏好。 -->
+    <details v-if="dismissed.length" class="ipmem">
+      <summary>已忽略 {{ dismissed.length }} 条建议</summary>
+      <div v-for="d in dismissed" :key="d.id" class="iprow">
+        <span class="tag">已忽略</span>
+        <b>{{ d.subject_name }}</b>
+        <span class="faint">记着</span><b>「{{ d.object_text }}」</b>
+        <div class="grow"></div>
+        <button class="btn sm ghost" :disabled="busy" @click="undoDismissal(d.id)">恢复提示</button>
+      </div>
+      <p class="faint" style="font-size:9.5px;margin:6px 4px 0">
+        忽略的是「这条别再提醒我」，不是对知识的判断——所以它随时可以恢复，也没有改变任何一条知识。
+      </p>
     </details>
 
     <!-- 3. 结果 —— 包括它引起的后果 -->

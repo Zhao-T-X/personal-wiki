@@ -10,6 +10,7 @@ performs no IO, so it is trivially testable and cannot drift from the database.
 from __future__ import annotations
 
 SUPERSEDED = 'superseded'
+CANDIDATE = 'candidate'
 
 
 def is_current(claim: dict) -> bool:
@@ -55,5 +56,13 @@ def resolve(claims: list[dict]) -> list[dict]:
 
 
 def select_current(claims: list[dict]) -> list[dict]:
-    """Convenience for callers that only want the current rows (no history)."""
+    """Convenience for callers that only want the current rows (no history).
+
+    Deliberately about *lifecycle only*: "not superseded" is not the same question as
+    "may be stated as fact" — a research proposal is the latest version of what was
+    proposed, and a correction the user just confirmed is knowledge even though both
+    carry ``status='candidate'``. That second question needs provenance, which this
+    pure module cannot see, so it is answered where the documents are
+    (``ask_workflow._as_knowledge``), not by a status check here.
+    """
     return [c for c in resolve(claims) if is_current(c)]

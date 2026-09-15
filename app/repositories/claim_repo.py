@@ -172,6 +172,29 @@ class ClaimRepository(Repository):
                     WHERE c.subject_id IN ({marks}) OR c.object_id IN ({marks})''',
                 (*ids, *ids)))
 
+    def current_counterparts(self, claim_ids: list[str]) -> list[dict]:
+        """These claims plus everything filed under the same subject and predicate.
+
+        A disagreement is a property of a *group*, not of a row. After an operation
+        touches one claim, "did this create a conflict?" can only be answered by
+        looking at the rest of that group — so fetching only the named rows would make
+        a conflict invisible from whichever side happened not to be named.
+
+        Deliberately *not* :meth:`claims_touching`, which takes entity ids and answers a
+        different question ("what does this entity appear in?").
+        """
+        ids = [i for i in dict.fromkeys(claim_ids) if i]
+        if not ids:
+            return []
+        marks = ','.join('?' * len(ids))
+        with self.read() as conn:
+            return rows(conn.execute(
+                _RELATION_SELECT
+                + f'''WHERE c.id IN ({marks})
+                       OR (c.subject_id,c.predicate) IN (
+                            SELECT subject_id,predicate FROM claims WHERE id IN ({marks}))''',
+                (*ids, *ids)))
+
     def unlinked_object_claims(self, limit: int = 200) -> list[dict]:
         """Current claims whose object is free text that never resolved to an entity.
 
@@ -504,6 +527,36 @@ class ClaimRepository(Repository):
         sql += ' ORDER BY r.created_at DESC LIMIT ?'; params.append(limit)
         with self.read() as conn:
             return rows(conn.execute(sql, params))
+
+    def pending_decisions(self, limit: int = 200) -> list[dict]:
+        """Claim relations still waiting for a human *and* still worth asking about.
+
+        The difference between this and :meth:`relation_queue` is the difference
+        between "what the table holds" and "what is on my desk". Three filters, each
+        removing one way a work count can lie:
+
+        * ``status='candidate'`` — a decided relation is history, not work;
+        * neither claim ``rejected`` — a pair whose sides were thrown away is not a
+          question any more;
+        * the target not already ``superseded`` — once the older statement has been
+          retired by some other decision, "these two disagree" has been answered.
+
+        Without the last two the number can only grow, and an inbox that never empties
+        is one people learn to stop reading.
+        """
+        with self.read() as conn:
+            return rows(conn.execute(
+                '''SELECT r.id,r.relationship,r.confidence,r.reason,r.created_at,
+                          s.id source_claim_id,s.object_text source_object_text,
+                          t.id target_claim_id,t.object_text target_object_text,
+                          se.name subject_name
+                   FROM claim_relations r
+                   JOIN claims s ON s.id=r.source_claim_id
+                   JOIN claims t ON t.id=r.target_claim_id
+                   JOIN entities se ON se.id=s.subject_id
+                   WHERE r.status='candidate' AND s.status!='rejected' AND t.status!='rejected'
+                     AND t.status!='superseded'
+                   ORDER BY r.created_at DESC LIMIT ?''', (max(1, limit),)))
 
     def brief(self, claim_id: str) -> dict:
         with self.read() as conn:
