@@ -7,10 +7,11 @@
 | 目录 | 回答的问题 | 性质 |
 |---|---|---|
 | [architecture/](./architecture/README.md) | 系统怎么分层、边界在哪、怎么扩展 | 架构规范（长期） |
-| [development/](./development/README.md) | 代码怎么写、API/测试/错误/日志规范 | 开发规范（长期） |
+| [development/](./development/README.md) | 代码怎么写、API/测试/错误/日志规范、任务怎么验收 | 开发规范（长期） |
 | [adr/](./adr/README.md) | **为什么**这样设计 | 决策记录（追加式） |
 | [standards/](./standards/README.md) | 知识 / 本体 / 抽取的语义标准 | 语义契约 |
 | [superpowers/specs/](./superpowers/specs/) | 单次功能的设计规格 | 随功能冻结 |
+| [archive/](./archive/README.md) | v0.1 时代的历史文档（仅供溯源） | 已归档 |
 | [prototype/](./prototype/) | 原型 | 参考 |
 
 ---
@@ -29,6 +30,7 @@
 | LLM 输出的处理纪律？ | [development/CODING-STANDARD.md](./development/CODING-STANDARD.md) §3 |
 | API / 错误 / 日志约定？ | [development/API-STANDARD.md](./development/API-STANDARD.md) 等 |
 | 新功能开发流程？ | [development/FEATURE-DEVELOPMENT.md](./development/FEATURE-DEVELOPMENT.md) |
+| 一个任务怎样才算完成、验收报告怎么写？ | [development/TASK-DEVELOPMENT-AND-ACCEPTANCE.md](./development/TASK-DEVELOPMENT-AND-ACCEPTANCE.md) |
 | 有哪些必须守住的测试？ | [development/TESTING-STANDARD.md](./development/TESTING-STANDARD.md) |
 | 某个设计的来龙去脉？ | [adr/](./adr/README.md) |
 
@@ -48,12 +50,7 @@
 
 ## 既有文档
 
-- [TECHNICAL-DESIGN.md](./TECHNICAL-DESIGN.md) / TECHNICAL-DESIGN.docx — 技术设计
-- [PROCESSING-PIPELINE.md](./PROCESSING-PIPELINE.md) / [ORIGINAL-PROCESSING-FLOW.md](./ORIGINAL-PROCESSING-FLOW.md) — 处理流水线
-- [IMPLEMENTATION-PLAN.md](./IMPLEMENTATION-PLAN.md) / [ORIGINAL-IMPLEMENTATION-PLAN.md](./ORIGINAL-IMPLEMENTATION-PLAN.md) — 实现计划
-- [API-EXAMPLES.md](./API-EXAMPLES.md) — API 示例
-- [README-IMPLEMENTATION.md](./README-IMPLEMENTATION.md) — 实现说明
-- [ORIGINAL-EXTRACTION-PROMPT.md](./ORIGINAL-EXTRACTION-PROMPT.md) — 原始抽取提示词
 - [standards/](./standards/README.md) — 知识标准（14 篇）
 - [superpowers/specs/2026-09-11-context-runtime-design.md](./superpowers/specs/2026-09-11-context-runtime-design.md) — Context Runtime 设计规格（P1–P4）
 - [superpowers/specs/](./superpowers/specs/) — 其他设计规格（frontend-redesign / llm-run-records / pkos-redesign）
+- [archive/](./archive/README.md) — **v0.1 时代的历史文档**（TECHNICAL-DESIGN / PROCESSING-PIPELINE / IMPLEMENTATION-PLAN / ORIGINAL-\* / API-EXAMPLES / README-IMPLEMENTATION）。已被现行架构、标准与根 README 取代，仅供溯源。

@@ -14,22 +14,26 @@ Invariant     Domain 不变量（见 §4，最高优先级）
 
 ## 2. 当前测试盘点（CURRENT）
 
-| 文件 | 覆盖 |
+截至 2026-09：**60 个测试文件，501+ 用例**。逐文件清单不再在此维护——那份表每加一个测试文件就会过期一次，过期的事实比没有事实更糟。
+
+要看真实的测试面，直接看源头：
+
+```bash
+pytest --collect-only -q          # 全部用例清单
+ls tests/test_*.py                # 测试文件列表
+```
+
+按**能力域**而非文件名理解测试覆盖：
+
+| 能力域 | 代表测试 |
 |---|---|
-| `test_core.py` / `test_full.py` | 核心链路、端到端 |
-| `test_pipeline.py` | 抽取流水线 |
-| `test_normalization.py` | 关系归一化 / 派生 |
-| `test_manual_entry.py` | 手工录入 |
-| `test_pkos_api.py` / `test_frontend_api.py` | API 表面 |
-| `test_retrieval_dedup.py` | 检索去重 |
-| `test_evidence_escalation.py` | 证据升级 L1–L5 |
-| `test_context_budget.py` / `test_context_planning.py` / `test_context_trace.py` | Context Runtime 基座 |
-| `test_skill_lazy_loading.py` / `test_registry_subset.py` | Skill 惰性 / Registry 子集 |
-| `test_history_compression.py` / `test_conversation_summaries.py` | 历史压缩 / 多轮 |
-| `test_tool_compression.py` | 工具返回压缩 |
-| `test_task_packet.py` / `test_task_packet_chain.py` | Task Packet / Agent 间调用链 |
-| `test_context_cache.py` | Context Cache + 版本失效 |
-| `test_token_usage.py` / `test_runlog.py` | token 计量 / 运行记录 |
+| 核心链路 / 端到端 | `test_core.py`、`test_full.py`、`test_pipeline.py` |
+| 知识语义（编译 / 演化 / 操作） | `test_knowledge_compilation.py`、`test_knowledge_operations.py`、`test_correction_loop_e2e.py` |
+| 检索与知识层 | `test_retrieval_dedup.py`、`test_search_knowledge.py`、`test_qa_knowledge.py`、`test_research_knowledge.py` |
+| Context Runtime | `test_context_*.py`、`test_skill_lazy_loading.py`、`test_task_packet*.py`、`test_token_usage.py` |
+| 知识完整性与修复 | `test_knowledge_integrity.py`、`test_predicate_migration.py`、`test_onebox_intent.py` |
+| 架构红线 | `test_architecture.py`（import 规则 + 行为对照） |
+| API 表面 | `test_pkos_api.py`、`test_frontend_api.py` |
 
 运行：`pytest -q`（`pytest.ini` 指定 `testpaths = tests`）。
 

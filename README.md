@@ -107,7 +107,7 @@ Hybrid Retrieval / Graph / RAG / Multi-agent
 ├── docs/                     # 架构规范 / 开发规范 / ADR / 知识标准 / 设计规格（见 docs/README.md）
 ├── scripts/                  # init_db / export_json / migrate_v01 / seed_demo / smoke_test / check_css
 ├── sql/                      # schema.v0.1.sql
-├── tests/                    # pytest 套件（24 个文件）
+├── tests/                    # pytest 套件（60 个文件，501+ 用例）
 ├── web/                      # 后端直接托管的前端静态入口（index.html）
 ├── requirements.txt / Makefile / Dockerfile / run.sh / run.bat / pytest.ini
 ```
@@ -412,6 +412,8 @@ registry 与 normalization 规则 **不进 prompt**，仅做程序校验（Deter
 
 ## 开发、测试与脚本
 
+> 开发任务的统一生命周期与验收规范见 [`docs/development/TASK-DEVELOPMENT-AND-ACCEPTANCE.md`](docs/development/TASK-DEVELOPMENT-AND-ACCEPTANCE.md)——不以"代码写完"为完成标准，以"可验证、不回归、边界清楚、可追踪、产品确实变好"为完成标准。其余开发规范见 [`docs/development/`](docs/development/README.md)。
+
 ```bash
 # 安装
 pip install -r requirements.txt
@@ -419,7 +421,7 @@ pip install -r requirements.txt
 # 初始化数据库
 python scripts/init_db.py
 
-# 运行测试（全量 150+ 通过，24 个测试文件）
+# 运行测试（全量 501+ 通过，60 个测试文件）
 pytest -q
 
 # Makefile 快捷方式
@@ -470,9 +472,5 @@ make export    # python scripts/export_json.py
 
 - `docs/superpowers/specs/2026-09-11-context-runtime-design.md` — Context Runtime 设计规格（P1–P4 验收）
 - `docs/superpowers/specs/` — 其他设计规格（frontend-redesign / llm-run-records / pkos-redesign）
-- `docs/TECHNICAL-DESIGN.md` / `TECHNICAL-DESIGN.docx` — 技术设计
-- `docs/PROCESSING-PIPELINE.md` / `ORIGINAL-PROCESSING-FLOW.md` — 处理流水线
-- `docs/IMPLEMENTATION-PLAN.md` / `ORIGINAL-IMPLEMENTATION-PLAN.md` — 实现计划
-- `docs/API-EXAMPLES.md` — API 示例
-- `docs/README-IMPLEMENTATION.md` — 实现说明
+- `docs/archive/` — v0.1 时代的历史文档（TECHNICAL-DESIGN / PROCESSING-PIPELINE / IMPLEMENTATION-PLAN / ORIGINAL-\* / API-EXAMPLES / README-IMPLEMENTATION），仅供溯源
 - `frontend/README.md` — 前端脚手架说明
