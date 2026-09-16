@@ -166,8 +166,12 @@ def scan_duplicate_entities(conn, *, threshold: float = 0.65, entity_limit: int 
     keep proposing the merge that already happened.
     """
     pool = EntityRepository(conn).similarity_pool(None, entity_limit)
+    # Duplicate Detection never judges whether something deserves to be an Entity: it
+    # only compares entities that already passed Entity Eligibility. Unsupported
+    # (``review``) entities are excluded, so the detector's input stays clean.
     rows_ = [(r['id'], r['name'], set(loads(r['types_json'], [])) or {r['type']})
-             for r in pool if r.get('status') != 'archived']
+             for r in pool if r.get('status') != 'archived'
+             and loads(r.get('properties_json') or '{}', {}).get('eligibility') != 'review']
 
     pairs: list[dict] = []
     for i, (a_id, a_name, a_types) in enumerate(rows_):

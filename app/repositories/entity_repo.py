@@ -132,7 +132,7 @@ class EntityRepository(Repository):
         where, params = ('WHERE id != ?', [exclude_id]) if exclude_id else ('', [])
         with self.read() as conn:
             return rows(conn.execute(
-                f'SELECT id,name,type,types_json,status FROM entities {where} '
+                f'SELECT id,name,type,types_json,status,properties_json FROM entities {where} '
                 'ORDER BY updated_at DESC LIMIT ?', (*params, limit)))
 
     def insert(self, entity_id: str, *, type: str, types: list[str], name: str,
@@ -150,7 +150,18 @@ class EntityRepository(Repository):
                         'INSERT OR IGNORE INTO entity_aliases(entity_id,alias,alias_normalized) VALUES(?,?,?)',
                         (entity_id, alias, normalize(alias)))
 
+    def by_ids(self, entity_ids: list[str]) -> list[dict]:
+        """id/name/status/type for many entities in one query (experiment snapshots)."""
+        ids = [i for i in dict.fromkeys(entity_ids or []) if i]
+        if not ids:
+            return []
+        marks = ','.join('?' * len(ids))
+        with self.read() as conn:
+            return rows(conn.execute(
+                f'SELECT id,name,status,type FROM entities WHERE id IN ({marks})', ids))
+
     def fetch_types_aliases(self, entity_id: str) -> dict | None:
+
         with self.read() as conn:
             return row(conn.execute(
                 'SELECT types_json,aliases_json,description,properties_json FROM entities WHERE id=?',
@@ -213,10 +224,25 @@ class EntityRepository(Repository):
                 f'SELECT name,type,description,status FROM entities WHERE name IN ({placeholders})', names))
 
     def candidates(self, limit: int) -> list[dict]:
+        """Entities awaiting human review.
+
+        Eligibility-accepted entities (persisted with ``properties.eligibility ==
+        'keep'`` — claim-backed, stable identity) are not review work: extraction
+        already decided them. They are filtered out so this queue holds only what a
+        person should actually judge (the ``review`` ones). Rows without the marker
+        (e.g. manually seeded) are kept, so nothing is hidden by default.
+        """
         with self.read() as conn:
-            return rows(conn.execute(
-                "SELECT id,name,type,description,status,created_at FROM entities "
+            found = rows(conn.execute(
+                "SELECT id,name,type,description,status,created_at,properties_json FROM entities "
                 "WHERE status='candidate' ORDER BY created_at DESC LIMIT ?", (limit,)))
+        out = []
+        for r in found:
+            props = loads(r.pop('properties_json', '{}') or '{}', {})
+            if props.get('eligibility') == 'keep':
+                continue
+            out.append(r)
+        return out
 
     def count_claims_for(self, entity_id: str) -> list[dict]:
         """Claims referencing this entity (with document title)."""

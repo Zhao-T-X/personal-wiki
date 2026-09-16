@@ -1,0 +1,190 @@
+{
+  "phase": "after",
+  "documents": [
+    {
+      "doc": "docs/standards/10-EXTRACTION-V2-STANDARD.md",
+      "entity_created": 7,
+      "claims": 9,
+      "dropped": 2,
+      "review": 4,
+      "auto_subjects": 3,
+      "object_links": 0,
+      "free_text_objects": 9,
+      "entities": [
+        "LLM-Wiki Extraction Standard v2.0",
+        "Extraction engine",
+        "Entity",
+        "Claim",
+        "Relation",
+        "Event",
+        "Idea",
+        "Question",
+        "LLM"
+      ],
+      "object_texts": [
+        "valuable knowledge explicitly supported by the input text",
+        "missing knowledge",
+        "source evidence",
+        "only registered Entity Types, Claim Predicates and Relation Predicates",
+        "invented aliases, predicates, relations, events, ideas or questions",
+        "database IDs",
+        "Claim",
+        "recall",
+        "empty arrays",
+        "an Entity reference"
+      ],
+      "object_classes": {
+        "valuable knowledge explicitly supported by the input text": "concept",
+        "missing knowledge": "unknown",
+        "source evidence": "unknown",
+        "only registered Entity Types, Claim Predicates and Relation Predicates": "concept",
+        "invented aliases, predicates, relations, events, ideas or questions": "concept",
+        "database IDs": "entity",
+        "Claim": "entity",
+        "recall": "unknown",
+        "empty arrays": "unknown",
+        "an Entity reference": "entity"
+      }
+    },
+    {
+      "doc": "docs/standards/11-NORMALIZATION-ENGINE-STANDARD.md",
+      "entity_created": 8,
+      "claims": 18,
+      "dropped": 1,
+      "review": 2,
+      "auto_subjects": 0,
+      "object_links": 0,
+      "free_text_objects": 2,
+      "entities": [
+        "Knowledge Normalization Engine",
+        "Entity Type Registry",
+        "Claim Predicate Registry",
+        "Relation Registry",
+        "Entity Resolution",
+        "Deduplication",
+        "Entity",
+        "Claim",
+        "Relation"
+      ],
+      "object_texts": [
+        "source-grounded LLM extraction",
+        "Entity Type Registry",
+        "compatible semantic types and a conservative threshold"
+      ],
+      "object_classes": {
+        "source-grounded LLM extraction": "entity",
+        "Entity Type Registry": "entity",
+        "compatible semantic types and a conservative threshold": "concept"
+      }
+    },
+    {
+      "doc": "docs/architecture/DOMAIN-MODEL.md",
+      "entity_created": 12,
+      "claims": 32,
+      "dropped": 2,
+      "review": 2,
+      "auto_subjects": 0,
+      "object_links": 0,
+      "free_text_objects": 0,
+      "entities": [
+        "Document",
+        "Chunk",
+        "Evidence",
+        "Entity",
+        "Claim",
+        "Relation",
+        "Claim Evolution",
+        "Event",
+        "Idea",
+        "Question",
+        "Research Task",
+        "Claim Predicate Registry",
+        "Relation Predicate Registry",
+        "ClaimStateResolver"
+      ],
+      "object_texts": [],
+      "object_classes": {}
+    },
+    {
+      "doc": "docs/architecture/KNOWLEDGE-OPERATIONS.md",
+      "entity_created": 13,
+      "claims": 16,
+      "dropped": 0,
+      "review": 0,
+      "auto_subjects": 0,
+      "object_links": 0,
+      "free_text_objects": 14,
+      "entities": [
+        "CREATE",
+        "CORRECT",
+        "MERGE",
+        "SPLIT",
+        "SUPERSEDE",
+        "CONTRADICT",
+        "ARCHIVE",
+        "RESTORE",
+        "Operation",
+        "ClaimStateResolver",
+        "Retrieval",
+        "Claim",
+        "Claim Evolution"
+      ],
+      "object_texts": [
+        "创建新知识",
+        "纠正既有知识（产生新 Claim，而非覆盖）",
+        "Claim",
+        "合并重复实体 / 断言",
+        "拆分被错误合并的实体 / 断言",
+        "新知识取代旧知识（旧知识保留为历史）",
+        "标记冲突（等待人工裁决，不自动改状态）",
+        "归档（退出 current，但保留可检索历史）",
+        "从归档 / 被取代状态恢复",
+        "回到 current 视图",
+        "注册式扩展点",
+        "is_current / get_current / get_history / resolve",
+        "ClaimStateResolver",
+        "current 判定逻辑的唯一实现位置",
+        "让旧 Claim 停止 current 的唯一关系",
+        "never overwrite a claim"
+      ],
+      "object_classes": {
+        "创建新知识": "entity",
+        "纠正既有知识（产生新 Claim，而非覆盖）": "entity",
+        "Claim": "entity",
+        "合并重复实体 / 断言": "unknown",
+        "拆分被错误合并的实体 / 断言": "unknown",
+        "新知识取代旧知识（旧知识保留为历史）": "entity",
+        "标记冲突（等待人工裁决，不自动改状态）": "entity",
+        "归档（退出 current，但保留可检索历史）": "unknown",
+        "从归档 / 被取代状态恢复": "unknown",
+        "回到 current 视图": "entity",
+        "注册式扩展点": "entity",
+        "is_current / get_current / get_history / resolve": "unknown",
+        "ClaimStateResolver": "entity",
+        "current 判定逻辑的唯一实现位置": "concept",
+        "让旧 Claim 停止 current 的唯一关系": "concept",
+        "never overwrite a claim": "unknown"
+      }
+    },
+    {
+      "doc": "docs/superpowers/specs/2026-09-11-context-runtime-design.md",
+      "error": "ValueError: Claim violates ontology domain/range: Context Runtime creates (none). `creates` declares domain=*, range=*."
+    }
+  ],
+  "scan_counts": {
+    "duplicate_entities": 2,
+    "unlinked_claims": 3,
+    "hidden_no_knowledge": 0,
+    "hidden_decided": 0,
+    "hidden_dismissed": 0
+  },
+  "global": {
+    "entity_total": 33,
+    "claim_total": 75,
+    "duplicate_candidates": 2,
+    "unlinked_object_proposals": 3,
+    "non_entity_object_proposals": 0,
+    "review_total": 84,
+    "object_link_suggestions": 3
+  }
+}

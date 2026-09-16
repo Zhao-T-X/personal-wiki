@@ -39,3 +39,22 @@ class RunRepository(Repository):
     def status(self, run_id: str) -> str | None:
         with self.read() as conn:
             return one(conn.execute('SELECT status FROM llm_runs WHERE id=?', (run_id,)), 'status')
+
+    def extraction_snapshots(self, limit: int = 50) -> list[dict]:
+        """Extract-task runs that stored a full extraction envelope.
+
+        The extraction snapshot (task: Before/After experiments) lives in
+        ``llm_runs.summary_json``; this reads back the runs that actually carry one, so
+        a caller never has to speak SQL to replay "what did the model extract".
+        """
+        with self.read() as conn:
+            out = rows(conn.execute(
+                "SELECT id,document_id,created_at,summary_json FROM llm_runs "
+                "WHERE task_type='extract' ORDER BY created_at DESC LIMIT ?", (max(1, limit),)))
+        snapshots = []
+        for item in out:
+            summary = loads(item.pop('summary_json', '{}') or '{}', {})
+            if 'extraction' not in summary:
+                continue
+            snapshots.append({**item, 'summary': summary})
+        return snapshots

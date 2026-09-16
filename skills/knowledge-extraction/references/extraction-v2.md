@@ -16,6 +16,13 @@ The extraction engine identifies and structures valuable knowledge explicitly su
 8. The LLM does not generate database IDs.
 9. The LLM does not decide final Graph persistence.
 10. Empty arrays are valid.
+11. A Mention is not an Entity. Only extract an Entity that has a stable identity and
+    can be referenced long-term as a Claim Subject or Object (see `entity-types.md`).
+12. A Claim's `object` is an Entity reference only when it names another extracted
+    Entity. A value (`8192`, `true`, `高风险`) or a description is kept as a short
+    literal phrase in the Claim — it does not become an Entity.
+13. Never create an Entity from a file/directory path, URL, relation/table/column
+    name, schema field, lone modifier, description, or transient mention.
 
 ## 3. Output objects
 

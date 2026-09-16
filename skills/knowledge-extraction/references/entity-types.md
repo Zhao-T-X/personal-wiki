@@ -4,7 +4,37 @@
 
 An Entity is a knowledge object with an independent identity, stable semantic boundary, reusable identity and meaningful long-term knowledge value.
 
+An Entity must be able to stand as a Claim Subject or Object *outside the sentence it
+was mentioned in*, without losing its identity. If it cannot, it is a Mention, not an
+Entity.
+
 A noun, keyword, adjective, ordinary action, attribute, sentence, or transient phrase is not automatically an Entity.
+
+## 1.1 Mention versus Entity
+
+"Text contains X" does NOT mean "X is an Entity".
+
+Never create an Entity for any of the following:
+
+```text
+a value                 2026, 8192, true, 3.14, 42%, "5 minutes"
+a qualifier/value phrase "高风险", "每天", "仅在生产环境"
+a descriptive phrase     "indexes raw document titles and bodies",
+                         "only the selected evidence pack is given to the LLM"
+a sentence fragment, a bare modifier or pronoun ("现在", "主要")
+a source artefact        a file path, directory path, URL, or document reference
+a structural name        a relation/table/column name or schema field ("relations")
+a lone mention that no Claim uses as its subject or object
+```
+
+## 1.2 Technical objects are allowed, with a technical identity rule
+
+A class, DTO, API, table or technology (`GomsInventoryPagingRequestDTO`, `FTS5`) MAY
+be an Entity when it is a real object participating in a Claim. Do not discard
+technical objects just because they are technical.
+
+But name similarity is never identity: `GomsInventoryPagingRequestDTO` and
+`GomsInventoryPagingResponseDTO` are two distinct Entities (request vs response).
 
 ## 2. Type registry
 

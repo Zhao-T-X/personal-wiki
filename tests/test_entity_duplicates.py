@@ -11,16 +11,16 @@ from app.resolution import find_similar_entities
 
 
 def _conn(rows):
-    """Minimal entities table: the function only reads id/name/type/types_json/status."""
+    """Minimal entities table: the readers use id/name/type/types_json/status/properties_json."""
     conn = sqlite3.connect(':memory:')
     conn.row_factory = sqlite3.Row
     conn.execute('''CREATE TABLE entities(
         id TEXT PRIMARY KEY, type TEXT, types_json TEXT, name TEXT,
-        status TEXT, updated_at TEXT)''')
+        status TEXT, properties_json TEXT DEFAULT '{}', updated_at TEXT)''')
     for i, (name, etype) in enumerate(rows, 1):
-        conn.execute('INSERT INTO entities(id,type,types_json,name,status,updated_at)'
-                     ' VALUES(?,?,?,?,?,?)',
-                     (f'e{i}', etype, f'["{etype}"]', name, 'candidate', f'2026-01-{i:02d}'))
+        conn.execute('INSERT INTO entities(id,type,types_json,name,status,properties_json,updated_at)'
+                     ' VALUES(?,?,?,?,?,?,?)',
+                     (f'e{i}', etype, f'["{etype}"]', name, 'candidate', '{}', f'2026-01-{i:02d}'))
     return conn
 
 

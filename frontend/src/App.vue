@@ -33,6 +33,7 @@ const items = [
     关掉只是不在侧栏占位置，路由仍然直连可用。 */
 const devItems = [
   { id: '/agent', icon: '◌', text: 'Agent 工作台' },
+  { id: '/extraction-experiment', icon: '◆', text: '抽取对比' },
   { id: '/eval', icon: '◈', text: '评测' },
 ]
 

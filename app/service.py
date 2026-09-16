@@ -66,7 +66,7 @@ async def _maybe_embed(document_id: str) -> bool:
         return False
 
 
-async def index_document(document_id: str, *, use_llm=True):
+async def index_document(document_id: str, *, use_llm=True, experiment_tag: str | None = None):
     """Index a document incrementally (task §32).
 
     Only the chunks whose text changed — or whose knowledge was produced by an
@@ -138,7 +138,16 @@ async def index_document(document_id: str, *, use_llm=True):
             # Record which extractor+ontology produced this chunk's knowledge, so a
             # registry change makes it stale again on the next index run.
             DocumentRepository(conn).set_extraction_version(stale_ids, version)
-        run.summary = {**counts, 'chunks': len(stale_rows)}
+        # The extraction snapshot: everything needed to replay "what did the model pull
+        # out of this document, and what did we keep?" is captured under the run id, so
+        # a later experiment can diff Before/After without re-running the model.
+        run.summary = {
+            **counts,
+            'chunks': len(stale_rows),
+            'extraction_version': version,
+            'experiment_tag': experiment_tag,
+            'extraction': result,
+        }
         report.update(llm='success', counts=counts, extracted_chunks=len(stale_rows),
                       embedded=await _maybe_embed(document_id))
         return report

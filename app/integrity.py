@@ -45,6 +45,8 @@ from .repositories import (ClaimRepository, CurationRepository, EntityRepository
 from .repositories.curation_repo import NOT_SAME, canonical_pair
 from .repositories.suppression_repo import CLAIM, OBJECT_LINK, SuppressionRepository
 from .resolution import name_similarity, scan_duplicate_entities
+from .object_classification import classify_object
+from .config import runtime
 
 # How sure the system is that a free-text object refers to an existing entity.
 HIGH, MEDIUM = 'high', 'medium'
@@ -154,7 +156,10 @@ def entity_pool() -> list[dict]:
     """
     return [{'id': r['id'], 'name': r['name'], 'status': r.get('status'),
              'types': set(loads(r.get('types_json') or '[]', []) or ([r['type']] if r.get('type') else []))}
-            for r in EntityRepository().similarity_pool(None, 500)]
+            for r in EntityRepository().similarity_pool(None, 500)
+            # Unsupported entities are not linking targets: a literal can only be
+            # attached to a subject that passed eligibility.
+            if loads(r.get('properties_json') or '{}', {}).get('eligibility') != 'review']
 
 
 def object_link_candidate_key(object_text: str) -> str:
@@ -191,6 +196,15 @@ def link_proposal(claim: dict, resolved: dict[str, list[str]], pool: list[dict])
     text = str(claim.get('object_text') or '').strip()
     if not text:
         return None
+    # Semantic boundary: an object is only a linking *candidate* if it is an entity-like
+    # mention. A literal value ("8192"), a descriptive phrase ("only the selected
+    # evidence pack to the LLM") or an unclassifiable fragment is not a subject anyone
+    # should be asked to attach — offering it is the "字面量未接入主体" noise.
+    if runtime().get('object_classification_enabled', True):
+        stored = (claim.get('context') or {}).get('object_class') if isinstance(claim.get('context'), dict) else None
+        cls = stored or classify_object(text)[0]
+        if cls != 'entity':
+            return None
     predicate = claim.get('predicate') or ''
     base = {
         'claim_id': claim.get('id'),

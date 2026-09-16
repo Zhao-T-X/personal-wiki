@@ -1,7 +1,7 @@
 from __future__ import annotations
 import sqlite3
 import traceback
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Body
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from . import __version__
@@ -28,6 +28,7 @@ from .repositories import (CatalogRepository, ClaimRepository, DocumentRepositor
                            EventRepository, IdeaRepository, OperationRepository, QuestionRepository,
                            RelationRepository, ResearchRepository, RunRepository)
 from .evaluation.runners import run_evaluation
+from .experiments import (load_corpus, run_summary_view, diff_summaries)
 # Aliased to avoid shadowing the existing /api/runs handlers `list_runs`/`get_run`.
 from .evaluation.store import list_runs as list_eval_runs, get_run as get_eval_run
 from .evaluation import baseline as _evaluation_baseline
@@ -483,11 +484,75 @@ def get_doc(doc_id:str):
     item['metadata']=loads(item.pop('metadata_json','{}'),{}); return item
 
 @app.post('/api/documents/{doc_id}/index')
-async def index_doc(doc_id:str):
-    try: return await index_document(doc_id,use_llm=True)
+async def index_doc(doc_id:str, tag:str|None=None):
+    try: return await index_document(doc_id,use_llm=True, experiment_tag=tag)
     except KeyError as exc: raise HTTPException(404,'Document not found') from exc
     except RuntimeError as exc: raise HTTPException(503,str(exc)) from exc
     except ValueError as exc: raise HTTPException(422,str(exc)) from exc
+
+# ---------------------------------------------------------------------------
+# Extraction Before/After experiment endpoints (task: real-button-driven regression)
+# ---------------------------------------------------------------------------
+
+@app.get('/api/experiments/corpus')
+def experiment_corpus():
+    """Golden Corpus metadata: which documents exist and what they should/shouldn't extract."""
+    c = load_corpus()
+    return {'version': c.get('version'),
+            'documents': [{'id': d['id'], 'name': d.get('name'), 'source': d.get('source'),
+                          'expected_entities': d.get('expected_entities', []),
+                          'expected_non_entities': d.get('expected_non_entities', []),
+                          'proposed_entities': [e['name'] for e in d.get('extraction', {}).get('entities', [])]}
+                         for d in c.get('documents', [])]}
+
+
+@app.post('/api/experiments/run')
+async def experiment_run(content:str = Body(...), title:str = Body(...), tag:str|None = Body(None)):
+    """The real import button, experiment-tagged. Runs the exact production pipeline
+    (create document -> chunk -> extract via LLM -> persist). Snapshots the result
+    under llm_runs so it can be diffed later. Requires a configured LLM."""
+    try:
+        doc_id = create_document(title=title, content=content, source_type='note',
+                                metadata={'experiment': True})
+        return await index_document(doc_id, use_llm=True, experiment_tag=tag)
+    except RuntimeError as exc:
+        raise HTTPException(503, f'LLM not configured or extraction failed: {exc}') from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.post('/api/experiments/run-corpus')
+def experiment_run_corpus():
+    """Run the Golden Corpus through the real persistence pipeline (gate off then on)
+    and return the Before/After report. The only substituted step is the model's
+    inference (the golden envelope stands in); everything downstream is shipping code.
+    No LLM key required."""
+    from .experiments import run_experiment
+    return run_experiment()
+
+
+@app.get('/api/experiments/snapshots')
+def experiment_snapshots(tag:str|None=None, limit:int=50):
+    """List extraction snapshots (runs that stored a full extraction envelope)."""
+    out = []
+    for snap in RunRepository().extraction_snapshots(limit):
+        summary = snap['summary']
+        if tag and summary.get('experiment_tag') != tag:
+            continue
+        out.append({'run_id': snap['id'], 'document_id': snap['document_id'],
+                    'created_at': snap['created_at'], 'view': run_summary_view(summary)})
+    return out
+
+
+@app.get('/api/experiments/compare')
+def experiment_compare(before:str, after:str):
+    """Diff two extraction snapshots by run id."""
+    repo = RunRepository()
+    b = repo.get(before)
+    a = repo.get(after)
+    if not b or not a:
+        raise HTTPException(404, 'run not found')
+    return diff_summaries(b['summary'], a['summary'])
 
 @app.post('/api/documents/{doc_id}/index/local')
 async def index_local(doc_id:str):

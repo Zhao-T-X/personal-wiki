@@ -1,0 +1,151 @@
+{
+  "corpus_version": "v0.1",
+  "documents": [
+    {
+      "id": "goms_api",
+      "name": "Goms 库存服务 API 设计说明",
+      "source": "用户 wiki（截图里导致大量错误主体的文档）",
+      "before": {
+        "kept": [
+          "GomsInventoryPagingRequestDTO",
+          "GomsInventoryPagingResponseDTO",
+          "GomsOrderPagingRequestDTO",
+          "GomsOrderPagingResponseDTO",
+          "claim_relations",
+          "docs/design/context-runtime-design.md",
+          "relations",
+          "出库点检日志",
+          "库存",
+          "库存分页查询",
+          "库存查询能力"
+        ],
+        "verified": [
+          "GomsInventoryPagingRequestDTO",
+          "GomsInventoryPagingResponseDTO",
+          "GomsOrderPagingRequestDTO",
+          "GomsOrderPagingResponseDTO",
+          "claim_relations",
+          "relations",
+          "出库点检日志"
+        ],
+        "quarantined": [
+          "docs/design/context-runtime-design.md",
+          "库存",
+          "库存分页查询",
+          "库存查询能力"
+        ],
+        "precision": 0.636,
+        "recall": 1.0,
+        "unsupported_rate": 0.0,
+        "dropped_entities": 0,
+        "review_entities": 0,
+        "leaked_non_entities": [
+          "claim_relations",
+          "docs/design/context-runtime-design.md",
+          "relations",
+          "出库点检日志"
+        ],
+        "false_positives": []
+      },
+      "after": {
+        "kept": [
+          "GomsInventoryPagingRequestDTO",
+          "GomsInventoryPagingResponseDTO",
+          "GomsOrderPagingRequestDTO",
+          "GomsOrderPagingResponseDTO",
+          "库存",
+          "库存分页查询",
+          "库存查询能力"
+        ],
+        "verified": [
+          "GomsInventoryPagingRequestDTO",
+          "GomsInventoryPagingResponseDTO",
+          "GomsOrderPagingRequestDTO",
+          "GomsOrderPagingResponseDTO"
+        ],
+        "quarantined": [
+          "库存",
+          "库存分页查询",
+          "库存查询能力"
+        ],
+        "precision": 1.0,
+        "recall": 1.0,
+        "unsupported_rate": 0.364,
+        "dropped_entities": 4,
+        "review_entities": 0,
+        "leaked_non_entities": [],
+        "false_positives": []
+      },
+      "before_run_id": "c7187907-3db0-47c5-bb09-fce0973fc837",
+      "after_run_id": "db9c1237-64dd-4358-84a5-198f80a2c017"
+    },
+    {
+      "id": "apple_leadership",
+      "name": "苹果公司领导层",
+      "source": "自然语言文档（检验正常实体不被误杀 / Recall 不退化）",
+      "before": {
+        "kept": [
+          "John Ternus",
+          "苹果公司"
+        ],
+        "verified": [
+          "苹果公司"
+        ],
+        "quarantined": [
+          "John Ternus"
+        ],
+        "precision": 1.0,
+        "recall": 1.0,
+        "unsupported_rate": 0.0,
+        "dropped_entities": 0,
+        "review_entities": 0,
+        "leaked_non_entities": [],
+        "false_positives": []
+      },
+      "after": {
+        "kept": [
+          "John Ternus",
+          "苹果公司"
+        ],
+        "verified": [
+          "苹果公司"
+        ],
+        "quarantined": [
+          "John Ternus"
+        ],
+        "precision": 1.0,
+        "recall": 1.0,
+        "unsupported_rate": 0.0,
+        "dropped_entities": 0,
+        "review_entities": 0,
+        "leaked_non_entities": [],
+        "false_positives": []
+      },
+      "before_run_id": "26afa3bd-b173-4a77-a47d-105866b44e6a",
+      "after_run_id": "f0af981a-f284-434c-961f-fb9861db0021"
+    }
+  ],
+  "errors": [],
+  "aggregate": {
+    "precision": {
+      "before": 0.818,
+      "after": 1.0
+    },
+    "recall": {
+      "before": 1.0,
+      "after": 1.0
+    },
+    "unsupported_rate": {
+      "before": 0.0,
+      "after": 0.182
+    },
+    "dropped_entities": {
+      "before": 0.0,
+      "after": 2.0
+    },
+    "review_entities": {
+      "before": 0.0,
+      "after": 0.0
+    }
+  }
+}

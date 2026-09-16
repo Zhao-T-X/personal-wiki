@@ -12,6 +12,7 @@ import EvalDashboard from '../views/EvalDashboard.vue'
 import AgentView from '../views/AgentView.vue'
 import SettingsView from '../views/SettingsView.vue'
 import DatabaseView from '../views/DatabaseView.vue'
+import ExtractionExperimentView from '../views/ExtractionExperimentView.vue'
 
 const routes = [
   { path: '/', component: HomeView },
@@ -26,6 +27,7 @@ const routes = [
   { path: '/settings', component: SettingsView },
   { path: '/settings/database', component: DatabaseView },
   { path: '/eval', component: EvalDashboard },
+  { path: '/extraction-experiment', component: ExtractionExperimentView },
 ]
 
 export const router = createRouter({ history: createWebHashHistory(), routes })

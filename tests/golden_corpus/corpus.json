@@ -1,0 +1,73 @@
+{
+  "version": "v0.1",
+  "description": "真实按钮抽取的回归语料：覆盖导致 Review 大量误报的技术文档与正常自然语言文档。负样本为真实项目里出现的主体名（RequestDTO / relations / 文件路径 / 日志）。",
+  "documents": [
+    {
+      "id": "goms_api",
+      "name": "Goms 库存服务 API 设计说明",
+      "source": "用户 wiki（截图里导致大量错误主体的文档）",
+      "content": "Goms 库存服务对外暴露分页查询能力。客户端调用 GomsInventoryPagingRequestDTO 发起库存分页查询，服务端返回 GomsInventoryPagingResponseDTO。订单域使用 GomsOrderPagingRequestDTO 与 GomsOrderPagingResponseDTO 完成分页。相关设计见 docs/design/context-runtime-design.md。每次出库操作会写入一条出库点检日志。系统内部维护 relations 与 claim_relations 用于关系存储。库存分页查询是库存能力的核心。",
+      "expected_entities": [
+        "GomsInventoryPagingRequestDTO",
+        "GomsInventoryPagingResponseDTO",
+        "GomsOrderPagingRequestDTO",
+        "GomsOrderPagingResponseDTO",
+        "库存分页查询",
+        "库存",
+        "库存查询能力"
+      ],
+      "expected_non_entities": [
+        "docs/design/context-runtime-design.md",
+        "出库点检日志",
+        "claim_relations",
+        "relations"
+      ],
+      "extraction": {
+        "entities": [
+          {"name": "GomsInventoryPagingRequestDTO", "types": ["Technology"], "aliases": [], "description": "库存分页查询请求对象"},
+          {"name": "GomsInventoryPagingResponseDTO", "types": ["Technology"], "aliases": [], "description": "库存分页查询响应对象"},
+          {"name": "GomsOrderPagingRequestDTO", "types": ["Technology"], "aliases": [], "description": "订单分页查询请求对象"},
+          {"name": "GomsOrderPagingResponseDTO", "types": ["Technology"], "aliases": [], "description": "订单分页查询响应对象"},
+          {"name": "库存分页查询", "types": ["Concept"], "aliases": [], "description": "库存分页查询能力"},
+          {"name": "库存查询能力", "types": ["Concept"], "aliases": [], "description": "库存查询能力"},
+          {"name": "库存", "types": ["Concept"], "aliases": [], "description": "库存"},
+          {"name": "docs/design/context-runtime-design.md", "types": ["Resource"], "aliases": [], "description": "设计文档路径"},
+          {"name": "出库点检日志", "types": ["Concept"], "aliases": [], "description": "出库点检记录"},
+          {"name": "claim_relations", "types": ["Resource"], "aliases": [], "description": "关系列表"},
+          {"name": "relations", "types": ["Resource"], "aliases": [], "description": "关系"}
+        ],
+        "claims": [
+          {"subject": "GomsInventoryPagingRequestDTO", "predicate": "used_for", "object": "库存分页查询", "claim_type": "factual", "polarity": "positive", "modality": "asserted", "context": {}, "confidence": 0.9},
+          {"subject": "GomsInventoryPagingResponseDTO", "predicate": "used_for", "object": "库存分页查询", "claim_type": "factual", "polarity": "positive", "modality": "asserted", "context": {}, "confidence": 0.9},
+          {"subject": "GomsOrderPagingRequestDTO", "predicate": "used_for", "object": "库存分页查询", "claim_type": "factual", "polarity": "positive", "modality": "asserted", "context": {}, "confidence": 0.9},
+          {"subject": "GomsOrderPagingResponseDTO", "predicate": "used_for", "object": "库存分页查询", "claim_type": "factual", "polarity": "positive", "modality": "asserted", "context": {}, "confidence": 0.9},
+          {"subject": "库存分页查询", "predicate": "is", "object": "库存查询能力", "claim_type": "factual", "polarity": "positive", "modality": "asserted", "context": {}, "confidence": 0.9},
+          {"subject": "库存", "predicate": "contains", "object": "库存分页查询", "claim_type": "factual", "polarity": "positive", "modality": "asserted", "context": {}, "confidence": 0.9}
+        ],
+        "events": [],
+        "ideas": [],
+        "questions": []
+      }
+    },
+    {
+      "id": "apple_leadership",
+      "name": "苹果公司领导层",
+      "source": "自然语言文档（检验正常实体不被误杀 / Recall 不退化）",
+      "content": "苹果公司是一家总部位于加利福尼亚的科技公司。苹果公司的首席执行官是 John Ternus。John Ternus 于 2025 年接任首席执行官职位。苹果公司长期专注于消费电子与操作系统。",
+      "expected_entities": ["苹果公司", "John Ternus"],
+      "expected_non_entities": [],
+      "extraction": {
+        "entities": [
+          {"name": "苹果公司", "types": ["Organization"], "aliases": [], "description": "科技公司"},
+          {"name": "John Ternus", "types": ["Person"], "aliases": [], "description": "苹果公司首席执行官"}
+        ],
+        "claims": [
+          {"subject": "苹果公司", "predicate": "has_ceo", "object": "John Ternus", "claim_type": "factual", "polarity": "positive", "modality": "asserted", "context": {}, "confidence": 0.9}
+        ],
+        "events": [],
+        "ideas": [],
+        "questions": []
+      }
+    }
+  ]
+}

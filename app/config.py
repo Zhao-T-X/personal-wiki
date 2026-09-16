@@ -16,6 +16,15 @@ DEFAULTS = {
     'llm_batch_chunks': int(os.getenv('LLM_BATCH_CHUNKS', '8')),
     'max_search_results': int(os.getenv('MAX_SEARCH_RESULTS', '50')),
     'auto_embed': os.getenv('AUTO_EMBED', 'false').lower() in {'1','true','yes'},
+    # Entity Eligibility gate (task: extraction precision). When on, declared entities
+    # without claim support / structural garbage (file paths, relation names, pure
+    # modifier phrases) are quarantined or dropped before they reach the verified
+    # entity pool. Toggle OFF only for A/B experiments (Before run).
+    'extraction_eligibility_enabled': os.getenv('EXTRACTION_ELIGIBILITY', 'true').lower() in {'1','true','yes'},
+    # Claim Object classification (task: semantic boundary). When on, a free-text claim
+    # object is typed as entity/literal/concept/unknown and recorded on the claim, and
+    # only *entity*-like objects may enter Object Linking. Toggle OFF for A/B (Before).
+    'object_classification_enabled': os.getenv('OBJECT_CLASSIFICATION', 'true').lower() in {'1','true','yes'},
     'agentscope_enabled': os.getenv('AGENTSCOPE_ENABLED', 'true').lower() in {'1','true','yes'},
     # Per-agent context budgets in tokens, e.g. {"KnowledgeAgent": 2500}.
     # Empty means "use app/context/budget.py::AGENT_BUDGETS".
@@ -57,8 +66,17 @@ def save_settings(updates: dict) -> dict:
     return data
 
 
+# Explicit, in-process overrides that must beat the persisted settings file. Used only
+# by the Before/After experiment harness and its tests to force a phase deterministically
+# (a settings.json written by an unrelated request must not silently keep a gate on).
+# Empty in production, so runtime() behaves exactly as before.
+_OVERRIDES: dict = {}
+
+
 def runtime():
     s = get_settings()
+    if _OVERRIDES:
+        s.update(_OVERRIDES)
     return s
 
 # Backward-compatible constants for callers that have not yet been migrated.
