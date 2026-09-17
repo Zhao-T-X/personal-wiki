@@ -40,7 +40,8 @@ def _seed(db, *, defined_as: int = 1, status: str = 'verified') -> str:
     entity_id = str(uuid.uuid4())
     conn.execute('INSERT INTO entities(id,type,types_json,name,aliases_json,properties_json,status)'
                  ' VALUES(?,?,?,?,?,?,?)',
-                 (entity_id, 'Technology', '["Technology"]', 'RAG', '[]', '{}', 'verified'))
+                 (entity_id, 'Technology', '["Technology"]', 'RAG', '[]',
+                  '{"eligibility": "keep"}', 'verified'))
     for index in range(defined_as):
         conn.execute(
             '''INSERT INTO claims(id,subject_id,predicate,object_id,object_text,claim_type,polarity,

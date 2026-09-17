@@ -135,7 +135,8 @@ def _seed(tmp_path):
     for name, (eid, etype, aliases) in entities.items():
         conn.execute('INSERT INTO entities(id,type,types_json,name,aliases_json,properties_json,status) '
                      'VALUES(?,?,?,?,?,?,?)',
-                     (eid, etype, json.dumps([etype]), name, json.dumps(aliases), '{}', 'verified'))
+                     (eid, etype, json.dumps([etype]), name, json.dumps(aliases),
+                      '{"eligibility": "keep"}', 'verified'))
         for alias in aliases:
             conn.execute('INSERT OR IGNORE INTO entity_aliases(entity_id,alias,alias_normalized) '
                          'VALUES(?,?,?)', (eid, alias, normalize_name(alias)))

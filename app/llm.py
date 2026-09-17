@@ -1,13 +1,65 @@
 from __future__ import annotations
+import hashlib
 import json
-from .config import runtime
+from pathlib import Path
+from .config import runtime, llm_test_mode
 from .agents.extraction_agent import (
     KIND_KEYS, detect_structured, extract_structured, scope_hint, wanted_kinds)
 from .extraction import normalize_extraction
+from .extraction_items import ACCEPTED, SECTIONS, compile_extraction_items
 from .runlog import current_run, is_cancelled, record_run
+
+# The real agent entry points, remembered so the test-mode guard can step aside when a
+# test has swapped in its own fake provider (a fake costs nothing, so it needs no guard).
+_REAL_DETECT = detect_structured
+_REAL_EXTRACT = extract_structured
+
+_FIXTURE_DIR = Path(__file__).resolve().parents[1] / 'tests' / 'fixtures' / 'llm'
+
+
+def _fixture_key(payload: str) -> str:
+    """Stable identity of an extraction payload, for record/replay fixtures."""
+    return hashlib.sha1((payload or '').encode('utf-8')).hexdigest()[:12]
+
+
+def _replay_fixture(kind: str, payload: str) -> dict | None:
+    path = _FIXTURE_DIR / f'{kind}-{_fixture_key(payload)}.json'
+    if not path.exists():
+        return None
+    return json.loads(path.read_text(encoding='utf-8'))
+
+
+def _resolve_call(kind: str, payload: str) -> dict | None:
+    """Resolve an LLM call under the active test mode.
+
+    * ``live`` → ``None`` (call the real agent);
+    * ``disabled`` → raise, so a test can never silently spend money;
+    * ``replay`` → return the recorded fixture, or raise when it is missing (a silent
+      fallback to the network is exactly the leak this guards against).
+    """
+    mode = llm_test_mode()
+    if mode == 'live':
+        return None
+    if mode == 'disabled':
+        raise AssertionError(
+            f'LLM call forbidden (LLM_TEST_MODE=disabled): {kind}. '
+            'Mark the test @pytest.mark.live_llm or provide a replay fixture.')
+    data = _replay_fixture(kind, payload)
+    if data is None:
+        raise AssertionError(
+            f'No replay fixture for {kind} [{_fixture_key(payload)}]. '
+            'Record one with scripts/llm_record.py, or run with LLM_TEST_MODE=live.')
+    return data
+
+
+def _guard_client() -> None:
+    mode = llm_test_mode()
+    if mode != 'live':
+        raise AssertionError(f'LLM chat client forbidden (LLM_TEST_MODE={mode}).')
 
 
 def _client():
+    _guard_client()
     cfg = runtime()
     if not cfg['openai_api_key']:
         raise RuntimeError('API key is not configured')
@@ -58,10 +110,11 @@ def _provider_usage(usage) -> dict | None:
 async def _extract_one(payload: str, step_name: str, input_summary: str) -> dict:
     """Run one extraction pass, recording it as a step of the current run."""
     run = current_run()
+    replay = _resolve_call('extract', payload) if extract_structured is _REAL_EXTRACT else None
     if run is None:
-        return await extract_structured(payload)
+        return replay if replay is not None else await extract_structured(payload)
     with run.step(step_name, input_summary=input_summary) as step:
-        data = await extract_structured(payload)
+        data = replay if replay is not None else await extract_structured(payload)
         step.output = json.dumps(data, ensure_ascii=False)
         return data
 
@@ -86,18 +139,105 @@ async def _detect_one(payload: str, step_name: str, input_summary: str) -> set[s
     """
     run = current_run()
     try:
+        replay = _resolve_call('detect', payload) if detect_structured is _REAL_DETECT else None
         if run is None:
-            return wanted_kinds(await detect_structured(payload))
+            data = replay if replay is not None else await detect_structured(payload)
+            return wanted_kinds(data)
         with run.step(step_name, input_summary=input_summary) as step:
-            data = await detect_structured(payload)
+            data = replay if replay is not None else await detect_structured(payload)
             step.output = json.dumps(data, ensure_ascii=False)
             return wanted_kinds(data)
+    except AssertionError:
+        # Test-mode violation (disabled / missing fixture) must stay loud.
+        raise
     except Exception:
         # Degradation, not failure: an unknown scope means "extract everything".
         return None
 
 
-async def extract(chunks: list[dict]) -> dict:
+def _repair_payload(rejected: list) -> dict:
+    """The payload the repair call is allowed to see: the rejected items only.
+
+    Sending the whole envelope back would invite the model to rewrite claims that
+    already compiled — losing good knowledge to fix bad knowledge. The repair is an
+    item-level operation, so the repair prompt is item-level too.
+    """
+    out: dict[str, list] = {s: [] for s in SECTIONS}
+    for result in rejected:
+        section = result.item_type + 's' if result.item_type in ('event', 'idea', 'question') else result.item_type
+        if section in out:
+            out[section].append(result.input)
+    return out
+
+
+def _item_key(section: str, item) -> tuple:
+    """Identity of an extracted item, for de-duplicating a retry against the first pass."""
+    if not isinstance(item, dict):
+        return (section, str(item))
+    if section == 'entities':
+        return ('entity', (item.get('name') or '').casefold())
+    if section == 'claims':
+        return ('claim', (item.get('subject') or '').casefold(), item.get('predicate'),
+                (item.get('object') or '').casefold(), item.get('source_chunk'))
+    return (section, item.get('source_chunk'),
+            (item.get('description') or item.get('content') or '')[:80])
+
+
+def _merge_retry(outcome, retry) -> tuple[dict, list]:
+    """Join a batch's accepted items with the retry's, and finalise the failures.
+
+    Items the retry fixed are accepted (and marked ``attempts=2`` so the retry is
+    visible); items it did not fix keep their first-attempt error alongside the
+    second one. Nothing is silently dropped — and nothing is stored twice: a repair
+    that echoes an already-accepted item must not duplicate it.
+    """
+    merged = {s: list(outcome.raw_envelope[s]) for s in SECTIONS}
+    for section in SECTIONS:
+        seen = {_item_key(section, item) for item in merged[section]}
+        for item in retry.raw_envelope[section]:
+            key = _item_key(section, item)
+            if key in seen:
+                continue
+            seen.add(key)
+            merged[section].append(item)
+    for result in retry.accepted:
+        result.attempts = 2
+
+    def _section_of(item_type: str) -> str:
+        return item_type + 's' if item_type in ('event', 'idea', 'question', 'entity') else item_type
+
+    # Which refusals is the retry answering? The repair payload carried the rejected
+    # items only, grouped by section and in order, so the retry's items in a section
+    # answer that section's refusals positionally. Matching on content would be wrong
+    # here: a successful repair *changes* the item, which is the whole point.
+    by_section: dict[str, list] = {}
+    for failure in outcome.failures:
+        by_section.setdefault(_section_of(failure.item_type), []).append(failure)
+
+    final: list = []
+    for section, priors in by_section.items():
+        answers = [r for r in retry.results if _section_of(r.item_type) == section]
+        for i, prior in enumerate(priors):
+            answer = answers[i] if i < len(answers) else None
+            if answer is None:
+                # The repair never re-extracted it: the first refusal still stands.
+                final.append(prior)
+            elif answer.status == ACCEPTED:
+                answer.attempts = 2          # fixed by the retry
+            else:
+                answer.attempts = 2
+                answer.prior_errors = [{'attempt': 1, 'error_code': prior.error_code,
+                                        'error_message': prior.error_message}]
+                final.append(answer)
+        # A repair that invents extra items is judged by the same rule as anything else.
+        for extra in answers[len(priors):]:
+            if extra.status != ACCEPTED:
+                extra.attempts = 2
+                final.append(extra)
+    return merged, final
+
+
+async def extract(chunks: list[dict], *, report: dict | None = None) -> dict:
     """Extract knowledge with the AgentScope extraction agent (task §12).
 
     Each batch runs in two passes. Pass 1 (``detect_structured``) cheaply
@@ -105,8 +245,14 @@ async def extract(chunks: list[dict]) -> dict:
     least one kind does Pass 2 (``extract_structured``) run, scoped to those
     kinds. A failed detection degrades to the original single-pass behaviour
     instead of losing the batch.
+
+    Compilation is **item-level** (Step 11). A claim the ontology refuses no longer
+    costs its batch: the rejected items alone are sent to one repair call, and if the
+    repair does not fix them they are reported as failures while every accepted item
+    of the same batch is returned. ``report``, when given, receives those failures.
     """
     results = []
+    failures: list[dict] = []
     batch_size = max(1, int(runtime()['llm_batch_chunks']))
     batches = [chunks[i:i + batch_size] for i in range(0, len(chunks), batch_size)]
     run = current_run()
@@ -132,18 +278,31 @@ async def extract(chunks: list[dict]) -> dict:
         data = await _extract_one(scoped, 'extract_batch', extract_summary)
         if wanted is not None:
             data = _restrict(data, wanted)
-        try:
-            results.append(normalize_extraction(data))
-        except ValueError as exc:
-            repair = _repair_instruction(data, error=str(exc))
+        outcome = compile_extraction_items(data)
+        if outcome.rejected:
+            # One repair attempt (the project's existing limit), item-level: only the
+            # refused items are re-extracted, and only their results are re-compiled.
+            repair = _repair_instruction(_repair_payload(outcome.rejected),
+                                         error=outcome.rejected[0].error_message)
             if wanted is not None:
                 repair = f'{repair}\n\n{scope_hint(wanted)}'
             repaired = await _extract_one(
                 repair, 'extract_repair',
-                f'batch {n}/{len(batches)} · retry after validation failure')
+                f'batch {n}/{len(batches)} · item-level retry · {len(outcome.rejected)} rejected')
             if wanted is not None:
                 repaired = _restrict(repaired, wanted)
-            results.append(normalize_extraction(repaired))
+            merged, final_failures = _merge_retry(outcome, compile_extraction_items(repaired))
+            results.append(merged)
+            failures.extend(r.failure_view() for r in final_failures)
+            continue
+        results.append(outcome.raw_envelope)
+    if report is not None:
+        report['rejected_items'] = failures
+        report['rejected_count'] = len(failures)
+    if run is not None:
+        # Carried on the run, not returned: the call stays ``extract(chunks)`` so every
+        # existing caller — and every test double — keeps working unchanged.
+        run.extraction_issues = failures
     return _merge(results)
 
 

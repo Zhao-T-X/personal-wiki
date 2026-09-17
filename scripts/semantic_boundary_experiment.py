@@ -76,6 +76,11 @@ def main() -> int:
     ap.add_argument('--phase', choices=['before', 'after'], required=True)
     ap.add_argument('--limit', type=int, default=len(CORPUS))
     ap.add_argument('--maxchars', type=int, default=6000)
+    # Step 11: target a single document and keep the Step 10 baseline untouched.
+    ap.add_argument('--only', default=None,
+                    help='run only corpus entries whose path contains this substring')
+    ap.add_argument('--out', default=None,
+                    help='output file name under tests/golden_corpus (default semantic_<phase>.json)')
     args = ap.parse_args()
 
     _configure_env(args.phase)
@@ -95,7 +100,8 @@ def main() -> int:
     print(f"[{args.phase}] model={cfg.get('openai_model')} db={cfg.get('database_path')}")
 
     documents = []
-    for rel in CORPUS[:args.limit]:
+    selected = [rel for rel in CORPUS if args.only is None or args.only in rel][:args.limit]
+    for rel in selected:
         path = ROOT / rel
         if not path.exists():
             print(f'  skip (missing): {rel}')
@@ -133,22 +139,46 @@ def main() -> int:
             'auto_subjects': counts.get('auto_created_subjects', 0),
             'object_links': counts.get('object_links', 0), 'free_text_objects': free_text,
             'entities': ent_names, 'object_texts': obj_texts, 'object_classes': obj_classes,
+            # Step 11: the document's own verdict and every isolated refusal.
+            'status': report.get('status'), 'warnings': report.get('warnings', 0),
+            'rejected_items': report.get('rejected_items', []),
+            'persistence_failures': counts.get('persistence_failures', []),
         })
-        print(f"  {rel}: entities={counts.get('entities')} claims={counts.get('claims')} "
+        print(f"  {rel}: status={report.get('status')} entities={counts.get('entities')} "
+              f"claims={counts.get('claims')} warnings={report.get('warnings', 0)} "
               f"free_text={free_text} dropped={counts.get('dropped_entities', 0)} "
               f"review={counts.get('review_entities', 0)} links={counts.get('object_links', 0)}")
+        for item in report.get('rejected_items', []):
+            print(f"    REJECTED {item.get('item_type')}#{item.get('item_index')} "
+                  f"{item.get('error_code')}: {(item.get('error_message') or '')[:120]}")
 
     conn = connect()
     try:
         entity_total = conn.execute('SELECT COUNT(*) c FROM entities').fetchone()['c']
         claim_total = conn.execute('SELECT COUNT(*) c FROM claims').fetchone()['c']
+        ent_rows = conn.execute('SELECT properties_json FROM entities').fetchall()
+        obj_rows = conn.execute(
+            "SELECT context_json FROM claims WHERE object_id IS NULL "
+            "AND TRIM(COALESCE(object_text,''))!=''").fetchall()
     finally:
         conn.close()
 
+    elig = {'keep': 0, 'review': 0, 'missing': 0}
+    for r in ent_rows:
+        value = (json.loads(r['properties_json'] or '{}') or {}).get('eligibility')
+        elig[value if value in ('keep', 'review') else 'missing'] += 1
+    oclasses = {'entity': 0, 'literal': 0, 'concept': 0, 'unknown': 0, 'none': 0}
+    for r in obj_rows:
+        value = (json.loads(r['context_json'] or '{}') or {}).get('object_class')
+        oclasses[value if value in oclasses else 'none'] += 1
+
     scan = integrity_scan(duplicate_limit=200, unlinked_limit=200)
     proposals = scan['unlinked_claims']
-    non_entity_props = [p for p in proposals
-                        if classify_object(p.get('object_text') or '')[0] != 'entity']
+    # Step 10 definition: only literal/concept objects are blocked by the boundary, so a
+    # correct run shows 0 here. (`unknown` is allowed — a name we did not deterministically
+    # type may still resolve to an entity.)
+    blocked = [p for p in proposals
+               if classify_object(p.get('object_text') or '')[0] in ('literal', 'concept')]
     ib = inbox()
     report = {
         'phase': args.phase,
@@ -156,14 +186,30 @@ def main() -> int:
         'scan_counts': scan['counts'],
         'global': {
             'entity_total': entity_total, 'claim_total': claim_total,
+            'entity_eligibility': elig,
+            'object_classes': oclasses,
             'duplicate_candidates': scan['counts']['duplicate_entities'],
             'unlinked_object_proposals': scan['counts']['unlinked_claims'],
-            'non_entity_object_proposals': len(non_entity_props),
+            'non_entity_object_proposals': len(blocked),
             'review_total': ib['total'],
             'object_link_suggestions': ib['maintenance']['object_link_suggestions'],
         },
     }
-    out = ROOT / 'tests' / 'golden_corpus' / f'semantic_{args.phase}.json'
+    # Cost accounting: every live run reports what it spent, so a real run is never a
+    # surprise and the next one can be budgeted (Step 11 §18).
+    cost_conn = connect()
+    try:
+        row = cost_conn.execute(
+            "SELECT COUNT(*) c, COALESCE(SUM(prompt_tokens),0) p,"
+            " COALESCE(SUM(completion_tokens),0) o FROM llm_run_steps").fetchone()
+        runs = cost_conn.execute("SELECT COUNT(*) c FROM llm_runs").fetchone()['c']
+    finally:
+        cost_conn.close()
+    report['usage'] = {'llm_calls': row['c'], 'runs': runs,
+                       'prompt_tokens': row['p'], 'completion_tokens': row['o']}
+    print(f"\nUSAGE {json.dumps(report['usage'])}")
+
+    out = ROOT / 'tests' / 'golden_corpus' / (args.out or f'semantic_{args.phase}.json')
     out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
     print('\nGLOBAL', json.dumps(report['global'], ensure_ascii=False, indent=2))
     print(f'\nSaved {out}')

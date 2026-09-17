@@ -64,12 +64,19 @@ designed_for
 used_for
 applied_to
 addresses
+
+has_ceo        # 首席执行官 (aliases: CEO, chief executive officer, 首席执行官, 首席执行长, 行政总裁)
+               # domain Organization -> range Person; temporal
 ```
 
 ## 3. Registry rules
 
 - The LLM must select only registered predicates.
 - The LLM must never invent predicate names.
+- **Prefer the most specific registered predicate over a generic one.** `X 的 CEO 是 Y` is
+  `has_ceo`, not `is`; `is` is the last resort when no more specific predicate fits. A
+  predicate's `domain`/`range` decide which side is the Subject (for `has_ceo`: Subject is
+  the Organization, Object is the Person).
 - Modal words such as `may`, `can` and `likely` are not predicates.
 - Negation is represented by polarity.
 - Conditions belong in `context`.

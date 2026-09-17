@@ -1,0 +1,438 @@
+{
+  "what": "Real model output for every case whose SEMANTIC gold failed. These are replay fixtures, not summaries: the raw envelope is what the model produced. Kept per run, so a later fix does not erase the evidence it fixed.",
+  "history": [
+    {
+      "source_run": "live_baseline.json",
+      "model": "deepseek-v4-flash",
+      "ran_at": "2026-09-17T08:11:56+00:00",
+      "cases": [
+        {
+          "id": "predicate_registry_ceo",
+          "covers": "predicate",
+          "text": "苹果现任 CEO 是 John Ternus。",
+          "semantic_expected": {
+            "claim_about": "John Ternus",
+            "subject_contains": "苹果",
+            "object_contains": "John Ternus",
+            "predicate": "has_ceo",
+            "temporal_signal": "current"
+          },
+          "failed_checks": [
+            {
+              "check": "predicate_is",
+              "detail": "predicates=['is'] want=has_ceo"
+            }
+          ],
+          "raw_llm_output": {
+            "entities": [
+              {
+                "name": "苹果",
+                "types": [
+                  "Organization"
+                ],
+                "aliases": [],
+                "description": "该公司，其现任 CEO 为 John Ternus",
+                "properties": {}
+              },
+              {
+                "name": "John Ternus",
+                "types": [
+                  "Person"
+                ],
+                "aliases": [],
+                "description": "苹果现任 CEO",
+                "properties": {}
+              }
+            ],
+            "claims": [
+              {
+                "subject": "苹果",
+                "predicate": "is",
+                "object": "John Ternus",
+                "object_kind": "entity",
+                "temporal_signal": "current",
+                "claim_type": "factual",
+                "polarity": "positive",
+                "modality": "asserted",
+                "content": "苹果现任 CEO 是 John Ternus。",
+                "context": {},
+                "confidence": 0.9,
+                "source_chunk": "9ea81fff-f8e1-425a-8439-4db2338837bd",
+                "evidence_quote": "苹果现任 CEO 是 John Ternus。 [c7a8df01]"
+              }
+            ],
+            "events": [],
+            "ideas": [],
+            "questions": []
+          },
+          "observed": {
+            "status": "COMPLETED",
+            "entities": [
+              "苹果",
+              "John Ternus"
+            ],
+            "claims": [
+              {
+                "subject": "苹果",
+                "predicate": "is",
+                "object": "John Ternus",
+                "object_kind": "entity",
+                "object_class": "entity",
+                "polarity": "positive",
+                "temporal_signal": "current",
+                "evidence_quote": "苹果现任 CEO 是 John Ternus。 [c7a8df01]"
+              }
+            ],
+            "rejected": [],
+            "persistence_failures": [],
+            "imprecise_quotes": 0
+          }
+        },
+        {
+          "id": "temporal_former_ceo",
+          "covers": "temporal",
+          "text": "Tim Cook 曾经担任苹果 CEO。",
+          "semantic_expected": {
+            "claim_about": "Tim Cook",
+            "subject_contains": "苹果",
+            "object_contains": "Tim Cook",
+            "predicate": "has_ceo",
+            "temporal_signal": "former"
+          },
+          "failed_checks": [
+            {
+              "check": "subject_is",
+              "detail": "subjects=['Tim Cook'] want=苹果"
+            },
+            {
+              "check": "object_is",
+              "detail": "objects=['苹果'] want=Tim Cook"
+            },
+            {
+              "check": "predicate_is",
+              "detail": "predicates=['is'] want=has_ceo"
+            }
+          ],
+          "raw_llm_output": {
+            "entities": [
+              {
+                "name": "Tim Cook",
+                "types": [
+                  "Person"
+                ],
+                "aliases": [],
+                "description": "Person who formerly served as CEO of Apple",
+                "properties": {}
+              },
+              {
+                "name": "苹果",
+                "types": [
+                  "Organization"
+                ],
+                "aliases": [],
+                "description": "Company whose CEO was formerly Tim Cook",
+                "properties": {}
+              }
+            ],
+            "claims": [
+              {
+                "subject": "Tim Cook",
+                "predicate": "is",
+                "object": "苹果",
+                "object_kind": "entity",
+                "temporal_signal": "former",
+                "claim_type": "factual",
+                "polarity": "positive",
+                "modality": "asserted",
+                "content": "Tim Cook 曾经担任苹果 CEO。",
+                "context": {
+                  "role": "CEO"
+                },
+                "confidence": 0.9,
+                "source_chunk": "4dbb91ef-0376-497e-9916-74f8ab5a2512",
+                "evidence_quote": "Tim Cook 曾经担任苹果 CEO。"
+              }
+            ],
+            "events": [],
+            "ideas": [],
+            "questions": []
+          },
+          "observed": {
+            "status": "COMPLETED",
+            "entities": [
+              "Tim Cook",
+              "苹果"
+            ],
+            "claims": [
+              {
+                "subject": "Tim Cook",
+                "predicate": "is",
+                "object": "苹果",
+                "object_kind": "entity",
+                "object_class": "entity",
+                "polarity": "positive",
+                "temporal_signal": "former",
+                "evidence_quote": "Tim Cook 曾经担任苹果 CEO。"
+              }
+            ],
+            "rejected": [],
+            "persistence_failures": [],
+            "imprecise_quotes": 0
+          }
+        },
+        {
+          "id": "evidence_attachment",
+          "covers": "evidence",
+          "text": "文档明确指出，Context Runtime 支持按需加载上下文。",
+          "semantic_expected": {
+            "claim_about": "Context Runtime",
+            "subject_contains": "Context Runtime",
+            "object_kind": "concept"
+          },
+          "failed_checks": [
+            {
+              "check": "object_kind_is",
+              "detail": "kinds=['literal'] want=concept"
+            }
+          ],
+          "raw_llm_output": {
+            "entities": [
+              {
+                "name": "Context Runtime",
+                "types": [
+                  "Software"
+                ],
+                "aliases": [],
+                "description": "A runtime component that supports on-demand loading of context.",
+                "properties": {}
+              }
+            ],
+            "claims": [
+              {
+                "subject": "Context Runtime",
+                "predicate": "supports",
+                "object": "按需加载上下文",
+                "object_kind": "literal",
+                "temporal_signal": null,
+                "claim_type": "factual",
+                "polarity": "positive",
+                "modality": "capable",
+                "content": "Context Runtime supports loading context on demand.",
+                "context": {},
+                "confidence": 0.7,
+                "source_chunk": "8f7c7ba2-6c73-4335-bfac-6f9ef1faf729",
+                "evidence_quote": "Context Runtime 支持按需加载上下文"
+              }
+            ],
+            "events": [],
+            "ideas": [],
+            "questions": []
+          },
+          "observed": {
+            "status": "COMPLETED",
+            "entities": [
+              "Context Runtime"
+            ],
+            "claims": [
+              {
+                "subject": "Context Runtime",
+                "predicate": "supports",
+                "object": "按需加载上下文",
+                "object_kind": "literal",
+                "object_class": "literal",
+                "polarity": "positive",
+                "temporal_signal": null,
+                "evidence_quote": "Context Runtime 支持按需加载上下文"
+              }
+            ],
+            "rejected": [],
+            "persistence_failures": [],
+            "imprecise_quotes": 0
+          }
+        }
+      ]
+    },
+    {
+      "source_run": "live_last_run.json",
+      "model": "deepseek-v4-flash",
+      "ran_at": "2026-09-17T08:52:02+00:00",
+      "cases": [
+        {
+          "id": "literal_retry_limit",
+          "covers": "literal",
+          "text": "KnowledgeCompiler 允许重试 3 次。",
+          "semantic_expected": {
+            "claim_about": "KnowledgeCompiler",
+            "subject_contains": "KnowledgeCompiler",
+            "object_kind": "literal"
+          },
+          "failed_checks": [
+            {
+              "check": "object_kind_is",
+              "detail": "kinds=['concept'] want=literal"
+            }
+          ],
+          "raw_llm_output": {
+            "entities": [
+              {
+                "name": "KnowledgeCompiler",
+                "types": [
+                  "Software"
+                ],
+                "aliases": [],
+                "description": "支持重试机制的编译器组件，最多允许重试 3 次。",
+                "properties": {}
+              }
+            ],
+            "claims": [
+              {
+                "subject": "KnowledgeCompiler",
+                "predicate": "allows",
+                "object": "最多重试 3 次",
+                "object_kind": "concept",
+                "temporal_signal": null,
+                "claim_type": "factual",
+                "polarity": "positive",
+                "modality": "asserted",
+                "content": null,
+                "context": {},
+                "confidence": 0.85,
+                "source_chunk": "c257b8f1-9df9-4abc-9f97-592633f53c8e",
+                "evidence_quote": "KnowledgeCompiler 允许最多重试 3 次。"
+              }
+            ],
+            "events": [],
+            "ideas": [],
+            "questions": []
+          },
+          "observed": {
+            "status": "COMPLETED",
+            "entities": [
+              {
+                "name": "KnowledgeCompiler",
+                "types": [
+                  "Software"
+                ],
+                "aliases": [],
+                "description": "支持重试机制的编译器组件，最多允许重试 3 次。",
+                "properties": {}
+              }
+            ],
+            "claims": [
+              {
+                "subject": "KnowledgeCompiler",
+                "predicate": "allows",
+                "object": "最多重试 3 次",
+                "object_kind": "concept",
+                "temporal_signal": null,
+                "claim_type": "factual",
+                "polarity": "positive",
+                "modality": "asserted",
+                "content": null,
+                "context": {},
+                "confidence": 0.85,
+                "source_chunk": "c257b8f1-9df9-4abc-9f97-592633f53c8e",
+                "evidence_quote": "KnowledgeCompiler 允许最多重试 3 次。"
+              }
+            ],
+            "rejected": [],
+            "imprecise_quotes": 0
+          }
+        }
+      ]
+    },
+    {
+      "source_run": "live_last_run.json",
+      "model": "deepseek-v4-flash",
+      "ran_at": "2026-09-17T08:56:46+00:00",
+      "cases": [
+        {
+          "id": "literal_retry_limit",
+          "covers": "literal",
+          "text": "KnowledgeCompiler 允许重试 3 次。",
+          "semantic_expected": {
+            "claim_about": "KnowledgeCompiler",
+            "subject_contains": "KnowledgeCompiler",
+            "object_kind": "literal"
+          },
+          "failed_checks": [
+            {
+              "check": "object_kind_is",
+              "detail": "kinds=['concept'] want=literal"
+            }
+          ],
+          "raw_llm_output": {
+            "entities": [
+              {
+                "name": "KnowledgeCompiler",
+                "types": [
+                  "Software"
+                ],
+                "aliases": [],
+                "description": "A compiler component that allows up to 3 retries.",
+                "properties": {}
+              }
+            ],
+            "claims": [
+              {
+                "subject": "KnowledgeCompiler",
+                "predicate": "allows",
+                "object": "重试 3 次",
+                "object_kind": "concept",
+                "temporal_signal": null,
+                "claim_type": "factual",
+                "polarity": "positive",
+                "modality": "capable",
+                "content": null,
+                "context": {
+                  "retry_limit": 3
+                },
+                "confidence": 0.85,
+                "source_chunk": "3027e68e-d284-4712-9039-ebc8b80fae4b",
+                "evidence_quote": "KnowledgeCompiler 允许重试 3 次。"
+              }
+            ],
+            "events": [],
+            "ideas": [],
+            "questions": []
+          },
+          "observed": {
+            "status": "COMPLETED",
+            "entities": [
+              {
+                "name": "KnowledgeCompiler",
+                "types": [
+                  "Software"
+                ],
+                "aliases": [],
+                "description": "A compiler component that allows up to 3 retries.",
+                "properties": {}
+              }
+            ],
+            "claims": [
+              {
+                "subject": "KnowledgeCompiler",
+                "predicate": "allows",
+                "object": "重试 3 次",
+                "object_kind": "concept",
+                "temporal_signal": null,
+                "claim_type": "factual",
+                "polarity": "positive",
+                "modality": "capable",
+                "content": null,
+                "context": {
+                  "retry_limit": 3
+                },
+                "confidence": 0.85,
+                "source_chunk": "3027e68e-d284-4712-9039-ebc8b80fae4b",
+                "evidence_quote": "KnowledgeCompiler 允许重试 3 次。"
+              }
+            ],
+            "rejected": [],
+            "imprecise_quotes": 0
+          }
+        }
+      ]
+    }
+  ]
+}

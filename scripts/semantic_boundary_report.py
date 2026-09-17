@@ -7,15 +7,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 R = ROOT / 'tests' / 'golden_corpus'
 METRICS = ['entity_total', 'claim_total', 'duplicate_candidates', 'unlinked_object_proposals',
-           'non_entity_object_proposals', 'review_total', 'object_link_suggestions']
+           'non_entity_object_proposals', 'review_total', 'object_link_suggestions',
+           'entity_eligibility', 'object_classes']
 
 
 def main() -> None:
     before = json.loads((R / 'semantic_before.json').read_text(encoding='utf-8'))
     after = json.loads((R / 'semantic_after.json').read_text(encoding='utf-8'))
-    print('GLOBAL METRIC'.ljust(30), 'BEFORE'.rjust(8), 'AFTER'.rjust(8))
+    print('GLOBAL METRIC'.ljust(30), 'BEFORE'.rjust(12), 'AFTER'.rjust(12))
     for k in METRICS:
-        print(k.ljust(30), str(before['global'][k]).rjust(8), str(after['global'][k]).rjust(8))
+        print(k.ljust(30), str(before['global'].get(k, '-')).rjust(12),
+              str(after['global'].get(k, '-')).rjust(12))
 
     bmap = {d['doc']: d for d in before['documents']}
     amap = {d['doc']: d for d in after['documents']}

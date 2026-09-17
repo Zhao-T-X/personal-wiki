@@ -721,6 +721,26 @@ def transaction() -> Iterator[sqlite3.Connection]:
         conn.close()
 
 
+@contextmanager
+def savepoint(conn: sqlite3.Connection, name: str):
+    """Isolate ONE write inside an open transaction (Step 11).
+
+    The caller keeps a single outer transaction, so accepted knowledge still commits
+    together or not at all. Inside it, a savepoint means a write that fails for one
+    item rolls back to that item — every already-written item stays written, and no
+    half-written row survives. SQL lives here rather than in the business layer, so
+    the architecture rule ("SQL only in the persistence layer") keeps holding.
+    """
+    conn.execute(f'SAVEPOINT {name}')
+    try:
+        yield
+    except Exception:
+        conn.execute(f'ROLLBACK TO {name}')
+        conn.execute(f'RELEASE {name}')
+        raise
+    conn.execute(f'RELEASE {name}')
+
+
 def dumps(value) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(',', ':'))
 

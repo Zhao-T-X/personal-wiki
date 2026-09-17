@@ -32,7 +32,7 @@ import re
 from .config import runtime
 from .ontology import canonical_entity_type
 from .normalization import normalize_name
-from .object_classification import classify_object, LITERAL, CONCEPT
+from .object_classification import classify_object, LITERAL
 
 _CLASSIFICATION_GATE = 'object_classification_enabled'
 
@@ -128,9 +128,11 @@ def is_plausible_subject(name: str) -> bool:
         return False
     if _is_pure_modifier(n):
         return False
-    # A value ("8192", "每天") or a description is not a subject to invent an entity for.
+    # A value ("8192", "每天") is not a subject to invent an entity for. Note: we do NOT
+    # reject on a *descriptive* guess — whether a phrase is a concept is the LLM's
+    # semantic verdict (object_kind), not a code keyword judgement (Step 10).
     if runtime().get('object_classification_enabled', True):
-        if classify_object(n)[0] in (LITERAL, CONCEPT):
+        if classify_object(n)[0] == LITERAL:
             return False
     return True
 

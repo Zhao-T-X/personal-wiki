@@ -1,0 +1,202 @@
+{
+  "ran_at": "2026-09-17T09:04:00+00:00",
+  "model": "deepseek-v4-flash",
+  "metrics": {
+    "cases": 1,
+    "semantic_cases": 1,
+    "abstention_cases": 0,
+    "structural_compliance": "1/1",
+    "registry_compliance": "1/1",
+    "semantic_accuracy": "1/1",
+    "abstention_behavior": "n/a",
+    "semantic_checks_passed": "3/3",
+    "failed_cases": [],
+    "failed_abstention": []
+  },
+  "cost": {
+    "steps": 2,
+    "prompt_tokens": 8852,
+    "completion_tokens": 1418,
+    "model_calls": 2,
+    "cases": 1,
+    "estimated_cost_usd": 0.006553,
+    "price_per_1k_in": 0.0005,
+    "price_per_1k_out": 0.0015,
+    "prompt_tokens_per_step": 4426,
+    "by_step": {
+      "detect_batch": {
+        "calls": 1,
+        "prompt_tokens": 811,
+        "completion_tokens": 93
+      },
+      "extract_batch": {
+        "calls": 1,
+        "prompt_tokens": 8041,
+        "completion_tokens": 1325
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "literal_chunk_size",
+      "kind": "semantic",
+      "covers": "literal",
+      "text": "最大 chunk 为 8192 tokens。",
+      "checks": [
+        {
+          "layer": "structural",
+          "check": "min_claims",
+          "ok": true,
+          "detail": "claims=1"
+        },
+        {
+          "layer": "structural",
+          "check": "evidence_present",
+          "ok": true,
+          "detail": "missing=[]"
+        },
+        {
+          "layer": "structural",
+          "check": "evidence_located",
+          "ok": true,
+          "detail": "imprecise_quotes=0"
+        },
+        {
+          "layer": "structural",
+          "check": "no_rejected_items",
+          "ok": true,
+          "detail": "rejected=[]"
+        },
+        {
+          "layer": "structural",
+          "check": "no_entity_object",
+          "ok": true,
+          "detail": "entity_objects=[]"
+        },
+        {
+          "layer": "structural",
+          "check": "no_declared_entity",
+          "ok": true,
+          "detail": "bad=[]"
+        },
+        {
+          "layer": "registry",
+          "check": "predicate_in_registry",
+          "ok": true,
+          "detail": "unregistered=[]"
+        },
+        {
+          "layer": "semantic",
+          "check": "claim_exists",
+          "ok": true,
+          "detail": "about=chunk subjects=['chunk']"
+        },
+        {
+          "layer": "semantic",
+          "check": "subject_is",
+          "ok": true,
+          "detail": "subjects=['chunk'] want=chunk"
+        },
+        {
+          "layer": "semantic",
+          "check": "object_kind_is",
+          "ok": true,
+          "detail": "kinds=['literal'] want=literal"
+        }
+      ],
+      "by_layer": {
+        "structural": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "registry": [
+          true
+        ],
+        "semantic": [
+          true,
+          true,
+          true
+        ]
+      },
+      "passed": {
+        "structural": true,
+        "registry": true,
+        "semantic": true
+      },
+      "steps": 2,
+      "model_calls": 2,
+      "by_step": [
+        {
+          "step": "detect_batch",
+          "calls": 1,
+          "prompt_tokens": 811,
+          "completion_tokens": 93
+        },
+        {
+          "step": "extract_batch",
+          "calls": 1,
+          "prompt_tokens": 8041,
+          "completion_tokens": 1325
+        }
+      ],
+      "prompt_tokens": 8852,
+      "completion_tokens": 1418,
+      "raw_envelope": {
+        "entities": [],
+        "claims": [
+          {
+            "subject": "chunk",
+            "predicate": "is",
+            "object": "8192 tokens",
+            "object_kind": "literal",
+            "temporal_signal": null,
+            "claim_type": "factual",
+            "polarity": "positive",
+            "modality": "asserted",
+            "content": "最大 chunk 为 8192 tokens",
+            "context": {
+              "constraint": "maximum",
+              "unit": "tokens"
+            },
+            "confidence": 0.65,
+            "source_chunk": "aa97491d-1daa-46c6-b933-b35492be903c",
+            "evidence_quote": "最大 chunk 为 8192 tokens。"
+          }
+        ],
+        "events": [],
+        "ideas": [],
+        "questions": []
+      },
+      "observed": {
+        "status": "COMPLETED",
+        "entities": [],
+        "claims": [
+          {
+            "subject": "chunk",
+            "predicate": "is",
+            "object": "8192 tokens",
+            "object_kind": "literal",
+            "temporal_signal": null,
+            "claim_type": "factual",
+            "polarity": "positive",
+            "modality": "asserted",
+            "content": "最大 chunk 为 8192 tokens",
+            "context": {
+              "constraint": "maximum",
+              "unit": "tokens"
+            },
+            "confidence": 0.65,
+            "source_chunk": "aa97491d-1daa-46c6-b933-b35492be903c",
+            "evidence_quote": "最大 chunk 为 8192 tokens。"
+          }
+        ],
+        "rejected": [],
+        "imprecise_quotes": 0
+      }
+    }
+  ]
+}

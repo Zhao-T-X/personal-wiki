@@ -331,6 +331,12 @@ _PREDICATE_HINTS: dict[str, tuple[str, ...]] = {
 def match_claim_predicates(text: str, limit: int = 5) -> list[str]:
     """The 2-5 registered claim predicates most consistent with ``text``.
 
+    **Role: candidate generation only — never a semantic resolver (Step 10).** This
+    function may read hint phrases to *propose* a shortlist, but it never decides what a
+    sentence means: the final predicate is always resolved through the Registry by
+    ``KnowledgeCompiler`` (``resolve_predicate``), and that authority never moves here.
+    A keyword hit is a suggestion the repair prompt may show, never a verdict.
+
     Deterministic scoring: hint-phrase hits (English + Chinese synonyms) per
     registry predicate, ties broken by registry order. Returns [] when nothing
     matches - callers must treat that as "no suggestion", never as a license to

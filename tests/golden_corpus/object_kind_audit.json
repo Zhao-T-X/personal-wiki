@@ -1,0 +1,112 @@
+{
+  "distribution_after": {
+    "entity": 1,
+    "literal": 40,
+    "concept": 13,
+    "unknown": 0,
+    "none": 0
+  },
+  "note": "object_kind is now declared by the LLM and validated by code. Two error classes were found by sampling: (1) the deterministic slash guardrail marks any text containing \"/\" as a source artefact -> literal (wrong for enumerations); (2) some very long enumerations were declared literal by the model itself. Recorded, not fixed (Step 10.1 is audit-only).",
+  "literal_sample_count": 18,
+  "object_kind_errors": [
+    {
+      "doc": "docs/standards/11-NORMALIZATION-ENGINE-STANDARD.md",
+      "text": "Entity Resolution and predicate/type validation before final Graph Relations are generated",
+      "detected": "literal",
+      "likely_intended": "concept",
+      "cause": "slash_guardrail: any \"/\" treated as a path"
+    },
+    {
+      "doc": "docs/architecture/DOMAIN-MODEL.md",
+      "text": "用户导入的 Markdown / TXT / HTML 原文及其元信息",
+      "detected": "literal",
+      "likely_intended": "concept",
+      "cause": "slash_guardrail: any \"/\" treated as a path"
+    },
+    {
+      "doc": "docs/architecture/DOMAIN-MODEL.md",
+      "text": "事件：type / time / status / participants",
+      "detected": "literal",
+      "likely_intended": "concept",
+      "cause": "slash_guardrail: any \"/\" treated as a path"
+    },
+    {
+      "doc": "docs/superpowers/specs/2026-09-11-context-runtime-design.md",
+      "text": "Static Context / Dynamic Context / On-Demand Context 三层上下文",
+      "detected": "literal",
+      "likely_intended": "concept",
+      "cause": "slash_guardrail: any \"/\" treated as a path"
+    },
+    {
+      "doc": "docs/superpowers/specs/2026-09-11-context-runtime-design.md",
+      "text": "LOAD / SUMMARIZE / RETRIEVE_LATER / NEVER_LOAD 四种加载策略",
+      "detected": "literal",
+      "likely_intended": "concept",
+      "cause": "slash_guardrail: any \"/\" treated as a path"
+    },
+    {
+      "doc": "docs/superpowers/specs/2026-09-11-context-runtime-design.md",
+      "text": "计算 Budget、决定 LOAD/SUMMARIZE/RETRIEVE_LATER/NEVER_LOAD、实时统计、返回 Effective Context",
+      "detected": "literal",
+      "likely_intended": "concept",
+      "cause": "slash_guardrail: any \"/\" treated as a path"
+    },
+    {
+      "doc": "docs/superpowers/specs/2026-09-11-context-runtime-design.md",
+      "text": "Agent identity、grounding/safety、tool usage principle、context loading principle、output contract",
+      "detected": "literal",
+      "likely_intended": "concept",
+      "cause": "slash_guardrail: any \"/\" treated as a path"
+    },
+    {
+      "doc": "docs/superpowers/specs/2026-09-11-context-runtime-design.md",
+      "text": "Purpose / When to use / Core workflow / Required references / Prohibitions",
+      "detected": "literal",
+      "likely_intended": "concept",
+      "cause": "slash_guardrail: any \"/\" treated as a path"
+    },
+    {
+      "doc": "docs/superpowers/specs/2026-09-11-context-runtime-design.md",
+      "text": "cost metadata（lazy / estimated_tokens / load_when）",
+      "detected": "literal",
+      "likely_intended": "concept",
+      "cause": "slash_guardrail: any \"/\" treated as a path"
+    },
+    {
+      "doc": "docs/superpowers/specs/2026-09-11-context-runtime-design.md",
+      "text": "证据歧义 / 冲突 / 缺条件 / 需要整段",
+      "detected": "literal",
+      "likely_intended": "concept",
+      "cause": "slash_guardrail: any \"/\" treated as a path"
+    },
+    {
+      "doc": "docs/superpowers/specs/2026-09-11-context-runtime-design.md",
+      "text": "run_id / agent / budget_tokens / actual_tokens / efficiency / sections[{name,tokens,source}]",
+      "detected": "literal",
+      "likely_intended": "concept",
+      "cause": "slash_guardrail: any \"/\" treated as a path"
+    },
+    {
+      "doc": "docs/superpowers/specs/2026-09-11-context-runtime-design.md",
+      "text": "分区 token 明细 + 每项 View / Why loaded? / Token cost / Source / Remove / Expand",
+      "detected": "literal",
+      "likely_intended": "concept",
+      "cause": "slash_guardrail: any \"/\" treated as a path"
+    },
+    {
+      "doc": "docs/superpowers/specs/2026-09-11-context-runtime-design.md",
+      "text": "Average/Useful/Wasted Context、Efficiency、Token per successful answer / verified claim / research task / extraction chunk",
+      "detected": "literal",
+      "likely_intended": "concept",
+      "cause": "slash_guardrail: any \"/\" treated as a path"
+    },
+    {
+      "doc": "docs/superpowers/specs/2026-09-11-context-runtime-design.md",
+      "text": "Prompt / Skill / Registry / Schema / Knowledge 版本",
+      "detected": "literal",
+      "likely_intended": "concept",
+      "cause": "slash_guardrail: any \"/\" treated as a path"
+    }
+  ],
+  "error_count": 14
+}

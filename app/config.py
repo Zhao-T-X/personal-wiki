@@ -79,6 +79,16 @@ def runtime():
         s.update(_OVERRIDES)
     return s
 
+
+def llm_test_mode() -> str:
+    """LLM test mode: ``live`` | ``replay`` | ``disabled``.
+
+    Defaults to ``live`` (production). The test suite forces ``disabled`` so a test can
+    never silently spend money, and ``replay`` serves recorded fixtures instead of a
+    real call. Read dynamically so a test fixture can set it per-test.
+    """
+    return str(_OVERRIDES.get('llm_test_mode') or os.getenv('LLM_TEST_MODE', 'live')).lower()
+
 # Backward-compatible constants for callers that have not yet been migrated.
 DATABASE_PATH = DEFAULTS['database_path']
 OPENAI_API_KEY = DEFAULTS['openai_api_key']

@@ -6,6 +6,9 @@ from difflib import SequenceMatcher
 from .db import loads
 from .ontology import normalize_name, canonical_entity_type
 from .repositories import EntityRepository
+from .domain.entity_eligibility import (ELIGIBILITY_KEY, EntityEligibility,
+                                        is_entity_eligible_for_semantic_pool,
+                                        with_eligibility)
 
 # Legal suffixes carry no identity: "Apple Inc." and "Apple" are the same entity.
 # normalize_name only folds whitespace and case, so without this "Apple Inc." vs
@@ -65,12 +68,22 @@ def types_compatible(a: set[str], b: set[str]) -> bool:
 
 def resolve_or_create_entity(conn, *, name: str, entity_types: list[str] | None = None,
                              entity_type: str | None = None, aliases: list[str],
-                             description: str | None, properties: dict) -> str:
+                             description: str | None, properties: dict,
+                             eligibility: str | None = None) -> str:
     entities = EntityRepository(conn)
     types = [canonical_entity_type(t) for t in (entity_types or ([entity_type] if entity_type else []))]
     if not types:
         raise ValueError('Entity requires at least one type')
     types = list(dict.fromkeys(types))
+    # Every Entity carries an explicit eligibility (Step 9.1): no `properties={}` row.
+    # The Extraction gate passes its verdict; every other caller (manual entry, seeding)
+    # asserts a confirmed entity, so the safe default is KEEP. REVIEW can only be
+    # produced by Extraction, which is the only path that judges claim support.
+    props = dict(properties or {}) if isinstance(properties, dict) else {}
+    if eligibility is not None:
+        props = with_eligibility(props, eligibility)
+    elif ELIGIBILITY_KEY not in props:
+        props = with_eligibility(props, EntityEligibility.KEEP)
     normalized = normalize_name(name)
     existing_name = entities.by_name(name)
     if existing_name:
@@ -89,13 +102,13 @@ def resolve_or_create_entity(conn, *, name: str, entity_types: list[str] | None 
             else:
                 entity_id = str(uuid.uuid4())
                 entities.insert(entity_id, type=types[0], types=types, name=name,
-                                aliases=[], description=description, properties=properties or {})
+                                aliases=[], description=description, properties=props)
     existing = entities.fetch_types_aliases(entity_id)
     merged_types = list(dict.fromkeys(loads(existing['types_json'], []) + types))
     merged_aliases = list(dict.fromkeys(
         loads(existing['aliases_json'], []) + [a.strip() for a in aliases if a.strip()] + [name]))
     entities.merge(entity_id, types=merged_types, aliases=merged_aliases,
-                   description=description, properties=properties or {})
+                   description=description, properties=props)
     for alias in merged_aliases:
         entities.insert_alias(entity_id, alias, normalize_name(alias))
     return entity_id
@@ -140,6 +153,8 @@ def find_similar_entities(conn, entity_id: str, *, limit: int = 5, threshold: fl
 
     out = []
     for cand in entities.similarity_pool(entity_id, 800):
+        if not is_entity_eligible_for_semantic_pool(cand.get('properties')):
+            continue
         cand_types = set(loads(cand['types_json'], [])) or ({cand['type']} if cand['type'] else set())
         if not types_compatible(target_types, cand_types):
             continue
@@ -167,11 +182,11 @@ def scan_duplicate_entities(conn, *, threshold: float = 0.65, entity_limit: int 
     """
     pool = EntityRepository(conn).similarity_pool(None, entity_limit)
     # Duplicate Detection never judges whether something deserves to be an Entity: it
-    # only compares entities that already passed Entity Eligibility. Unsupported
-    # (``review``) entities are excluded, so the detector's input stays clean.
+    # only compares entities that already passed Entity Eligibility (the canonical
+    # boundary), so REVIEW / legacy rows never enter the detector's input.
     rows_ = [(r['id'], r['name'], set(loads(r['types_json'], [])) or {r['type']})
              for r in pool if r.get('status') != 'archived'
-             and loads(r.get('properties_json') or '{}', {}).get('eligibility') != 'review']
+             and is_entity_eligible_for_semantic_pool(r.get('properties'))]
 
     pairs: list[dict] = []
     for i, (a_id, a_name, a_types) in enumerate(rows_):

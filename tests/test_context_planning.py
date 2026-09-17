@@ -256,10 +256,15 @@ def test_build_context_keeps_the_prompt_contract_and_withholds_references(tmp_pa
 
     assert '[SKILL]' in rendered
     assert '[NON-NEGOTIABLE]' in rendered
-    assert '## Reference:' not in rendered                    # nothing inlined
+    assert '## Reference:' not in rendered                    # nothing inlined by default
     withheld = [w for w in compiled.to_trace()['withheld'] if w['reason'] == 'retrieve_later']
     assert withheld and sum(w['tokens'] for w in withheld) > 2000
-    assert compiled.total_tokens < 400
+    # Was <400 before Step 13.1. The extraction SKILL now carries the `object_kind`
+    # semantics and the "prefer the most specific registered predicate" rule (+~200
+    # tokens); the live semantic smoke measured that addition turning 7/10 into 9/10
+    # semantic correctness (docs/development/step13-1-semantic-gold.md). The guard keeps
+    # its purpose — the extractor prompt stays small and every heavy reference stays lazy.
+    assert compiled.total_tokens < 700
     assert compiled.efficiency > 0.15
 
 

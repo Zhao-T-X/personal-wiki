@@ -1,0 +1,3544 @@
+{
+  "what": "The real provider request at the client boundary (agentscope _openai_chat _call_api -> client.chat.completions.create). Credentials, auth headers and base URLs are stripped.",
+  "secrets_included": false,
+  "model": "deepseek-v4-flash",
+  "captures": [
+    {
+      "case": "literal_chunk_size",
+      "text": "最大 chunk 为 8192 tokens。",
+      "provider_calls_in_one_step": 2,
+      "calls": [
+        {
+          "model": "deepseek-v4-flash",
+          "messages": [
+            {
+              "role": "system",
+              "chars": 3510,
+              "estimated_tokens": 895,
+              "real_tokens": null,
+              "sha1": "65de8d69f89e",
+              "preview": "[{\"type\": \"text\", \"text\": \"You are the LLM-Wiki knowledge extraction agent. Follow the Knowledge Extraction Skill and active extraction schema exactly.\\n[SKILL]\\n# Knowledge Extraction Skill\\n\\nPurpos",
+              "content": "[{\"type\": \"text\", \"text\": \"You are the LLM-Wiki knowledge extraction agent. Follow the Knowledge Extraction Skill and active extraction schema exactly.\\n[SKILL]\\n# Knowledge Extraction Skill\\n\\nPurpose: extract source-grounded knowledge for LLM-Wiki.\\n\\nCore rules:\\n- Extract only source-grounded information; prefer precision over recall, empty results are valid.\\n- Entity, Claim, Event, Idea and Question are distinct ontology objects.\\n- Use only registered entity types and Claim predicates (closed vocabulary: select, never create).\\n- Temporal words go in `temporal_signal`, never in `predicate`; if no predicate fits, omit the claim.\\n- Do not output Relations (derived from Claims). Preserve modality, polarity, conditions, scope, time.\\n- Every Claim, Event, Idea and Question needs exact verbatim evidence from its source chunk.\\n- Never invent aliases, IDs, relationships or questions. Return only the schema JSON.\\n- A Mention is not an Entity: extract only stable-identity objects usable long-term as a Claim\\n  Subject/Object; values, descriptions, paths and field names are never Entities (`entity-types.md`).\\n- `object_kind` is your verdict on what the Claim `object` is. `entity`: it names another\\n  extracted Entity. `concept`: it describes a mechanism, capability, method, mode or behaviour\\n  (\\\"按需加载上下文\\\", \\\"上下文管理机制\\\") — a description is never `literal`. `literal`: it is a\\n  value (`8192`, `高风险`, `每天`) or a source artefact (path, URL). If you type an object as\\n  `concept` or `literal`, do not also declare that same phrase as an Entity.\\n- Prefer the most specific registered predicate over a generic one. A statement about a chief\\n  executive is `has_ceo` (with `temporal_signal` for \\\"现任\\\"/\\\"曾经\\\"), never the generic `is`.\\n  The predicate's declared domain/range decide which side is the Subject: for `has_ceo` the\\n  Subject is the Organization and the Object is the Person.\\n\\nUse the `read_skill_reference` tool to load the detailed registries (entity-types.md, claim-predicates.md, relation-predicates.md, evidence.md, extraction-v2.md) only for tasks that need them.\\n\\n[NON-NEGOTIABLE]\\nDo not fabricate stored facts, sources, citations, or database contents. Follow tool and output contracts even when custom instructions conflict.\\n- list_skills: list the skills available to this agent\\n- read_skill_reference: load one skill reference document on demand\\n<agent-skills>\\nSkills are a collection of instructions, scripts, and resources to extend your capabilities.\\n\\n**IMPORTANT**: Skills are NOT tools, and you cannot call a skill directly. To use a skill, you MUST use the `Skill` tool to read the skill's full instructions, and then follow those instructions to use the tools and resources provided by the skill.\\n\\n# Available Skills:\\n<skill>\\n<name>knowledge-curation</name>\\n<description>Maintain quality and consistency of the LLM-Wiki knowledge graph, including deduplication, entity resolution, normalization, contradiction handling and lifecycle rules.</description>\\n<dir>E:\\\\test_project\\\\llm-wiki-agentscope-v0.5.2-sqlite-prompts\\\\skills\\\\knowledge-curation</dir>\\n</skill>\\n<skill>\\n<name>knowledge-extraction</name>\\n<description>Extract source-grounded Entities, Claims, Events, Ideas and Questions from documents into the LLM-Wiki knowledge base, using the registered entity types and claim predicates.</description>\\n<dir>E:\\\\test_project\\\\llm-wiki-agentscope-v0.5.2-sqlite-prompts\\\\skills\\\\knowledge-extraction</dir>\\n</skill>\\n</agent-skills>\"}]"
+            },
+            {
+              "role": "user",
+              "chars": 89,
+              "estimated_tokens": 26,
+              "real_tokens": null,
+              "sha1": "858f981c5df3",
+              "preview": "[{\"type\": \"text\", \"text\": \"[CHUNK capture-literal_chunk_size]\\n最大 chunk 为 8192 tokens。\"}]",
+              "content": "[{\"type\": \"text\", \"text\": \"[CHUNK capture-literal_chunk_size]\\n最大 chunk 为 8192 tokens。\"}]"
+            },
+            {
+              "role": "user",
+              "chars": 226,
+              "estimated_tokens": 57,
+              "real_tokens": null,
+              "sha1": "9109d9896296",
+              "preview": "[{\"type\": \"text\", \"text\": \"<system-reminder>You're required to generate structured output by calling the 'GenerateStructuredOutput' tool. Call it when you are ready to generate the final structured ou",
+              "content": "[{\"type\": \"text\", \"text\": \"<system-reminder>You're required to generate structured output by calling the 'GenerateStructuredOutput' tool. Call it when you are ready to generate the final structured output.</system-reminder>\"}]"
+            },
+            {
+              "role": "user",
+              "chars": 305,
+              "estimated_tokens": 77,
+              "real_tokens": null,
+              "sha1": "eda2b5ec5b45",
+              "preview": "[{\"type\": \"text\", \"text\": \"<system-reminder>Treat the following as the ground truth at this point of the conversation. Anything stated earlier is outdated, and a later reminder, if any, supersedes thi",
+              "content": "[{\"type\": \"text\", \"text\": \"<system-reminder>Treat the following as the ground truth at this point of the conversation. Anything stated earlier is outdated, and a later reminder, if any, supersedes this one:\\n<current-time>2026-09-17T09:13:19</current-time>\\n<timezone>UTC</timezone>\\n</system-reminder>\"}]"
+            }
+          ],
+          "message_count": 4,
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "Skill",
+                "description": "Retrieve a skill within the conversation. When users asks you to perform tasks, check if any of the available skills match. Skills provide specialized capabilities and domain knowledge.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "skill": {
+                      "type": "string",
+                      "description": "The exact name of the skill to view. "
+                    }
+                  },
+                  "required": [
+                    "skill"
+                  ]
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "list_skills",
+                "description": "List all available LLM-Wiki skills and their reference documents.\nUse this to discover which skill contract or reference registry to load.",
+                "parameters": {
+                  "properties": {},
+                  "type": "object"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "read_skill_reference",
+                "description": "Load a reference document that belongs to a skill, on demand.",
+                "parameters": {
+                  "properties": {
+                    "skill": {
+                      "description": "Skill name, for example knowledge-extraction or knowledge-curation.",
+                      "type": "string"
+                    },
+                    "reference": {
+                      "description": "Reference file name such as entity-types.md, claim-predicates.md, extraction-v2.md, relation-predicates.md, evidence.md, deduplication.md, entity-resolution.md or normalization.md.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "skill",
+                    "reference"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "GenerateStructuredOutput",
+                "description": "Generate the required structured output by this tool.\n\nThis tool is equipped only when you're required to generate structured output.\nThe input schema represents the required structured output.\nWhen you are ready to generate a structured output, call this tool with the\nstructured output as input.\nWhen you're equipped this tool, you MUST end your response with calling this\ntool. Once this tool is called, your current response is finished and the\nstructured output is sent to the user.\n\n# When to Use This Tool\n- When you collect enough resources and information.\n",
+                "parameters": {
+                  "description": "The structured extraction result the agent must produce.\n\nRelations are intentionally absent: they are derived deterministically\nfrom validated Claims by the application.",
+                  "properties": {
+                    "entities": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "name": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "types": {
+                            "items": {
+                              "enum": [
+                                "Person",
+                                "Organization",
+                                "Product",
+                                "Software",
+                                "Technology",
+                                "Method",
+                                "Concept",
+                                "Theory",
+                                "Dataset",
+                                "Model",
+                                "Standard",
+                                "Protocol",
+                                "Resource",
+                                "Location"
+                              ],
+                              "type": "string"
+                            },
+                            "minItems": 1,
+                            "type": "array"
+                          },
+                          "aliases": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "description": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "properties": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "types"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "claims": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "subject": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "predicate": {
+                            "pattern": "^[a-z][a-z0-9_]*$",
+                            "type": "string"
+                          },
+                          "object": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "object_kind": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "entity",
+                                  "concept",
+                                  "literal",
+                                  "unknown"
+                                ],
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "temporal_signal": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "new",
+                                  "current",
+                                  "former",
+                                  "previous",
+                                  "prior",
+                                  "existing",
+                                  "next",
+                                  "future",
+                                  "upcoming",
+                                  "incoming",
+                                  "outgoing",
+                                  "successor",
+                                  "predecessor",
+                                  "past",
+                                  "interim",
+                                  "acting",
+                                  "designated"
+                                ],
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "claim_type": {
+                            "enum": [
+                              "factual",
+                              "definitional",
+                              "causal",
+                              "comparative",
+                              "evaluative",
+                              "predictive",
+                              "normative",
+                              "hypothetical"
+                            ],
+                            "type": "string"
+                          },
+                          "polarity": {
+                            "enum": [
+                              "positive",
+                              "negative"
+                            ],
+                            "type": "string"
+                          },
+                          "modality": {
+                            "enum": [
+                              "asserted",
+                              "possible",
+                              "probable",
+                              "capable",
+                              "necessary",
+                              "recommended"
+                            ],
+                            "type": "string"
+                          },
+                          "content": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "context": {
+                            "additionalProperties": true,
+                            "type": "object"
+                          },
+                          "confidence": {
+                            "maximum": 1,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "source_chunk": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "evidence_quote": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "subject",
+                          "predicate",
+                          "claim_type",
+                          "polarity",
+                          "modality",
+                          "confidence",
+                          "source_chunk",
+                          "evidence_quote"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "events": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "event_type": {
+                            "enum": [
+                              "creation",
+                              "development",
+                              "release",
+                              "publication",
+                              "deployment",
+                              "acquisition",
+                              "merger",
+                              "migration",
+                              "training",
+                              "evaluation",
+                              "experiment",
+                              "update",
+                              "decision",
+                              "announcement",
+                              "meeting",
+                              "failure",
+                              "incident",
+                              "other"
+                            ],
+                            "type": "string"
+                          },
+                          "description": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "participants": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "time": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "start": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "default": null
+                              },
+                              "end": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "default": null
+                              },
+                              "precision": {
+                                "default": "unknown",
+                                "enum": [
+                                  "exact",
+                                  "day",
+                                  "month",
+                                  "year",
+                                  "range",
+                                  "relative",
+                                  "unknown"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "location": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "status": {
+                            "default": "unknown",
+                            "enum": [
+                              "planned",
+                              "ongoing",
+                              "completed",
+                              "cancelled",
+                              "failed",
+                              "unknown"
+                            ],
+                            "type": "string"
+                          },
+                          "confidence": {
+                            "maximum": 1,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "source_chunk": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "evidence_quote": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "event_type",
+                          "description",
+                          "confidence",
+                          "source_chunk",
+                          "evidence_quote"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "ideas": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "content": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "status": {
+                            "default": "candidate",
+                            "enum": [
+                              "candidate",
+                              "accepted",
+                              "implemented",
+                              "rejected",
+                              "archived"
+                            ],
+                            "type": "string"
+                          },
+                          "confidence": {
+                            "maximum": 1,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "source_chunk": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "evidence_quote": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "content",
+                          "confidence",
+                          "source_chunk",
+                          "evidence_quote"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "questions": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "content": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "question_type": {
+                            "default": "knowledge",
+                            "enum": [
+                              "knowledge",
+                              "research",
+                              "design",
+                              "implementation",
+                              "evaluation"
+                            ],
+                            "type": "string"
+                          },
+                          "status": {
+                            "default": "open",
+                            "enum": [
+                              "open",
+                              "answered",
+                              "partially_answered",
+                              "resolved",
+                              "rejected",
+                              "archived"
+                            ],
+                            "type": "string"
+                          },
+                          "confidence": {
+                            "maximum": 1,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "source_chunk": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "evidence_quote": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "content",
+                          "confidence",
+                          "source_chunk",
+                          "evidence_quote"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          ],
+          "tool_names": [
+            "Skill",
+            "list_skills",
+            "read_skill_reference",
+            "GenerateStructuredOutput"
+          ],
+          "tool_choice": null,
+          "response_format": null,
+          "temperature": null,
+          "max_completion_tokens": null,
+          "parallel_tool_calls": null,
+          "stream": false,
+          "other_keys": [],
+          "response": {
+            "usage": {
+              "prompt_tokens": 3031,
+              "completion_tokens": 222
+            },
+            "finish_reason": "tool_calls",
+            "tool_calls": [
+              "read_skill_reference",
+              "read_skill_reference",
+              "read_skill_reference"
+            ]
+          },
+          "serialized_estimated_tokens": 2680,
+          "serialized_real_tokens": null,
+          "provider_prompt_tokens": 3031,
+          "provider_completion_tokens": 222
+        },
+        {
+          "model": "deepseek-v4-flash",
+          "messages": [
+            {
+              "role": "system",
+              "chars": 3510,
+              "estimated_tokens": 895,
+              "real_tokens": null,
+              "sha1": "65de8d69f89e",
+              "preview": "[{\"type\": \"text\", \"text\": \"You are the LLM-Wiki knowledge extraction agent. Follow the Knowledge Extraction Skill and active extraction schema exactly.\\n[SKILL]\\n# Knowledge Extraction Skill\\n\\nPurpos",
+              "content": "[{\"type\": \"text\", \"text\": \"You are the LLM-Wiki knowledge extraction agent. Follow the Knowledge Extraction Skill and active extraction schema exactly.\\n[SKILL]\\n# Knowledge Extraction Skill\\n\\nPurpose: extract source-grounded knowledge for LLM-Wiki.\\n\\nCore rules:\\n- Extract only source-grounded information; prefer precision over recall, empty results are valid.\\n- Entity, Claim, Event, Idea and Question are distinct ontology objects.\\n- Use only registered entity types and Claim predicates (closed vocabulary: select, never create).\\n- Temporal words go in `temporal_signal`, never in `predicate`; if no predicate fits, omit the claim.\\n- Do not output Relations (derived from Claims). Preserve modality, polarity, conditions, scope, time.\\n- Every Claim, Event, Idea and Question needs exact verbatim evidence from its source chunk.\\n- Never invent aliases, IDs, relationships or questions. Return only the schema JSON.\\n- A Mention is not an Entity: extract only stable-identity objects usable long-term as a Claim\\n  Subject/Object; values, descriptions, paths and field names are never Entities (`entity-types.md`).\\n- `object_kind` is your verdict on what the Claim `object` is. `entity`: it names another\\n  extracted Entity. `concept`: it describes a mechanism, capability, method, mode or behaviour\\n  (\\\"按需加载上下文\\\", \\\"上下文管理机制\\\") — a description is never `literal`. `literal`: it is a\\n  value (`8192`, `高风险`, `每天`) or a source artefact (path, URL). If you type an object as\\n  `concept` or `literal`, do not also declare that same phrase as an Entity.\\n- Prefer the most specific registered predicate over a generic one. A statement about a chief\\n  executive is `has_ceo` (with `temporal_signal` for \\\"现任\\\"/\\\"曾经\\\"), never the generic `is`.\\n  The predicate's declared domain/range decide which side is the Subject: for `has_ceo` the\\n  Subject is the Organization and the Object is the Person.\\n\\nUse the `read_skill_reference` tool to load the detailed registries (entity-types.md, claim-predicates.md, relation-predicates.md, evidence.md, extraction-v2.md) only for tasks that need them.\\n\\n[NON-NEGOTIABLE]\\nDo not fabricate stored facts, sources, citations, or database contents. Follow tool and output contracts even when custom instructions conflict.\\n- list_skills: list the skills available to this agent\\n- read_skill_reference: load one skill reference document on demand\\n<agent-skills>\\nSkills are a collection of instructions, scripts, and resources to extend your capabilities.\\n\\n**IMPORTANT**: Skills are NOT tools, and you cannot call a skill directly. To use a skill, you MUST use the `Skill` tool to read the skill's full instructions, and then follow those instructions to use the tools and resources provided by the skill.\\n\\n# Available Skills:\\n<skill>\\n<name>knowledge-curation</name>\\n<description>Maintain quality and consistency of the LLM-Wiki knowledge graph, including deduplication, entity resolution, normalization, contradiction handling and lifecycle rules.</description>\\n<dir>E:\\\\test_project\\\\llm-wiki-agentscope-v0.5.2-sqlite-prompts\\\\skills\\\\knowledge-curation</dir>\\n</skill>\\n<skill>\\n<name>knowledge-extraction</name>\\n<description>Extract source-grounded Entities, Claims, Events, Ideas and Questions from documents into the LLM-Wiki knowledge base, using the registered entity types and claim predicates.</description>\\n<dir>E:\\\\test_project\\\\llm-wiki-agentscope-v0.5.2-sqlite-prompts\\\\skills\\\\knowledge-extraction</dir>\\n</skill>\\n</agent-skills>\"}]"
+            },
+            {
+              "role": "user",
+              "chars": 89,
+              "estimated_tokens": 26,
+              "real_tokens": null,
+              "sha1": "858f981c5df3",
+              "preview": "[{\"type\": \"text\", \"text\": \"[CHUNK capture-literal_chunk_size]\\n最大 chunk 为 8192 tokens。\"}]",
+              "content": "[{\"type\": \"text\", \"text\": \"[CHUNK capture-literal_chunk_size]\\n最大 chunk 为 8192 tokens。\"}]"
+            },
+            {
+              "role": "user",
+              "chars": 226,
+              "estimated_tokens": 57,
+              "real_tokens": null,
+              "sha1": "9109d9896296",
+              "preview": "[{\"type\": \"text\", \"text\": \"<system-reminder>You're required to generate structured output by calling the 'GenerateStructuredOutput' tool. Call it when you are ready to generate the final structured ou",
+              "content": "[{\"type\": \"text\", \"text\": \"<system-reminder>You're required to generate structured output by calling the 'GenerateStructuredOutput' tool. Call it when you are ready to generate the final structured output.</system-reminder>\"}]"
+            },
+            {
+              "role": "user",
+              "chars": 305,
+              "estimated_tokens": 77,
+              "real_tokens": null,
+              "sha1": "eda2b5ec5b45",
+              "preview": "[{\"type\": \"text\", \"text\": \"<system-reminder>Treat the following as the ground truth at this point of the conversation. Anything stated earlier is outdated, and a later reminder, if any, supersedes thi",
+              "content": "[{\"type\": \"text\", \"text\": \"<system-reminder>Treat the following as the ground truth at this point of the conversation. Anything stated earlier is outdated, and a later reminder, if any, supersedes this one:\\n<current-time>2026-09-17T09:13:19</current-time>\\n<timezone>UTC</timezone>\\n</system-reminder>\"}]"
+            },
+            {
+              "role": "assistant",
+              "chars": 4,
+              "estimated_tokens": 1,
+              "real_tokens": null,
+              "sha1": "2be88ca4242c",
+              "preview": "null",
+              "content": "null"
+            },
+            {
+              "role": "tool",
+              "chars": 5586,
+              "estimated_tokens": 1408,
+              "real_tokens": null,
+              "sha1": "c419cc07b42d",
+              "preview": "# Entity Type Standard v1.0\n\n## 1. Definition\n\nAn Entity is a knowledge object with an independent identity, stable semantic boundary, reusable identity and meaningful long-term knowledge value.\n\nAn E",
+              "content": "# Entity Type Standard v1.0\n\n## 1. Definition\n\nAn Entity is a knowledge object with an independent identity, stable semantic boundary, reusable identity and meaningful long-term knowledge value.\n\nAn Entity must be able to stand as a Claim Subject or Object *outside the sentence it\nwas mentioned in*, without losing its identity. If it cannot, it is a Mention, not an\nEntity.\n\nA noun, keyword, adjective, ordinary action, attribute, sentence, or transient phrase is not automatically an Entity.\n\n## 1.1 Mention versus Entity\n\n\"Text contains X\" does NOT mean \"X is an Entity\".\n\nNever create an Entity for any of the following:\n\n```text\na value                 2026, 8192, true, 3.14, 42%, \"5 minutes\"\na qualifier/value phrase \"高风险\", \"每天\", \"仅在生产环境\"\na descriptive phrase     \"indexes raw document titles and bodies\",\n                         \"only the selected evidence pack is given to the LLM\"\na sentence fragment, a bare modifier or pronoun (\"现在\", \"主要\")\na source artefact        a file path, directory path, URL, or document reference\na structural name        a relation/table/column name or schema field (\"relations\")\na lone mention that no Claim uses as its subject or object\n```\n\n## 1.2 Technical objects are allowed, with a technical identity rule\n\nA class, DTO, API, table or technology (`GomsInventoryPagingRequestDTO`, `FTS5`) MAY\nbe an Entity when it is a real object participating in a Claim. Do not discard\ntechnical objects just because they are technical.\n\nBut name similarity is never identity: `GomsInventoryPagingRequestDTO` and\n`GomsInventoryPagingResponseDTO` are two distinct Entities (request vs response).\n\n## 2. Type registry\n\nThe v1.0 registry contains exactly 14 types:\n\n```text\nPerson\nOrganization\nProduct\nSoftware\nTechnology\nMethod\nConcept\nTheory\nDataset\nModel\nStandard\nProtocol\nResource\nLocation\n```\n\nThese types are controlled vocabulary. The LLM may not invent new types.\n\n## 3. Type definitions\n\n### Person\nA naturally identifiable person with independent identity.\n\n### Organization\nA stable organization, institution, company, team or other organizational entity that is independently identifiable in context.\n\n### Product\nA product offered, distributed or provided as an identifiable product.\n\n### Software\nAn executable or deployable software system, program, library, framework or software tool.\n\n### Technology\nA technically meaningful technology, architecture, technical system, capability or technology family that can be independently discussed.\n\n### Method\nA method, algorithm, procedure, workflow or way of achieving a goal.\n\n### Concept\nAn abstract object that can be independently defined, discussed, compared or used as a durable knowledge topic.\n\n### Theory\nA relatively coherent explanatory theory or theoretical framework.\n\n### Dataset\nAn independently identifiable organized collection of data. Benchmark datasets may be represented as Dataset.\n\n### Model\nAn independently identifiable model used for training, inference, evaluation or deployment.\n\n### Standard\nA formally standardized or normative specification maintained by a recognized body, community or process.\n\n### Protocol\nA defined protocol for communication, interaction, coordination or interoperability.\n\n### Resource\nA separately identifiable knowledge or technical resource that cannot reasonably be classified as one of the other 13 types.\n\n`Resource` is not an uncertainty bucket.\n\n### Location\nA separately identifiable geographic, spatial or site/location entity.\n\n## 4. Type boundaries\n\n### Technology versus Method\n\nTechnology answers **what technical capability/system is this?**\n\nMethod answers **how is a task performed?**\n\nAn Entity may have both types when the source independently supports both. Example: a source may describe RAG as both a technology and a method.\n\n### Technology versus Concept\n\nA Technology has technical implementation or system meaning. A Concept is abstract and does not inherently represent an implementation.\n\n### Model versus Technology\n\nA Model is an identifiable model artifact or model family. It may also be classified as Technology when the source independently treats it as a technology object.\n\n### Standard versus Protocol\n\nA Protocol defines interaction/communication behavior. A Standard is a formalized normative specification. An object may have both types when supported.\n\n### Resource\n\nUse Resource only after the other types have been considered. If the type is too uncertain to establish responsibly, omit the Entity instead of defaulting to Resource.\n\n## 5. Entity inclusion test\n\nBefore extraction, ask:\n\n1. Does the object have independent identity?\n2. Can it be referred to outside this sentence without losing its identity?\n3. Does it have a stable semantic boundary?\n4. Does it have reusable knowledge value?\n5. Is it more than a fact, property, relation, action or generic phrase?\n\nIf the answers do not support Entity status, do not extract it.\n\n## 6. Canonical naming and aliases\n\nThe canonical name must be concise, stable and reusable. Do not put descriptions into the name.\n\nAliases must actually occur in the source or be explicitly established by the source. Do not invent synonyms.\n\n## 7. Multiple types\n\nMultiple types are allowed:\n\n```json\n{\n  \"name\": \"RAG\",\n  \"types\": [\"Technology\", \"Method\"]\n}\n```\n\nEvery additional type requires source support. Do not add types merely because the model knows they are plausible.\n\n## 8. Type uncertainty\n\nWhen type confidence is insufficient, omit the Entity. Do not invent a new type and do not use Resource as a fallback solely because classification is uncertain."
+            },
+            {
+              "role": "tool",
+              "chars": 2131,
+              "estimated_tokens": 549,
+              "real_tokens": null,
+              "sha1": "08ffbe2a9520",
+              "preview": "# Claim Predicate Registry v1.0\n\n## 1. Purpose\n\nClaim Predicates describe the semantic relation expressed by a source-grounded Claim. They are more expressive than Graph Relation Predicates because Cl",
+              "content": "# Claim Predicate Registry v1.0\n\n## 1. Purpose\n\nClaim Predicates describe the semantic relation expressed by a source-grounded Claim. They are more expressive than Graph Relation Predicates because Claims must preserve source information that does not necessarily belong in the long-lived graph.\n\n## 2. Core registry\n\n```text\nis\ndefined_as\nclassified_as\n\ncontains\nincludes\nconsists_of\n\nuses\nretrieves\naccesses\nprovides\nreceives\n\ngenerates\nproduces\ncreates\nextracts\ntransforms\n\nsupports\nenables\nallows\nimproves\nreduces\nincreases\ndecreases\nprevents\n\ncauses\nleads_to\n\ndepends_on\nrequires\n\nimplements\nbased_on\nderived_from\nextends\n\ntrained_on\nevaluated_on\ntested_on\n\nstudies\ninvestigates\nevaluates\nanalyzes\n\ncompares_with\nbetter_than\nworse_than\n\ndesigned_for\nused_for\napplied_to\naddresses\n\nhas_ceo        # 首席执行官 (aliases: CEO, chief executive officer, 首席执行官, 首席执行长, 行政总裁)\n               # domain Organization -> range Person; temporal\n```\n\n## 3. Registry rules\n\n- The LLM must select only registered predicates.\n- The LLM must never invent predicate names.\n- **Prefer the most specific registered predicate over a generic one.** `X 的 CEO 是 Y` is\n  `has_ceo`, not `is`; `is` is the last resort when no more specific predicate fits. A\n  predicate's `domain`/`range` decide which side is the Subject (for `has_ceo`: Subject is\n  the Organization, Object is the Person).\n- Modal words such as `may`, `can` and `likely` are not predicates.\n- Negation is represented by polarity.\n- Conditions belong in `context`.\n- Dates and temporal qualifiers belong in `context` or Event when the semantics are event-like.\n\n## 4. Claim-only predicates\n\nThe following are intentionally Claim-first in v1.0 and should not normally become Graph Relations:\n\n```text\nretrieves\nprovides\nreceives\ngenerates\nproduces\nextracts\nsupports\nenables\ncauses\nleads_to\nimproves\nreduces\nincreases\ndecreases\nprevents\naddresses\nbetter_than\nworse_than\n```\n\nThe reason is not that these statements are unimportant. The reason is that they often require contextual conditions, metrics, experimental settings or role information that should not be erased by a binary Graph edge."
+            },
+            {
+              "role": "tool",
+              "chars": 7076,
+              "estimated_tokens": 1775,
+              "real_tokens": null,
+              "sha1": "eef61ce8059c",
+              "preview": "# LLM-Wiki Extraction Standard v2.0\n\n## 1. Mission\n\nThe extraction engine identifies and structures valuable knowledge explicitly supported by the input text. It does not summarize the document, injec",
+              "content": "# LLM-Wiki Extraction Standard v2.0\n\n## 1. Mission\n\nThe extraction engine identifies and structures valuable knowledge explicitly supported by the input text. It does not summarize the document, inject external knowledge, or generate missing knowledge.\n\n## 2. Absolute rules\n\n1. Extract only source-grounded information.\n2. Every extracted object requires source evidence.\n3. Prefer precision over recall when classification is uncertain.\n4. Do not extract every noun, proper noun, keyword, property, action or sentence.\n5. Preserve modality, polarity, conditions, scope, time and perspective.\n6. Do not invent aliases, predicates, relations, events, ideas or questions.\n7. Use only registered Entity Types, Claim Predicates and Relation Predicates.\n8. The LLM does not generate database IDs.\n9. The LLM does not decide final Graph persistence.\n10. Empty arrays are valid.\n11. A Mention is not an Entity. Only extract an Entity that has a stable identity and\n    can be referenced long-term as a Claim Subject or Object (see `entity-types.md`).\n12. A Claim's `object` is an Entity reference only when it names another extracted\n    Entity. A value (`8192`, `true`, `高风险`) or a description is kept as a short\n    literal phrase in the Claim — it does not become an Entity.\n13. Never create an Entity from a file/directory path, URL, relation/table/column\n    name, schema field, lone modifier, description, or transient mention.\n\n## 3. Output objects\n\nThe LLM extraction result contains:\n\n```text\nentities[]\nclaims[]\nrelations[]\nevents[]\nideas[]\nquestions[]\n```\n\nDuring the migration phase, `relations[]` may be accepted for compatibility, but the preferred future flow is to derive Relations deterministically from validated Claims.\n\n## 4. Entity\n\nEach Entity contains:\n\n```text\nname\ntypes[]\naliases[]\ndescription?\nproperties?\n```\n\nRegistered `types[]` values (closed vocabulary; the LLM may not invent types):\n\n```text\nPerson\nOrganization\nProduct\nSoftware\nTechnology\nMethod\nConcept\nTheory\nDataset\nModel\nStandard\nProtocol\nResource\nLocation\n```\n\n## 5. Claim\n\nEach Claim contains:\n\n```text\nsubject\npredicate\nobject?\nobject_kind?\ntemporal_signal?\nclaim_type\npolarity\nmodality\ncontent?\ncontext\nconfidence\nsource_chunk\nevidence_quote\n```\n\n`object_kind` is the model's own verdict on what the object *is*:\n`entity | concept | literal | unknown`. Emit it whenever `object` is present:\n\n- `entity`  — the object names another extracted Entity (a real knowledge object);\n- `concept` — the object is a description of a mechanism/behaviour;\n- `literal` — the object is a value (8192, true, 高风险, 每天) or a source artefact;\n- `unknown` — you cannot responsibly decide.\n\nThe application validates this value and keeps deterministic guardrails for the\nunambiguous cases (numbers, paths, technical identifiers); it does **not** re-guess the\nkind from keywords. A Claim `object` is an Entity reference only when\n`object_kind = entity` *and* the object names an extracted Entity.\n\n`predicate` must be a registered Claim Predicate (see `claim-predicates.md`).\nIt is a *candidate*: a deterministic compiler resolves it against the closed\nregistry and rejects anything unregistered. Never invent a predicate.\n\n`temporal_signal` carries temporal/evolution meaning separately from the\npredicate. Registered values:\n\n```text\nnew\ncurrent\nformer\nprevious\nprior\nexisting\nnext\nfuture\nupcoming\nincoming\noutgoing\nsuccessor\npredecessor\npast\ninterim\nacting\ndesignated\n```\n\nTemporal words MUST NOT be folded into the predicate name. Encode\n\"the new CEO of X is Y\" as `predicate=has_ceo, temporal_signal=new` — one\npredicate, not a family of `new_ceo` / `current_ceo` / `former_ceo` terms.\n\nRegistered `claim_type` values (closed vocabulary; the LLM may not invent types):\n\n```text\nfactual\ndefinitional\ncausal\ncomparative\nevaluative\npredictive\nnormative\nhypothetical\n```\n\nRegistered `polarity` values:\n\n```text\npositive\nnegative\n```\n\nRegistered `modality` values:\n\n```text\nasserted\npossible\nprobable\ncapable\nnecessary\nrecommended\n```\n\n`claim_type`, `polarity` and `modality` are closed vocabularies. Emit only the exact lowercase tokens listed above. Never emit synonyms such as `fact`, `actual`, `likely`, `certain`, `maybe` or `can`; map them to the registered token (`fact`→`factual`, `actual`→`asserted`, `likely`→`probable`, `can`→`capable`).\n\n## 6. Relation\n\nEach Relation contains:\n\n```text\nsource\npredicate\ntarget\ncontext\nconfidence\nsource_chunk\nevidence_quote\n```\n\n`predicate` must be a registered Relation Predicate (see `relation-predicates.md`).\n\n## 7. Event\n\nEach Event contains:\n\n```text\nevent_type\ndescription\nparticipants[]\ntime\nlocation?\nstatus\nconfidence\nsource_chunk\nevidence_quote\n```\n\nRegistered `event_type` values:\n\n```text\ncreation\ndevelopment\nrelease\npublication\ndeployment\nacquisition\nmerger\nmigration\ntraining\nevaluation\nexperiment\nupdate\ndecision\nannouncement\nmeeting\nfailure\nincident\nother\n```\n\nRegistered `status` values:\n\n```text\nplanned\nongoing\ncompleted\ncancelled\nfailed\nunknown\n```\n\n`time.precision` values:\n\n```text\nexact\nday\nmonth\nyear\nrange\nrelative\nunknown\n```\n\n## 8. Idea\n\nEach Idea contains:\n\n```text\ncontent\nstatus\nconfidence\nsource_chunk\nevidence_quote\n```\n\nRegistered `status` values:\n\n```text\ncandidate\naccepted\nimplemented\nrejected\narchived\n```\n\n## 9. Question\n\nEach Question contains:\n\n```text\ncontent\nquestion_type\nstatus\nconfidence\nsource_chunk\nevidence_quote\n```\n\nRegistered `question_type` values:\n\n```text\nknowledge\nresearch\ndesign\nimplementation\nevaluation\n```\n\nRegistered `status` values:\n\n```text\nopen\nanswered\npartially_answered\nresolved\nrejected\narchived\n```\n\n## 10. Extraction procedure\n\n1. Read the complete chunk.\n2. Identify candidate knowledge.\n3. Decide whether each candidate is an Entity, Claim, Event, Idea or Question.\n4. Apply Entity and Predicate registries.\n5. Preserve qualifiers.\n6. Attach minimum sufficient evidence.\n7. Deduplicate within the extraction result.\n8. Validate structure.\n9. Return JSON only.\n\n## 11. Deterministic post-processing\n\nAfter LLM extraction:\n\n```text\nSchema validation\n↓\nRegistry validation\n↓\nEntity normalization\n↓\nEntity resolution\n↓\nClaim normalization\n↓\nClaim → Relation candidate generation\n↓\nRelation type/predicate validation\n↓\nProvenance validation\n↓\nDeduplication\n↓\nLifecycle assignment\n↓\nPersistence\n```\n\n## 12. Repair policy\n\nIf the model returns malformed JSON, a single repair attempt may be performed. The repair prompt must instruct the model to re-read the source and re-extract according to this standard rather than mechanically patching the previous output.\n\nRepeated or broad coercion must not silently weaken the extraction contract.\n\n## 13. Internal check before return\n\nThe extractor should internally verify:\n\n- Is every object source-grounded?\n- Does every object have valid evidence?\n- Did I invent anything?\n- Did I preserve negation and modality?\n- Did I preserve conditions and perspective?\n- Did I confuse Claim and Relation?\n- Did I confuse Idea and Claim?\n- Did I generate a Question?\n- Did I create an Event from a static statement?\n- Did I classify a low-value noun as an Entity?"
+            },
+            {
+              "role": "user",
+              "chars": 226,
+              "estimated_tokens": 57,
+              "real_tokens": null,
+              "sha1": "9109d9896296",
+              "preview": "[{\"type\": \"text\", \"text\": \"<system-reminder>You're required to generate structured output by calling the 'GenerateStructuredOutput' tool. Call it when you are ready to generate the final structured ou",
+              "content": "[{\"type\": \"text\", \"text\": \"<system-reminder>You're required to generate structured output by calling the 'GenerateStructuredOutput' tool. Call it when you are ready to generate the final structured output.</system-reminder>\"}]"
+            }
+          ],
+          "message_count": 9,
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "Skill",
+                "description": "Retrieve a skill within the conversation. When users asks you to perform tasks, check if any of the available skills match. Skills provide specialized capabilities and domain knowledge.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "skill": {
+                      "type": "string",
+                      "description": "The exact name of the skill to view. "
+                    }
+                  },
+                  "required": [
+                    "skill"
+                  ]
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "list_skills",
+                "description": "List all available LLM-Wiki skills and their reference documents.\nUse this to discover which skill contract or reference registry to load.",
+                "parameters": {
+                  "properties": {},
+                  "type": "object"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "read_skill_reference",
+                "description": "Load a reference document that belongs to a skill, on demand.",
+                "parameters": {
+                  "properties": {
+                    "skill": {
+                      "description": "Skill name, for example knowledge-extraction or knowledge-curation.",
+                      "type": "string"
+                    },
+                    "reference": {
+                      "description": "Reference file name such as entity-types.md, claim-predicates.md, extraction-v2.md, relation-predicates.md, evidence.md, deduplication.md, entity-resolution.md or normalization.md.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "skill",
+                    "reference"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "GenerateStructuredOutput",
+                "description": "Generate the required structured output by this tool.\n\nThis tool is equipped only when you're required to generate structured output.\nThe input schema represents the required structured output.\nWhen you are ready to generate a structured output, call this tool with the\nstructured output as input.\nWhen you're equipped this tool, you MUST end your response with calling this\ntool. Once this tool is called, your current response is finished and the\nstructured output is sent to the user.\n\n# When to Use This Tool\n- When you collect enough resources and information.\n",
+                "parameters": {
+                  "description": "The structured extraction result the agent must produce.\n\nRelations are intentionally absent: they are derived deterministically\nfrom validated Claims by the application.",
+                  "properties": {
+                    "entities": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "name": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "types": {
+                            "items": {
+                              "enum": [
+                                "Person",
+                                "Organization",
+                                "Product",
+                                "Software",
+                                "Technology",
+                                "Method",
+                                "Concept",
+                                "Theory",
+                                "Dataset",
+                                "Model",
+                                "Standard",
+                                "Protocol",
+                                "Resource",
+                                "Location"
+                              ],
+                              "type": "string"
+                            },
+                            "minItems": 1,
+                            "type": "array"
+                          },
+                          "aliases": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "description": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "properties": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "types"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "claims": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "subject": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "predicate": {
+                            "pattern": "^[a-z][a-z0-9_]*$",
+                            "type": "string"
+                          },
+                          "object": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "object_kind": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "entity",
+                                  "concept",
+                                  "literal",
+                                  "unknown"
+                                ],
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "temporal_signal": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "new",
+                                  "current",
+                                  "former",
+                                  "previous",
+                                  "prior",
+                                  "existing",
+                                  "next",
+                                  "future",
+                                  "upcoming",
+                                  "incoming",
+                                  "outgoing",
+                                  "successor",
+                                  "predecessor",
+                                  "past",
+                                  "interim",
+                                  "acting",
+                                  "designated"
+                                ],
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "claim_type": {
+                            "enum": [
+                              "factual",
+                              "definitional",
+                              "causal",
+                              "comparative",
+                              "evaluative",
+                              "predictive",
+                              "normative",
+                              "hypothetical"
+                            ],
+                            "type": "string"
+                          },
+                          "polarity": {
+                            "enum": [
+                              "positive",
+                              "negative"
+                            ],
+                            "type": "string"
+                          },
+                          "modality": {
+                            "enum": [
+                              "asserted",
+                              "possible",
+                              "probable",
+                              "capable",
+                              "necessary",
+                              "recommended"
+                            ],
+                            "type": "string"
+                          },
+                          "content": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "context": {
+                            "additionalProperties": true,
+                            "type": "object"
+                          },
+                          "confidence": {
+                            "maximum": 1,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "source_chunk": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "evidence_quote": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "subject",
+                          "predicate",
+                          "claim_type",
+                          "polarity",
+                          "modality",
+                          "confidence",
+                          "source_chunk",
+                          "evidence_quote"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "events": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "event_type": {
+                            "enum": [
+                              "creation",
+                              "development",
+                              "release",
+                              "publication",
+                              "deployment",
+                              "acquisition",
+                              "merger",
+                              "migration",
+                              "training",
+                              "evaluation",
+                              "experiment",
+                              "update",
+                              "decision",
+                              "announcement",
+                              "meeting",
+                              "failure",
+                              "incident",
+                              "other"
+                            ],
+                            "type": "string"
+                          },
+                          "description": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "participants": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "time": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "start": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "default": null
+                              },
+                              "end": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "default": null
+                              },
+                              "precision": {
+                                "default": "unknown",
+                                "enum": [
+                                  "exact",
+                                  "day",
+                                  "month",
+                                  "year",
+                                  "range",
+                                  "relative",
+                                  "unknown"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "location": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "status": {
+                            "default": "unknown",
+                            "enum": [
+                              "planned",
+                              "ongoing",
+                              "completed",
+                              "cancelled",
+                              "failed",
+                              "unknown"
+                            ],
+                            "type": "string"
+                          },
+                          "confidence": {
+                            "maximum": 1,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "source_chunk": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "evidence_quote": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "event_type",
+                          "description",
+                          "confidence",
+                          "source_chunk",
+                          "evidence_quote"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "ideas": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "content": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "status": {
+                            "default": "candidate",
+                            "enum": [
+                              "candidate",
+                              "accepted",
+                              "implemented",
+                              "rejected",
+                              "archived"
+                            ],
+                            "type": "string"
+                          },
+                          "confidence": {
+                            "maximum": 1,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "source_chunk": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "evidence_quote": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "content",
+                          "confidence",
+                          "source_chunk",
+                          "evidence_quote"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "questions": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "content": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "question_type": {
+                            "default": "knowledge",
+                            "enum": [
+                              "knowledge",
+                              "research",
+                              "design",
+                              "implementation",
+                              "evaluation"
+                            ],
+                            "type": "string"
+                          },
+                          "status": {
+                            "default": "open",
+                            "enum": [
+                              "open",
+                              "answered",
+                              "partially_answered",
+                              "resolved",
+                              "rejected",
+                              "archived"
+                            ],
+                            "type": "string"
+                          },
+                          "confidence": {
+                            "maximum": 1,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "source_chunk": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "evidence_quote": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "content",
+                          "confidence",
+                          "source_chunk",
+                          "evidence_quote"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          ],
+          "tool_names": [
+            "Skill",
+            "list_skills",
+            "read_skill_reference",
+            "GenerateStructuredOutput"
+          ],
+          "tool_choice": null,
+          "response_format": null,
+          "temperature": null,
+          "max_completion_tokens": null,
+          "parallel_tool_calls": null,
+          "stream": false,
+          "other_keys": [],
+          "response": {
+            "usage": {
+              "prompt_tokens": 6674,
+              "completion_tokens": 181
+            },
+            "finish_reason": "tool_calls",
+            "tool_calls": [
+              "GenerateStructuredOutput"
+            ]
+          },
+          "serialized_estimated_tokens": 6887,
+          "serialized_real_tokens": null,
+          "provider_prompt_tokens": 6674,
+          "provider_completion_tokens": 181
+        }
+      ],
+      "request": {
+        "model": "deepseek-v4-flash",
+        "messages": [
+          {
+            "role": "system",
+            "chars": 3510,
+            "estimated_tokens": 895,
+            "real_tokens": null,
+            "sha1": "65de8d69f89e",
+            "preview": "[{\"type\": \"text\", \"text\": \"You are the LLM-Wiki knowledge extraction agent. Follow the Knowledge Extraction Skill and active extraction schema exactly.\\n[SKILL]\\n# Knowledge Extraction Skill\\n\\nPurpos",
+            "content": "[{\"type\": \"text\", \"text\": \"You are the LLM-Wiki knowledge extraction agent. Follow the Knowledge Extraction Skill and active extraction schema exactly.\\n[SKILL]\\n# Knowledge Extraction Skill\\n\\nPurpose: extract source-grounded knowledge for LLM-Wiki.\\n\\nCore rules:\\n- Extract only source-grounded information; prefer precision over recall, empty results are valid.\\n- Entity, Claim, Event, Idea and Question are distinct ontology objects.\\n- Use only registered entity types and Claim predicates (closed vocabulary: select, never create).\\n- Temporal words go in `temporal_signal`, never in `predicate`; if no predicate fits, omit the claim.\\n- Do not output Relations (derived from Claims). Preserve modality, polarity, conditions, scope, time.\\n- Every Claim, Event, Idea and Question needs exact verbatim evidence from its source chunk.\\n- Never invent aliases, IDs, relationships or questions. Return only the schema JSON.\\n- A Mention is not an Entity: extract only stable-identity objects usable long-term as a Claim\\n  Subject/Object; values, descriptions, paths and field names are never Entities (`entity-types.md`).\\n- `object_kind` is your verdict on what the Claim `object` is. `entity`: it names another\\n  extracted Entity. `concept`: it describes a mechanism, capability, method, mode or behaviour\\n  (\\\"按需加载上下文\\\", \\\"上下文管理机制\\\") — a description is never `literal`. `literal`: it is a\\n  value (`8192`, `高风险`, `每天`) or a source artefact (path, URL). If you type an object as\\n  `concept` or `literal`, do not also declare that same phrase as an Entity.\\n- Prefer the most specific registered predicate over a generic one. A statement about a chief\\n  executive is `has_ceo` (with `temporal_signal` for \\\"现任\\\"/\\\"曾经\\\"), never the generic `is`.\\n  The predicate's declared domain/range decide which side is the Subject: for `has_ceo` the\\n  Subject is the Organization and the Object is the Person.\\n\\nUse the `read_skill_reference` tool to load the detailed registries (entity-types.md, claim-predicates.md, relation-predicates.md, evidence.md, extraction-v2.md) only for tasks that need them.\\n\\n[NON-NEGOTIABLE]\\nDo not fabricate stored facts, sources, citations, or database contents. Follow tool and output contracts even when custom instructions conflict.\\n- list_skills: list the skills available to this agent\\n- read_skill_reference: load one skill reference document on demand\\n<agent-skills>\\nSkills are a collection of instructions, scripts, and resources to extend your capabilities.\\n\\n**IMPORTANT**: Skills are NOT tools, and you cannot call a skill directly. To use a skill, you MUST use the `Skill` tool to read the skill's full instructions, and then follow those instructions to use the tools and resources provided by the skill.\\n\\n# Available Skills:\\n<skill>\\n<name>knowledge-curation</name>\\n<description>Maintain quality and consistency of the LLM-Wiki knowledge graph, including deduplication, entity resolution, normalization, contradiction handling and lifecycle rules.</description>\\n<dir>E:\\\\test_project\\\\llm-wiki-agentscope-v0.5.2-sqlite-prompts\\\\skills\\\\knowledge-curation</dir>\\n</skill>\\n<skill>\\n<name>knowledge-extraction</name>\\n<description>Extract source-grounded Entities, Claims, Events, Ideas and Questions from documents into the LLM-Wiki knowledge base, using the registered entity types and claim predicates.</description>\\n<dir>E:\\\\test_project\\\\llm-wiki-agentscope-v0.5.2-sqlite-prompts\\\\skills\\\\knowledge-extraction</dir>\\n</skill>\\n</agent-skills>\"}]"
+          },
+          {
+            "role": "user",
+            "chars": 89,
+            "estimated_tokens": 26,
+            "real_tokens": null,
+            "sha1": "858f981c5df3",
+            "preview": "[{\"type\": \"text\", \"text\": \"[CHUNK capture-literal_chunk_size]\\n最大 chunk 为 8192 tokens。\"}]",
+            "content": "[{\"type\": \"text\", \"text\": \"[CHUNK capture-literal_chunk_size]\\n最大 chunk 为 8192 tokens。\"}]"
+          },
+          {
+            "role": "user",
+            "chars": 226,
+            "estimated_tokens": 57,
+            "real_tokens": null,
+            "sha1": "9109d9896296",
+            "preview": "[{\"type\": \"text\", \"text\": \"<system-reminder>You're required to generate structured output by calling the 'GenerateStructuredOutput' tool. Call it when you are ready to generate the final structured ou",
+            "content": "[{\"type\": \"text\", \"text\": \"<system-reminder>You're required to generate structured output by calling the 'GenerateStructuredOutput' tool. Call it when you are ready to generate the final structured output.</system-reminder>\"}]"
+          },
+          {
+            "role": "user",
+            "chars": 305,
+            "estimated_tokens": 77,
+            "real_tokens": null,
+            "sha1": "eda2b5ec5b45",
+            "preview": "[{\"type\": \"text\", \"text\": \"<system-reminder>Treat the following as the ground truth at this point of the conversation. Anything stated earlier is outdated, and a later reminder, if any, supersedes thi",
+            "content": "[{\"type\": \"text\", \"text\": \"<system-reminder>Treat the following as the ground truth at this point of the conversation. Anything stated earlier is outdated, and a later reminder, if any, supersedes this one:\\n<current-time>2026-09-17T09:13:19</current-time>\\n<timezone>UTC</timezone>\\n</system-reminder>\"}]"
+          }
+        ],
+        "message_count": 4,
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "Skill",
+              "description": "Retrieve a skill within the conversation. When users asks you to perform tasks, check if any of the available skills match. Skills provide specialized capabilities and domain knowledge.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "skill": {
+                    "type": "string",
+                    "description": "The exact name of the skill to view. "
+                  }
+                },
+                "required": [
+                  "skill"
+                ]
+              }
+            }
+          },
+          {
+            "type": "function",
+            "function": {
+              "name": "list_skills",
+              "description": "List all available LLM-Wiki skills and their reference documents.\nUse this to discover which skill contract or reference registry to load.",
+              "parameters": {
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          {
+            "type": "function",
+            "function": {
+              "name": "read_skill_reference",
+              "description": "Load a reference document that belongs to a skill, on demand.",
+              "parameters": {
+                "properties": {
+                  "skill": {
+                    "description": "Skill name, for example knowledge-extraction or knowledge-curation.",
+                    "type": "string"
+                  },
+                  "reference": {
+                    "description": "Reference file name such as entity-types.md, claim-predicates.md, extraction-v2.md, relation-predicates.md, evidence.md, deduplication.md, entity-resolution.md or normalization.md.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "skill",
+                  "reference"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          {
+            "type": "function",
+            "function": {
+              "name": "GenerateStructuredOutput",
+              "description": "Generate the required structured output by this tool.\n\nThis tool is equipped only when you're required to generate structured output.\nThe input schema represents the required structured output.\nWhen you are ready to generate a structured output, call this tool with the\nstructured output as input.\nWhen you're equipped this tool, you MUST end your response with calling this\ntool. Once this tool is called, your current response is finished and the\nstructured output is sent to the user.\n\n# When to Use This Tool\n- When you collect enough resources and information.\n",
+              "parameters": {
+                "description": "The structured extraction result the agent must produce.\n\nRelations are intentionally absent: they are derived deterministically\nfrom validated Claims by the application.",
+                "properties": {
+                  "entities": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "name": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "types": {
+                          "items": {
+                            "enum": [
+                              "Person",
+                              "Organization",
+                              "Product",
+                              "Software",
+                              "Technology",
+                              "Method",
+                              "Concept",
+                              "Theory",
+                              "Dataset",
+                              "Model",
+                              "Standard",
+                              "Protocol",
+                              "Resource",
+                              "Location"
+                            ],
+                            "type": "string"
+                          },
+                          "minItems": 1,
+                          "type": "array"
+                        },
+                        "aliases": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "description": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        },
+                        "properties": {
+                          "type": "object",
+                          "additionalProperties": true
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "types"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "claims": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "subject": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "predicate": {
+                          "pattern": "^[a-z][a-z0-9_]*$",
+                          "type": "string"
+                        },
+                        "object": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        },
+                        "object_kind": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "entity",
+                                "concept",
+                                "literal",
+                                "unknown"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        },
+                        "temporal_signal": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "new",
+                                "current",
+                                "former",
+                                "previous",
+                                "prior",
+                                "existing",
+                                "next",
+                                "future",
+                                "upcoming",
+                                "incoming",
+                                "outgoing",
+                                "successor",
+                                "predecessor",
+                                "past",
+                                "interim",
+                                "acting",
+                                "designated"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        },
+                        "claim_type": {
+                          "enum": [
+                            "factual",
+                            "definitional",
+                            "causal",
+                            "comparative",
+                            "evaluative",
+                            "predictive",
+                            "normative",
+                            "hypothetical"
+                          ],
+                          "type": "string"
+                        },
+                        "polarity": {
+                          "enum": [
+                            "positive",
+                            "negative"
+                          ],
+                          "type": "string"
+                        },
+                        "modality": {
+                          "enum": [
+                            "asserted",
+                            "possible",
+                            "probable",
+                            "capable",
+                            "necessary",
+                            "recommended"
+                          ],
+                          "type": "string"
+                        },
+                        "content": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        },
+                        "context": {
+                          "additionalProperties": true,
+                          "type": "object"
+                        },
+                        "confidence": {
+                          "maximum": 1,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "source_chunk": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "evidence_quote": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "subject",
+                        "predicate",
+                        "claim_type",
+                        "polarity",
+                        "modality",
+                        "confidence",
+                        "source_chunk",
+                        "evidence_quote"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "events": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "event_type": {
+                          "enum": [
+                            "creation",
+                            "development",
+                            "release",
+                            "publication",
+                            "deployment",
+                            "acquisition",
+                            "merger",
+                            "migration",
+                            "training",
+                            "evaluation",
+                            "experiment",
+                            "update",
+                            "decision",
+                            "announcement",
+                            "meeting",
+                            "failure",
+                            "incident",
+                            "other"
+                          ],
+                          "type": "string"
+                        },
+                        "description": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "participants": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "time": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "start": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null
+                            },
+                            "end": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null
+                            },
+                            "precision": {
+                              "default": "unknown",
+                              "enum": [
+                                "exact",
+                                "day",
+                                "month",
+                                "year",
+                                "range",
+                                "relative",
+                                "unknown"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "location": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        },
+                        "status": {
+                          "default": "unknown",
+                          "enum": [
+                            "planned",
+                            "ongoing",
+                            "completed",
+                            "cancelled",
+                            "failed",
+                            "unknown"
+                          ],
+                          "type": "string"
+                        },
+                        "confidence": {
+                          "maximum": 1,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "source_chunk": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "evidence_quote": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "event_type",
+                        "description",
+                        "confidence",
+                        "source_chunk",
+                        "evidence_quote"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "ideas": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "content": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "status": {
+                          "default": "candidate",
+                          "enum": [
+                            "candidate",
+                            "accepted",
+                            "implemented",
+                            "rejected",
+                            "archived"
+                          ],
+                          "type": "string"
+                        },
+                        "confidence": {
+                          "maximum": 1,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "source_chunk": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "evidence_quote": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "content",
+                        "confidence",
+                        "source_chunk",
+                        "evidence_quote"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "questions": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "content": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "question_type": {
+                          "default": "knowledge",
+                          "enum": [
+                            "knowledge",
+                            "research",
+                            "design",
+                            "implementation",
+                            "evaluation"
+                          ],
+                          "type": "string"
+                        },
+                        "status": {
+                          "default": "open",
+                          "enum": [
+                            "open",
+                            "answered",
+                            "partially_answered",
+                            "resolved",
+                            "rejected",
+                            "archived"
+                          ],
+                          "type": "string"
+                        },
+                        "confidence": {
+                          "maximum": 1,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "source_chunk": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "evidence_quote": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "content",
+                        "confidence",
+                        "source_chunk",
+                        "evidence_quote"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          }
+        ],
+        "tool_names": [
+          "Skill",
+          "list_skills",
+          "read_skill_reference",
+          "GenerateStructuredOutput"
+        ],
+        "tool_choice": null,
+        "response_format": null,
+        "temperature": null,
+        "max_completion_tokens": null,
+        "parallel_tool_calls": null,
+        "stream": false,
+        "other_keys": [],
+        "response": {
+          "usage": {
+            "prompt_tokens": 3031,
+            "completion_tokens": 222
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "read_skill_reference",
+            "read_skill_reference",
+            "read_skill_reference"
+          ]
+        },
+        "serialized_estimated_tokens": 2680,
+        "serialized_real_tokens": null,
+        "provider_prompt_tokens": 3031,
+        "provider_completion_tokens": 222
+      },
+      "extraction_result_keys": [
+        "claims",
+        "entities",
+        "events",
+        "ideas",
+        "questions"
+      ],
+      "token_layers": {
+        "project_known": 2740,
+        "serialized_request_estimated": 2680,
+        "serialized_request_real": null,
+        "provider_reported_prompt_base_call": 3031,
+        "provider_reported_prompt_step_total": 9705,
+        "serialization_overhead_estimated": -60,
+        "provider_unattributed": 351,
+        "recorded_prompt_tokens_earlier_run": 8041
+      }
+    },
+    {
+      "case": "prose_slash_architecture",
+      "text": "客户端/服务端架构需要统一认证。",
+      "provider_calls_in_one_step": 2,
+      "calls": [
+        {
+          "model": "deepseek-v4-flash",
+          "messages": [
+            {
+              "role": "system",
+              "chars": 3510,
+              "estimated_tokens": 895,
+              "real_tokens": null,
+              "sha1": "65de8d69f89e",
+              "preview": "[{\"type\": \"text\", \"text\": \"You are the LLM-Wiki knowledge extraction agent. Follow the Knowledge Extraction Skill and active extraction schema exactly.\\n[SKILL]\\n# Knowledge Extraction Skill\\n\\nPurpos",
+              "content": "[{\"type\": \"text\", \"text\": \"You are the LLM-Wiki knowledge extraction agent. Follow the Knowledge Extraction Skill and active extraction schema exactly.\\n[SKILL]\\n# Knowledge Extraction Skill\\n\\nPurpose: extract source-grounded knowledge for LLM-Wiki.\\n\\nCore rules:\\n- Extract only source-grounded information; prefer precision over recall, empty results are valid.\\n- Entity, Claim, Event, Idea and Question are distinct ontology objects.\\n- Use only registered entity types and Claim predicates (closed vocabulary: select, never create).\\n- Temporal words go in `temporal_signal`, never in `predicate`; if no predicate fits, omit the claim.\\n- Do not output Relations (derived from Claims). Preserve modality, polarity, conditions, scope, time.\\n- Every Claim, Event, Idea and Question needs exact verbatim evidence from its source chunk.\\n- Never invent aliases, IDs, relationships or questions. Return only the schema JSON.\\n- A Mention is not an Entity: extract only stable-identity objects usable long-term as a Claim\\n  Subject/Object; values, descriptions, paths and field names are never Entities (`entity-types.md`).\\n- `object_kind` is your verdict on what the Claim `object` is. `entity`: it names another\\n  extracted Entity. `concept`: it describes a mechanism, capability, method, mode or behaviour\\n  (\\\"按需加载上下文\\\", \\\"上下文管理机制\\\") — a description is never `literal`. `literal`: it is a\\n  value (`8192`, `高风险`, `每天`) or a source artefact (path, URL). If you type an object as\\n  `concept` or `literal`, do not also declare that same phrase as an Entity.\\n- Prefer the most specific registered predicate over a generic one. A statement about a chief\\n  executive is `has_ceo` (with `temporal_signal` for \\\"现任\\\"/\\\"曾经\\\"), never the generic `is`.\\n  The predicate's declared domain/range decide which side is the Subject: for `has_ceo` the\\n  Subject is the Organization and the Object is the Person.\\n\\nUse the `read_skill_reference` tool to load the detailed registries (entity-types.md, claim-predicates.md, relation-predicates.md, evidence.md, extraction-v2.md) only for tasks that need them.\\n\\n[NON-NEGOTIABLE]\\nDo not fabricate stored facts, sources, citations, or database contents. Follow tool and output contracts even when custom instructions conflict.\\n- list_skills: list the skills available to this agent\\n- read_skill_reference: load one skill reference document on demand\\n<agent-skills>\\nSkills are a collection of instructions, scripts, and resources to extend your capabilities.\\n\\n**IMPORTANT**: Skills are NOT tools, and you cannot call a skill directly. To use a skill, you MUST use the `Skill` tool to read the skill's full instructions, and then follow those instructions to use the tools and resources provided by the skill.\\n\\n# Available Skills:\\n<skill>\\n<name>knowledge-curation</name>\\n<description>Maintain quality and consistency of the LLM-Wiki knowledge graph, including deduplication, entity resolution, normalization, contradiction handling and lifecycle rules.</description>\\n<dir>E:\\\\test_project\\\\llm-wiki-agentscope-v0.5.2-sqlite-prompts\\\\skills\\\\knowledge-curation</dir>\\n</skill>\\n<skill>\\n<name>knowledge-extraction</name>\\n<description>Extract source-grounded Entities, Claims, Events, Ideas and Questions from documents into the LLM-Wiki knowledge base, using the registered entity types and claim predicates.</description>\\n<dir>E:\\\\test_project\\\\llm-wiki-agentscope-v0.5.2-sqlite-prompts\\\\skills\\\\knowledge-extraction</dir>\\n</skill>\\n</agent-skills>\"}]"
+            },
+            {
+              "role": "user",
+              "chars": 88,
+              "estimated_tokens": 34,
+              "real_tokens": null,
+              "sha1": "df31e271c455",
+              "preview": "[{\"type\": \"text\", \"text\": \"[CHUNK capture-prose_slash_architecture]\\n客户端/服务端架构需要统一认证。\"}]",
+              "content": "[{\"type\": \"text\", \"text\": \"[CHUNK capture-prose_slash_architecture]\\n客户端/服务端架构需要统一认证。\"}]"
+            },
+            {
+              "role": "user",
+              "chars": 226,
+              "estimated_tokens": 57,
+              "real_tokens": null,
+              "sha1": "9109d9896296",
+              "preview": "[{\"type\": \"text\", \"text\": \"<system-reminder>You're required to generate structured output by calling the 'GenerateStructuredOutput' tool. Call it when you are ready to generate the final structured ou",
+              "content": "[{\"type\": \"text\", \"text\": \"<system-reminder>You're required to generate structured output by calling the 'GenerateStructuredOutput' tool. Call it when you are ready to generate the final structured output.</system-reminder>\"}]"
+            },
+            {
+              "role": "user",
+              "chars": 305,
+              "estimated_tokens": 77,
+              "real_tokens": null,
+              "sha1": "136e6d9c8f66",
+              "preview": "[{\"type\": \"text\", \"text\": \"<system-reminder>Treat the following as the ground truth at this point of the conversation. Anything stated earlier is outdated, and a later reminder, if any, supersedes thi",
+              "content": "[{\"type\": \"text\", \"text\": \"<system-reminder>Treat the following as the ground truth at this point of the conversation. Anything stated earlier is outdated, and a later reminder, if any, supersedes this one:\\n<current-time>2026-09-17T09:13:23</current-time>\\n<timezone>UTC</timezone>\\n</system-reminder>\"}]"
+            }
+          ],
+          "message_count": 4,
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "Skill",
+                "description": "Retrieve a skill within the conversation. When users asks you to perform tasks, check if any of the available skills match. Skills provide specialized capabilities and domain knowledge.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "skill": {
+                      "type": "string",
+                      "description": "The exact name of the skill to view. "
+                    }
+                  },
+                  "required": [
+                    "skill"
+                  ]
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "list_skills",
+                "description": "List all available LLM-Wiki skills and their reference documents.\nUse this to discover which skill contract or reference registry to load.",
+                "parameters": {
+                  "properties": {},
+                  "type": "object"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "read_skill_reference",
+                "description": "Load a reference document that belongs to a skill, on demand.",
+                "parameters": {
+                  "properties": {
+                    "skill": {
+                      "description": "Skill name, for example knowledge-extraction or knowledge-curation.",
+                      "type": "string"
+                    },
+                    "reference": {
+                      "description": "Reference file name such as entity-types.md, claim-predicates.md, extraction-v2.md, relation-predicates.md, evidence.md, deduplication.md, entity-resolution.md or normalization.md.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "skill",
+                    "reference"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "GenerateStructuredOutput",
+                "description": "Generate the required structured output by this tool.\n\nThis tool is equipped only when you're required to generate structured output.\nThe input schema represents the required structured output.\nWhen you are ready to generate a structured output, call this tool with the\nstructured output as input.\nWhen you're equipped this tool, you MUST end your response with calling this\ntool. Once this tool is called, your current response is finished and the\nstructured output is sent to the user.\n\n# When to Use This Tool\n- When you collect enough resources and information.\n",
+                "parameters": {
+                  "description": "The structured extraction result the agent must produce.\n\nRelations are intentionally absent: they are derived deterministically\nfrom validated Claims by the application.",
+                  "properties": {
+                    "entities": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "name": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "types": {
+                            "items": {
+                              "enum": [
+                                "Person",
+                                "Organization",
+                                "Product",
+                                "Software",
+                                "Technology",
+                                "Method",
+                                "Concept",
+                                "Theory",
+                                "Dataset",
+                                "Model",
+                                "Standard",
+                                "Protocol",
+                                "Resource",
+                                "Location"
+                              ],
+                              "type": "string"
+                            },
+                            "minItems": 1,
+                            "type": "array"
+                          },
+                          "aliases": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "description": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "properties": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "types"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "claims": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "subject": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "predicate": {
+                            "pattern": "^[a-z][a-z0-9_]*$",
+                            "type": "string"
+                          },
+                          "object": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "object_kind": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "entity",
+                                  "concept",
+                                  "literal",
+                                  "unknown"
+                                ],
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "temporal_signal": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "new",
+                                  "current",
+                                  "former",
+                                  "previous",
+                                  "prior",
+                                  "existing",
+                                  "next",
+                                  "future",
+                                  "upcoming",
+                                  "incoming",
+                                  "outgoing",
+                                  "successor",
+                                  "predecessor",
+                                  "past",
+                                  "interim",
+                                  "acting",
+                                  "designated"
+                                ],
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "claim_type": {
+                            "enum": [
+                              "factual",
+                              "definitional",
+                              "causal",
+                              "comparative",
+                              "evaluative",
+                              "predictive",
+                              "normative",
+                              "hypothetical"
+                            ],
+                            "type": "string"
+                          },
+                          "polarity": {
+                            "enum": [
+                              "positive",
+                              "negative"
+                            ],
+                            "type": "string"
+                          },
+                          "modality": {
+                            "enum": [
+                              "asserted",
+                              "possible",
+                              "probable",
+                              "capable",
+                              "necessary",
+                              "recommended"
+                            ],
+                            "type": "string"
+                          },
+                          "content": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "context": {
+                            "additionalProperties": true,
+                            "type": "object"
+                          },
+                          "confidence": {
+                            "maximum": 1,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "source_chunk": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "evidence_quote": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "subject",
+                          "predicate",
+                          "claim_type",
+                          "polarity",
+                          "modality",
+                          "confidence",
+                          "source_chunk",
+                          "evidence_quote"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "events": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "event_type": {
+                            "enum": [
+                              "creation",
+                              "development",
+                              "release",
+                              "publication",
+                              "deployment",
+                              "acquisition",
+                              "merger",
+                              "migration",
+                              "training",
+                              "evaluation",
+                              "experiment",
+                              "update",
+                              "decision",
+                              "announcement",
+                              "meeting",
+                              "failure",
+                              "incident",
+                              "other"
+                            ],
+                            "type": "string"
+                          },
+                          "description": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "participants": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "time": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "start": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "default": null
+                              },
+                              "end": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "default": null
+                              },
+                              "precision": {
+                                "default": "unknown",
+                                "enum": [
+                                  "exact",
+                                  "day",
+                                  "month",
+                                  "year",
+                                  "range",
+                                  "relative",
+                                  "unknown"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "location": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "status": {
+                            "default": "unknown",
+                            "enum": [
+                              "planned",
+                              "ongoing",
+                              "completed",
+                              "cancelled",
+                              "failed",
+                              "unknown"
+                            ],
+                            "type": "string"
+                          },
+                          "confidence": {
+                            "maximum": 1,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "source_chunk": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "evidence_quote": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "event_type",
+                          "description",
+                          "confidence",
+                          "source_chunk",
+                          "evidence_quote"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "ideas": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "content": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "status": {
+                            "default": "candidate",
+                            "enum": [
+                              "candidate",
+                              "accepted",
+                              "implemented",
+                              "rejected",
+                              "archived"
+                            ],
+                            "type": "string"
+                          },
+                          "confidence": {
+                            "maximum": 1,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "source_chunk": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "evidence_quote": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "content",
+                          "confidence",
+                          "source_chunk",
+                          "evidence_quote"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "questions": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "content": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "question_type": {
+                            "default": "knowledge",
+                            "enum": [
+                              "knowledge",
+                              "research",
+                              "design",
+                              "implementation",
+                              "evaluation"
+                            ],
+                            "type": "string"
+                          },
+                          "status": {
+                            "default": "open",
+                            "enum": [
+                              "open",
+                              "answered",
+                              "partially_answered",
+                              "resolved",
+                              "rejected",
+                              "archived"
+                            ],
+                            "type": "string"
+                          },
+                          "confidence": {
+                            "maximum": 1,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "source_chunk": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "evidence_quote": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "content",
+                          "confidence",
+                          "source_chunk",
+                          "evidence_quote"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          ],
+          "tool_names": [
+            "Skill",
+            "list_skills",
+            "read_skill_reference",
+            "GenerateStructuredOutput"
+          ],
+          "tool_choice": null,
+          "response_format": null,
+          "temperature": null,
+          "max_completion_tokens": null,
+          "parallel_tool_calls": null,
+          "stream": false,
+          "other_keys": [],
+          "response": {
+            "usage": {
+              "prompt_tokens": 3032,
+              "completion_tokens": 279
+            },
+            "finish_reason": "tool_calls",
+            "tool_calls": [
+              "read_skill_reference",
+              "read_skill_reference"
+            ]
+          },
+          "serialized_estimated_tokens": 2688,
+          "serialized_real_tokens": null,
+          "provider_prompt_tokens": 3032,
+          "provider_completion_tokens": 279
+        },
+        {
+          "model": "deepseek-v4-flash",
+          "messages": [
+            {
+              "role": "system",
+              "chars": 3510,
+              "estimated_tokens": 895,
+              "real_tokens": null,
+              "sha1": "65de8d69f89e",
+              "preview": "[{\"type\": \"text\", \"text\": \"You are the LLM-Wiki knowledge extraction agent. Follow the Knowledge Extraction Skill and active extraction schema exactly.\\n[SKILL]\\n# Knowledge Extraction Skill\\n\\nPurpos",
+              "content": "[{\"type\": \"text\", \"text\": \"You are the LLM-Wiki knowledge extraction agent. Follow the Knowledge Extraction Skill and active extraction schema exactly.\\n[SKILL]\\n# Knowledge Extraction Skill\\n\\nPurpose: extract source-grounded knowledge for LLM-Wiki.\\n\\nCore rules:\\n- Extract only source-grounded information; prefer precision over recall, empty results are valid.\\n- Entity, Claim, Event, Idea and Question are distinct ontology objects.\\n- Use only registered entity types and Claim predicates (closed vocabulary: select, never create).\\n- Temporal words go in `temporal_signal`, never in `predicate`; if no predicate fits, omit the claim.\\n- Do not output Relations (derived from Claims). Preserve modality, polarity, conditions, scope, time.\\n- Every Claim, Event, Idea and Question needs exact verbatim evidence from its source chunk.\\n- Never invent aliases, IDs, relationships or questions. Return only the schema JSON.\\n- A Mention is not an Entity: extract only stable-identity objects usable long-term as a Claim\\n  Subject/Object; values, descriptions, paths and field names are never Entities (`entity-types.md`).\\n- `object_kind` is your verdict on what the Claim `object` is. `entity`: it names another\\n  extracted Entity. `concept`: it describes a mechanism, capability, method, mode or behaviour\\n  (\\\"按需加载上下文\\\", \\\"上下文管理机制\\\") — a description is never `literal`. `literal`: it is a\\n  value (`8192`, `高风险`, `每天`) or a source artefact (path, URL). If you type an object as\\n  `concept` or `literal`, do not also declare that same phrase as an Entity.\\n- Prefer the most specific registered predicate over a generic one. A statement about a chief\\n  executive is `has_ceo` (with `temporal_signal` for \\\"现任\\\"/\\\"曾经\\\"), never the generic `is`.\\n  The predicate's declared domain/range decide which side is the Subject: for `has_ceo` the\\n  Subject is the Organization and the Object is the Person.\\n\\nUse the `read_skill_reference` tool to load the detailed registries (entity-types.md, claim-predicates.md, relation-predicates.md, evidence.md, extraction-v2.md) only for tasks that need them.\\n\\n[NON-NEGOTIABLE]\\nDo not fabricate stored facts, sources, citations, or database contents. Follow tool and output contracts even when custom instructions conflict.\\n- list_skills: list the skills available to this agent\\n- read_skill_reference: load one skill reference document on demand\\n<agent-skills>\\nSkills are a collection of instructions, scripts, and resources to extend your capabilities.\\n\\n**IMPORTANT**: Skills are NOT tools, and you cannot call a skill directly. To use a skill, you MUST use the `Skill` tool to read the skill's full instructions, and then follow those instructions to use the tools and resources provided by the skill.\\n\\n# Available Skills:\\n<skill>\\n<name>knowledge-curation</name>\\n<description>Maintain quality and consistency of the LLM-Wiki knowledge graph, including deduplication, entity resolution, normalization, contradiction handling and lifecycle rules.</description>\\n<dir>E:\\\\test_project\\\\llm-wiki-agentscope-v0.5.2-sqlite-prompts\\\\skills\\\\knowledge-curation</dir>\\n</skill>\\n<skill>\\n<name>knowledge-extraction</name>\\n<description>Extract source-grounded Entities, Claims, Events, Ideas and Questions from documents into the LLM-Wiki knowledge base, using the registered entity types and claim predicates.</description>\\n<dir>E:\\\\test_project\\\\llm-wiki-agentscope-v0.5.2-sqlite-prompts\\\\skills\\\\knowledge-extraction</dir>\\n</skill>\\n</agent-skills>\"}]"
+            },
+            {
+              "role": "user",
+              "chars": 88,
+              "estimated_tokens": 34,
+              "real_tokens": null,
+              "sha1": "df31e271c455",
+              "preview": "[{\"type\": \"text\", \"text\": \"[CHUNK capture-prose_slash_architecture]\\n客户端/服务端架构需要统一认证。\"}]",
+              "content": "[{\"type\": \"text\", \"text\": \"[CHUNK capture-prose_slash_architecture]\\n客户端/服务端架构需要统一认证。\"}]"
+            },
+            {
+              "role": "user",
+              "chars": 226,
+              "estimated_tokens": 57,
+              "real_tokens": null,
+              "sha1": "9109d9896296",
+              "preview": "[{\"type\": \"text\", \"text\": \"<system-reminder>You're required to generate structured output by calling the 'GenerateStructuredOutput' tool. Call it when you are ready to generate the final structured ou",
+              "content": "[{\"type\": \"text\", \"text\": \"<system-reminder>You're required to generate structured output by calling the 'GenerateStructuredOutput' tool. Call it when you are ready to generate the final structured output.</system-reminder>\"}]"
+            },
+            {
+              "role": "user",
+              "chars": 305,
+              "estimated_tokens": 77,
+              "real_tokens": null,
+              "sha1": "136e6d9c8f66",
+              "preview": "[{\"type\": \"text\", \"text\": \"<system-reminder>Treat the following as the ground truth at this point of the conversation. Anything stated earlier is outdated, and a later reminder, if any, supersedes thi",
+              "content": "[{\"type\": \"text\", \"text\": \"<system-reminder>Treat the following as the ground truth at this point of the conversation. Anything stated earlier is outdated, and a later reminder, if any, supersedes this one:\\n<current-time>2026-09-17T09:13:23</current-time>\\n<timezone>UTC</timezone>\\n</system-reminder>\"}]"
+            },
+            {
+              "role": "assistant",
+              "chars": 4,
+              "estimated_tokens": 1,
+              "real_tokens": null,
+              "sha1": "2be88ca4242c",
+              "preview": "null",
+              "content": "null"
+            },
+            {
+              "role": "tool",
+              "chars": 2131,
+              "estimated_tokens": 549,
+              "real_tokens": null,
+              "sha1": "08ffbe2a9520",
+              "preview": "# Claim Predicate Registry v1.0\n\n## 1. Purpose\n\nClaim Predicates describe the semantic relation expressed by a source-grounded Claim. They are more expressive than Graph Relation Predicates because Cl",
+              "content": "# Claim Predicate Registry v1.0\n\n## 1. Purpose\n\nClaim Predicates describe the semantic relation expressed by a source-grounded Claim. They are more expressive than Graph Relation Predicates because Claims must preserve source information that does not necessarily belong in the long-lived graph.\n\n## 2. Core registry\n\n```text\nis\ndefined_as\nclassified_as\n\ncontains\nincludes\nconsists_of\n\nuses\nretrieves\naccesses\nprovides\nreceives\n\ngenerates\nproduces\ncreates\nextracts\ntransforms\n\nsupports\nenables\nallows\nimproves\nreduces\nincreases\ndecreases\nprevents\n\ncauses\nleads_to\n\ndepends_on\nrequires\n\nimplements\nbased_on\nderived_from\nextends\n\ntrained_on\nevaluated_on\ntested_on\n\nstudies\ninvestigates\nevaluates\nanalyzes\n\ncompares_with\nbetter_than\nworse_than\n\ndesigned_for\nused_for\napplied_to\naddresses\n\nhas_ceo        # 首席执行官 (aliases: CEO, chief executive officer, 首席执行官, 首席执行长, 行政总裁)\n               # domain Organization -> range Person; temporal\n```\n\n## 3. Registry rules\n\n- The LLM must select only registered predicates.\n- The LLM must never invent predicate names.\n- **Prefer the most specific registered predicate over a generic one.** `X 的 CEO 是 Y` is\n  `has_ceo`, not `is`; `is` is the last resort when no more specific predicate fits. A\n  predicate's `domain`/`range` decide which side is the Subject (for `has_ceo`: Subject is\n  the Organization, Object is the Person).\n- Modal words such as `may`, `can` and `likely` are not predicates.\n- Negation is represented by polarity.\n- Conditions belong in `context`.\n- Dates and temporal qualifiers belong in `context` or Event when the semantics are event-like.\n\n## 4. Claim-only predicates\n\nThe following are intentionally Claim-first in v1.0 and should not normally become Graph Relations:\n\n```text\nretrieves\nprovides\nreceives\ngenerates\nproduces\nextracts\nsupports\nenables\ncauses\nleads_to\nimproves\nreduces\nincreases\ndecreases\nprevents\naddresses\nbetter_than\nworse_than\n```\n\nThe reason is not that these statements are unimportant. The reason is that they often require contextual conditions, metrics, experimental settings or role information that should not be erased by a binary Graph edge."
+            },
+            {
+              "role": "tool",
+              "chars": 5586,
+              "estimated_tokens": 1408,
+              "real_tokens": null,
+              "sha1": "c419cc07b42d",
+              "preview": "# Entity Type Standard v1.0\n\n## 1. Definition\n\nAn Entity is a knowledge object with an independent identity, stable semantic boundary, reusable identity and meaningful long-term knowledge value.\n\nAn E",
+              "content": "# Entity Type Standard v1.0\n\n## 1. Definition\n\nAn Entity is a knowledge object with an independent identity, stable semantic boundary, reusable identity and meaningful long-term knowledge value.\n\nAn Entity must be able to stand as a Claim Subject or Object *outside the sentence it\nwas mentioned in*, without losing its identity. If it cannot, it is a Mention, not an\nEntity.\n\nA noun, keyword, adjective, ordinary action, attribute, sentence, or transient phrase is not automatically an Entity.\n\n## 1.1 Mention versus Entity\n\n\"Text contains X\" does NOT mean \"X is an Entity\".\n\nNever create an Entity for any of the following:\n\n```text\na value                 2026, 8192, true, 3.14, 42%, \"5 minutes\"\na qualifier/value phrase \"高风险\", \"每天\", \"仅在生产环境\"\na descriptive phrase     \"indexes raw document titles and bodies\",\n                         \"only the selected evidence pack is given to the LLM\"\na sentence fragment, a bare modifier or pronoun (\"现在\", \"主要\")\na source artefact        a file path, directory path, URL, or document reference\na structural name        a relation/table/column name or schema field (\"relations\")\na lone mention that no Claim uses as its subject or object\n```\n\n## 1.2 Technical objects are allowed, with a technical identity rule\n\nA class, DTO, API, table or technology (`GomsInventoryPagingRequestDTO`, `FTS5`) MAY\nbe an Entity when it is a real object participating in a Claim. Do not discard\ntechnical objects just because they are technical.\n\nBut name similarity is never identity: `GomsInventoryPagingRequestDTO` and\n`GomsInventoryPagingResponseDTO` are two distinct Entities (request vs response).\n\n## 2. Type registry\n\nThe v1.0 registry contains exactly 14 types:\n\n```text\nPerson\nOrganization\nProduct\nSoftware\nTechnology\nMethod\nConcept\nTheory\nDataset\nModel\nStandard\nProtocol\nResource\nLocation\n```\n\nThese types are controlled vocabulary. The LLM may not invent new types.\n\n## 3. Type definitions\n\n### Person\nA naturally identifiable person with independent identity.\n\n### Organization\nA stable organization, institution, company, team or other organizational entity that is independently identifiable in context.\n\n### Product\nA product offered, distributed or provided as an identifiable product.\n\n### Software\nAn executable or deployable software system, program, library, framework or software tool.\n\n### Technology\nA technically meaningful technology, architecture, technical system, capability or technology family that can be independently discussed.\n\n### Method\nA method, algorithm, procedure, workflow or way of achieving a goal.\n\n### Concept\nAn abstract object that can be independently defined, discussed, compared or used as a durable knowledge topic.\n\n### Theory\nA relatively coherent explanatory theory or theoretical framework.\n\n### Dataset\nAn independently identifiable organized collection of data. Benchmark datasets may be represented as Dataset.\n\n### Model\nAn independently identifiable model used for training, inference, evaluation or deployment.\n\n### Standard\nA formally standardized or normative specification maintained by a recognized body, community or process.\n\n### Protocol\nA defined protocol for communication, interaction, coordination or interoperability.\n\n### Resource\nA separately identifiable knowledge or technical resource that cannot reasonably be classified as one of the other 13 types.\n\n`Resource` is not an uncertainty bucket.\n\n### Location\nA separately identifiable geographic, spatial or site/location entity.\n\n## 4. Type boundaries\n\n### Technology versus Method\n\nTechnology answers **what technical capability/system is this?**\n\nMethod answers **how is a task performed?**\n\nAn Entity may have both types when the source independently supports both. Example: a source may describe RAG as both a technology and a method.\n\n### Technology versus Concept\n\nA Technology has technical implementation or system meaning. A Concept is abstract and does not inherently represent an implementation.\n\n### Model versus Technology\n\nA Model is an identifiable model artifact or model family. It may also be classified as Technology when the source independently treats it as a technology object.\n\n### Standard versus Protocol\n\nA Protocol defines interaction/communication behavior. A Standard is a formalized normative specification. An object may have both types when supported.\n\n### Resource\n\nUse Resource only after the other types have been considered. If the type is too uncertain to establish responsibly, omit the Entity instead of defaulting to Resource.\n\n## 5. Entity inclusion test\n\nBefore extraction, ask:\n\n1. Does the object have independent identity?\n2. Can it be referred to outside this sentence without losing its identity?\n3. Does it have a stable semantic boundary?\n4. Does it have reusable knowledge value?\n5. Is it more than a fact, property, relation, action or generic phrase?\n\nIf the answers do not support Entity status, do not extract it.\n\n## 6. Canonical naming and aliases\n\nThe canonical name must be concise, stable and reusable. Do not put descriptions into the name.\n\nAliases must actually occur in the source or be explicitly established by the source. Do not invent synonyms.\n\n## 7. Multiple types\n\nMultiple types are allowed:\n\n```json\n{\n  \"name\": \"RAG\",\n  \"types\": [\"Technology\", \"Method\"]\n}\n```\n\nEvery additional type requires source support. Do not add types merely because the model knows they are plausible.\n\n## 8. Type uncertainty\n\nWhen type confidence is insufficient, omit the Entity. Do not invent a new type and do not use Resource as a fallback solely because classification is uncertain."
+            },
+            {
+              "role": "user",
+              "chars": 226,
+              "estimated_tokens": 57,
+              "real_tokens": null,
+              "sha1": "9109d9896296",
+              "preview": "[{\"type\": \"text\", \"text\": \"<system-reminder>You're required to generate structured output by calling the 'GenerateStructuredOutput' tool. Call it when you are ready to generate the final structured ou",
+              "content": "[{\"type\": \"text\", \"text\": \"<system-reminder>You're required to generate structured output by calling the 'GenerateStructuredOutput' tool. Call it when you are ready to generate the final structured output.</system-reminder>\"}]"
+            }
+          ],
+          "message_count": 8,
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "Skill",
+                "description": "Retrieve a skill within the conversation. When users asks you to perform tasks, check if any of the available skills match. Skills provide specialized capabilities and domain knowledge.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "skill": {
+                      "type": "string",
+                      "description": "The exact name of the skill to view. "
+                    }
+                  },
+                  "required": [
+                    "skill"
+                  ]
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "list_skills",
+                "description": "List all available LLM-Wiki skills and their reference documents.\nUse this to discover which skill contract or reference registry to load.",
+                "parameters": {
+                  "properties": {},
+                  "type": "object"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "read_skill_reference",
+                "description": "Load a reference document that belongs to a skill, on demand.",
+                "parameters": {
+                  "properties": {
+                    "skill": {
+                      "description": "Skill name, for example knowledge-extraction or knowledge-curation.",
+                      "type": "string"
+                    },
+                    "reference": {
+                      "description": "Reference file name such as entity-types.md, claim-predicates.md, extraction-v2.md, relation-predicates.md, evidence.md, deduplication.md, entity-resolution.md or normalization.md.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "skill",
+                    "reference"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            {
+              "type": "function",
+              "function": {
+                "name": "GenerateStructuredOutput",
+                "description": "Generate the required structured output by this tool.\n\nThis tool is equipped only when you're required to generate structured output.\nThe input schema represents the required structured output.\nWhen you are ready to generate a structured output, call this tool with the\nstructured output as input.\nWhen you're equipped this tool, you MUST end your response with calling this\ntool. Once this tool is called, your current response is finished and the\nstructured output is sent to the user.\n\n# When to Use This Tool\n- When you collect enough resources and information.\n",
+                "parameters": {
+                  "description": "The structured extraction result the agent must produce.\n\nRelations are intentionally absent: they are derived deterministically\nfrom validated Claims by the application.",
+                  "properties": {
+                    "entities": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "name": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "types": {
+                            "items": {
+                              "enum": [
+                                "Person",
+                                "Organization",
+                                "Product",
+                                "Software",
+                                "Technology",
+                                "Method",
+                                "Concept",
+                                "Theory",
+                                "Dataset",
+                                "Model",
+                                "Standard",
+                                "Protocol",
+                                "Resource",
+                                "Location"
+                              ],
+                              "type": "string"
+                            },
+                            "minItems": 1,
+                            "type": "array"
+                          },
+                          "aliases": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "description": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "properties": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "types"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "claims": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "subject": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "predicate": {
+                            "pattern": "^[a-z][a-z0-9_]*$",
+                            "type": "string"
+                          },
+                          "object": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "object_kind": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "entity",
+                                  "concept",
+                                  "literal",
+                                  "unknown"
+                                ],
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "temporal_signal": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "new",
+                                  "current",
+                                  "former",
+                                  "previous",
+                                  "prior",
+                                  "existing",
+                                  "next",
+                                  "future",
+                                  "upcoming",
+                                  "incoming",
+                                  "outgoing",
+                                  "successor",
+                                  "predecessor",
+                                  "past",
+                                  "interim",
+                                  "acting",
+                                  "designated"
+                                ],
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "claim_type": {
+                            "enum": [
+                              "factual",
+                              "definitional",
+                              "causal",
+                              "comparative",
+                              "evaluative",
+                              "predictive",
+                              "normative",
+                              "hypothetical"
+                            ],
+                            "type": "string"
+                          },
+                          "polarity": {
+                            "enum": [
+                              "positive",
+                              "negative"
+                            ],
+                            "type": "string"
+                          },
+                          "modality": {
+                            "enum": [
+                              "asserted",
+                              "possible",
+                              "probable",
+                              "capable",
+                              "necessary",
+                              "recommended"
+                            ],
+                            "type": "string"
+                          },
+                          "content": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "context": {
+                            "additionalProperties": true,
+                            "type": "object"
+                          },
+                          "confidence": {
+                            "maximum": 1,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "source_chunk": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "evidence_quote": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "subject",
+                          "predicate",
+                          "claim_type",
+                          "polarity",
+                          "modality",
+                          "confidence",
+                          "source_chunk",
+                          "evidence_quote"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "events": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "event_type": {
+                            "enum": [
+                              "creation",
+                              "development",
+                              "release",
+                              "publication",
+                              "deployment",
+                              "acquisition",
+                              "merger",
+                              "migration",
+                              "training",
+                              "evaluation",
+                              "experiment",
+                              "update",
+                              "decision",
+                              "announcement",
+                              "meeting",
+                              "failure",
+                              "incident",
+                              "other"
+                            ],
+                            "type": "string"
+                          },
+                          "description": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "participants": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "time": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "start": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "default": null
+                              },
+                              "end": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "default": null
+                              },
+                              "precision": {
+                                "default": "unknown",
+                                "enum": [
+                                  "exact",
+                                  "day",
+                                  "month",
+                                  "year",
+                                  "range",
+                                  "relative",
+                                  "unknown"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "type": "object"
+                          },
+                          "location": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "status": {
+                            "default": "unknown",
+                            "enum": [
+                              "planned",
+                              "ongoing",
+                              "completed",
+                              "cancelled",
+                              "failed",
+                              "unknown"
+                            ],
+                            "type": "string"
+                          },
+                          "confidence": {
+                            "maximum": 1,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "source_chunk": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "evidence_quote": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "event_type",
+                          "description",
+                          "confidence",
+                          "source_chunk",
+                          "evidence_quote"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "ideas": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "content": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "status": {
+                            "default": "candidate",
+                            "enum": [
+                              "candidate",
+                              "accepted",
+                              "implemented",
+                              "rejected",
+                              "archived"
+                            ],
+                            "type": "string"
+                          },
+                          "confidence": {
+                            "maximum": 1,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "source_chunk": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "evidence_quote": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "content",
+                          "confidence",
+                          "source_chunk",
+                          "evidence_quote"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "questions": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "content": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "question_type": {
+                            "default": "knowledge",
+                            "enum": [
+                              "knowledge",
+                              "research",
+                              "design",
+                              "implementation",
+                              "evaluation"
+                            ],
+                            "type": "string"
+                          },
+                          "status": {
+                            "default": "open",
+                            "enum": [
+                              "open",
+                              "answered",
+                              "partially_answered",
+                              "resolved",
+                              "rejected",
+                              "archived"
+                            ],
+                            "type": "string"
+                          },
+                          "confidence": {
+                            "maximum": 1,
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "source_chunk": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "evidence_quote": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "content",
+                          "confidence",
+                          "source_chunk",
+                          "evidence_quote"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          ],
+          "tool_names": [
+            "Skill",
+            "list_skills",
+            "read_skill_reference",
+            "GenerateStructuredOutput"
+          ],
+          "tool_choice": null,
+          "response_format": null,
+          "temperature": null,
+          "max_completion_tokens": null,
+          "parallel_tool_calls": null,
+          "stream": false,
+          "other_keys": [],
+          "response": {
+            "usage": {
+              "prompt_tokens": 4893,
+              "completion_tokens": 499
+            },
+            "finish_reason": "tool_calls",
+            "tool_calls": [
+              "GenerateStructuredOutput"
+            ]
+          },
+          "serialized_estimated_tokens": 4954,
+          "serialized_real_tokens": null,
+          "provider_prompt_tokens": 4893,
+          "provider_completion_tokens": 499
+        }
+      ],
+      "request": {
+        "model": "deepseek-v4-flash",
+        "messages": [
+          {
+            "role": "system",
+            "chars": 3510,
+            "estimated_tokens": 895,
+            "real_tokens": null,
+            "sha1": "65de8d69f89e",
+            "preview": "[{\"type\": \"text\", \"text\": \"You are the LLM-Wiki knowledge extraction agent. Follow the Knowledge Extraction Skill and active extraction schema exactly.\\n[SKILL]\\n# Knowledge Extraction Skill\\n\\nPurpos",
+            "content": "[{\"type\": \"text\", \"text\": \"You are the LLM-Wiki knowledge extraction agent. Follow the Knowledge Extraction Skill and active extraction schema exactly.\\n[SKILL]\\n# Knowledge Extraction Skill\\n\\nPurpose: extract source-grounded knowledge for LLM-Wiki.\\n\\nCore rules:\\n- Extract only source-grounded information; prefer precision over recall, empty results are valid.\\n- Entity, Claim, Event, Idea and Question are distinct ontology objects.\\n- Use only registered entity types and Claim predicates (closed vocabulary: select, never create).\\n- Temporal words go in `temporal_signal`, never in `predicate`; if no predicate fits, omit the claim.\\n- Do not output Relations (derived from Claims). Preserve modality, polarity, conditions, scope, time.\\n- Every Claim, Event, Idea and Question needs exact verbatim evidence from its source chunk.\\n- Never invent aliases, IDs, relationships or questions. Return only the schema JSON.\\n- A Mention is not an Entity: extract only stable-identity objects usable long-term as a Claim\\n  Subject/Object; values, descriptions, paths and field names are never Entities (`entity-types.md`).\\n- `object_kind` is your verdict on what the Claim `object` is. `entity`: it names another\\n  extracted Entity. `concept`: it describes a mechanism, capability, method, mode or behaviour\\n  (\\\"按需加载上下文\\\", \\\"上下文管理机制\\\") — a description is never `literal`. `literal`: it is a\\n  value (`8192`, `高风险`, `每天`) or a source artefact (path, URL). If you type an object as\\n  `concept` or `literal`, do not also declare that same phrase as an Entity.\\n- Prefer the most specific registered predicate over a generic one. A statement about a chief\\n  executive is `has_ceo` (with `temporal_signal` for \\\"现任\\\"/\\\"曾经\\\"), never the generic `is`.\\n  The predicate's declared domain/range decide which side is the Subject: for `has_ceo` the\\n  Subject is the Organization and the Object is the Person.\\n\\nUse the `read_skill_reference` tool to load the detailed registries (entity-types.md, claim-predicates.md, relation-predicates.md, evidence.md, extraction-v2.md) only for tasks that need them.\\n\\n[NON-NEGOTIABLE]\\nDo not fabricate stored facts, sources, citations, or database contents. Follow tool and output contracts even when custom instructions conflict.\\n- list_skills: list the skills available to this agent\\n- read_skill_reference: load one skill reference document on demand\\n<agent-skills>\\nSkills are a collection of instructions, scripts, and resources to extend your capabilities.\\n\\n**IMPORTANT**: Skills are NOT tools, and you cannot call a skill directly. To use a skill, you MUST use the `Skill` tool to read the skill's full instructions, and then follow those instructions to use the tools and resources provided by the skill.\\n\\n# Available Skills:\\n<skill>\\n<name>knowledge-curation</name>\\n<description>Maintain quality and consistency of the LLM-Wiki knowledge graph, including deduplication, entity resolution, normalization, contradiction handling and lifecycle rules.</description>\\n<dir>E:\\\\test_project\\\\llm-wiki-agentscope-v0.5.2-sqlite-prompts\\\\skills\\\\knowledge-curation</dir>\\n</skill>\\n<skill>\\n<name>knowledge-extraction</name>\\n<description>Extract source-grounded Entities, Claims, Events, Ideas and Questions from documents into the LLM-Wiki knowledge base, using the registered entity types and claim predicates.</description>\\n<dir>E:\\\\test_project\\\\llm-wiki-agentscope-v0.5.2-sqlite-prompts\\\\skills\\\\knowledge-extraction</dir>\\n</skill>\\n</agent-skills>\"}]"
+          },
+          {
+            "role": "user",
+            "chars": 88,
+            "estimated_tokens": 34,
+            "real_tokens": null,
+            "sha1": "df31e271c455",
+            "preview": "[{\"type\": \"text\", \"text\": \"[CHUNK capture-prose_slash_architecture]\\n客户端/服务端架构需要统一认证。\"}]",
+            "content": "[{\"type\": \"text\", \"text\": \"[CHUNK capture-prose_slash_architecture]\\n客户端/服务端架构需要统一认证。\"}]"
+          },
+          {
+            "role": "user",
+            "chars": 226,
+            "estimated_tokens": 57,
+            "real_tokens": null,
+            "sha1": "9109d9896296",
+            "preview": "[{\"type\": \"text\", \"text\": \"<system-reminder>You're required to generate structured output by calling the 'GenerateStructuredOutput' tool. Call it when you are ready to generate the final structured ou",
+            "content": "[{\"type\": \"text\", \"text\": \"<system-reminder>You're required to generate structured output by calling the 'GenerateStructuredOutput' tool. Call it when you are ready to generate the final structured output.</system-reminder>\"}]"
+          },
+          {
+            "role": "user",
+            "chars": 305,
+            "estimated_tokens": 77,
+            "real_tokens": null,
+            "sha1": "136e6d9c8f66",
+            "preview": "[{\"type\": \"text\", \"text\": \"<system-reminder>Treat the following as the ground truth at this point of the conversation. Anything stated earlier is outdated, and a later reminder, if any, supersedes thi",
+            "content": "[{\"type\": \"text\", \"text\": \"<system-reminder>Treat the following as the ground truth at this point of the conversation. Anything stated earlier is outdated, and a later reminder, if any, supersedes this one:\\n<current-time>2026-09-17T09:13:23</current-time>\\n<timezone>UTC</timezone>\\n</system-reminder>\"}]"
+          }
+        ],
+        "message_count": 4,
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "Skill",
+              "description": "Retrieve a skill within the conversation. When users asks you to perform tasks, check if any of the available skills match. Skills provide specialized capabilities and domain knowledge.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "skill": {
+                    "type": "string",
+                    "description": "The exact name of the skill to view. "
+                  }
+                },
+                "required": [
+                  "skill"
+                ]
+              }
+            }
+          },
+          {
+            "type": "function",
+            "function": {
+              "name": "list_skills",
+              "description": "List all available LLM-Wiki skills and their reference documents.\nUse this to discover which skill contract or reference registry to load.",
+              "parameters": {
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          {
+            "type": "function",
+            "function": {
+              "name": "read_skill_reference",
+              "description": "Load a reference document that belongs to a skill, on demand.",
+              "parameters": {
+                "properties": {
+                  "skill": {
+                    "description": "Skill name, for example knowledge-extraction or knowledge-curation.",
+                    "type": "string"
+                  },
+                  "reference": {
+                    "description": "Reference file name such as entity-types.md, claim-predicates.md, extraction-v2.md, relation-predicates.md, evidence.md, deduplication.md, entity-resolution.md or normalization.md.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "skill",
+                  "reference"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          {
+            "type": "function",
+            "function": {
+              "name": "GenerateStructuredOutput",
+              "description": "Generate the required structured output by this tool.\n\nThis tool is equipped only when you're required to generate structured output.\nThe input schema represents the required structured output.\nWhen you are ready to generate a structured output, call this tool with the\nstructured output as input.\nWhen you're equipped this tool, you MUST end your response with calling this\ntool. Once this tool is called, your current response is finished and the\nstructured output is sent to the user.\n\n# When to Use This Tool\n- When you collect enough resources and information.\n",
+              "parameters": {
+                "description": "The structured extraction result the agent must produce.\n\nRelations are intentionally absent: they are derived deterministically\nfrom validated Claims by the application.",
+                "properties": {
+                  "entities": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "name": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "types": {
+                          "items": {
+                            "enum": [
+                              "Person",
+                              "Organization",
+                              "Product",
+                              "Software",
+                              "Technology",
+                              "Method",
+                              "Concept",
+                              "Theory",
+                              "Dataset",
+                              "Model",
+                              "Standard",
+                              "Protocol",
+                              "Resource",
+                              "Location"
+                            ],
+                            "type": "string"
+                          },
+                          "minItems": 1,
+                          "type": "array"
+                        },
+                        "aliases": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "description": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        },
+                        "properties": {
+                          "type": "object",
+                          "additionalProperties": true
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "types"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "claims": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "subject": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "predicate": {
+                          "pattern": "^[a-z][a-z0-9_]*$",
+                          "type": "string"
+                        },
+                        "object": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        },
+                        "object_kind": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "entity",
+                                "concept",
+                                "literal",
+                                "unknown"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        },
+                        "temporal_signal": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "new",
+                                "current",
+                                "former",
+                                "previous",
+                                "prior",
+                                "existing",
+                                "next",
+                                "future",
+                                "upcoming",
+                                "incoming",
+                                "outgoing",
+                                "successor",
+                                "predecessor",
+                                "past",
+                                "interim",
+                                "acting",
+                                "designated"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        },
+                        "claim_type": {
+                          "enum": [
+                            "factual",
+                            "definitional",
+                            "causal",
+                            "comparative",
+                            "evaluative",
+                            "predictive",
+                            "normative",
+                            "hypothetical"
+                          ],
+                          "type": "string"
+                        },
+                        "polarity": {
+                          "enum": [
+                            "positive",
+                            "negative"
+                          ],
+                          "type": "string"
+                        },
+                        "modality": {
+                          "enum": [
+                            "asserted",
+                            "possible",
+                            "probable",
+                            "capable",
+                            "necessary",
+                            "recommended"
+                          ],
+                          "type": "string"
+                        },
+                        "content": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        },
+                        "context": {
+                          "additionalProperties": true,
+                          "type": "object"
+                        },
+                        "confidence": {
+                          "maximum": 1,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "source_chunk": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "evidence_quote": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "subject",
+                        "predicate",
+                        "claim_type",
+                        "polarity",
+                        "modality",
+                        "confidence",
+                        "source_chunk",
+                        "evidence_quote"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "events": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "event_type": {
+                          "enum": [
+                            "creation",
+                            "development",
+                            "release",
+                            "publication",
+                            "deployment",
+                            "acquisition",
+                            "merger",
+                            "migration",
+                            "training",
+                            "evaluation",
+                            "experiment",
+                            "update",
+                            "decision",
+                            "announcement",
+                            "meeting",
+                            "failure",
+                            "incident",
+                            "other"
+                          ],
+                          "type": "string"
+                        },
+                        "description": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "participants": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "time": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "start": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null
+                            },
+                            "end": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null
+                            },
+                            "precision": {
+                              "default": "unknown",
+                              "enum": [
+                                "exact",
+                                "day",
+                                "month",
+                                "year",
+                                "range",
+                                "relative",
+                                "unknown"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "location": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        },
+                        "status": {
+                          "default": "unknown",
+                          "enum": [
+                            "planned",
+                            "ongoing",
+                            "completed",
+                            "cancelled",
+                            "failed",
+                            "unknown"
+                          ],
+                          "type": "string"
+                        },
+                        "confidence": {
+                          "maximum": 1,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "source_chunk": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "evidence_quote": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "event_type",
+                        "description",
+                        "confidence",
+                        "source_chunk",
+                        "evidence_quote"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "ideas": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "content": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "status": {
+                          "default": "candidate",
+                          "enum": [
+                            "candidate",
+                            "accepted",
+                            "implemented",
+                            "rejected",
+                            "archived"
+                          ],
+                          "type": "string"
+                        },
+                        "confidence": {
+                          "maximum": 1,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "source_chunk": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "evidence_quote": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "content",
+                        "confidence",
+                        "source_chunk",
+                        "evidence_quote"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "questions": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "content": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "question_type": {
+                          "default": "knowledge",
+                          "enum": [
+                            "knowledge",
+                            "research",
+                            "design",
+                            "implementation",
+                            "evaluation"
+                          ],
+                          "type": "string"
+                        },
+                        "status": {
+                          "default": "open",
+                          "enum": [
+                            "open",
+                            "answered",
+                            "partially_answered",
+                            "resolved",
+                            "rejected",
+                            "archived"
+                          ],
+                          "type": "string"
+                        },
+                        "confidence": {
+                          "maximum": 1,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "source_chunk": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "evidence_quote": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "content",
+                        "confidence",
+                        "source_chunk",
+                        "evidence_quote"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          }
+        ],
+        "tool_names": [
+          "Skill",
+          "list_skills",
+          "read_skill_reference",
+          "GenerateStructuredOutput"
+        ],
+        "tool_choice": null,
+        "response_format": null,
+        "temperature": null,
+        "max_completion_tokens": null,
+        "parallel_tool_calls": null,
+        "stream": false,
+        "other_keys": [],
+        "response": {
+          "usage": {
+            "prompt_tokens": 3032,
+            "completion_tokens": 279
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "read_skill_reference",
+            "read_skill_reference"
+          ]
+        },
+        "serialized_estimated_tokens": 2688,
+        "serialized_real_tokens": null,
+        "provider_prompt_tokens": 3032,
+        "provider_completion_tokens": 279
+      },
+      "extraction_result_keys": [
+        "claims",
+        "entities",
+        "events",
+        "ideas",
+        "questions"
+      ],
+      "token_layers": {
+        "project_known": 2740,
+        "serialized_request_estimated": 2688,
+        "serialized_request_real": null,
+        "provider_reported_prompt_base_call": 3032,
+        "provider_reported_prompt_step_total": 7925,
+        "serialization_overhead_estimated": -52,
+        "provider_unattributed": 344,
+        "recorded_prompt_tokens_earlier_run": 9839
+      }
+    }
+  ]
+}

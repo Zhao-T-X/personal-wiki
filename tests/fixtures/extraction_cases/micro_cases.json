@@ -1,0 +1,278 @@
+{
+  "description": "Micro extraction cases. Level 1 = the LLM extraction we feed in (recorded / expected); Level 2 = what the KnowledgeCompiler must produce; Level 3 = what persistence must store. Zero LLM calls. The `live_cases` section below is read ONLY by tests/test_live_semantic_contract.py (Step 13), which is deselected by default and costs real tokens when run.",
+  "cases": [
+    {
+      "id": "ceo_predicate_resolution",
+      "text": "苹果现任 CEO 是 John Ternus。",
+      "llm_extraction": {
+        "entities": [
+          {"name": "苹果", "types": ["Organization"], "aliases": []},
+          {"name": "John Ternus", "types": ["Person"], "aliases": []}
+        ],
+        "claims": [
+          {"subject": "苹果", "predicate": "new_ceo", "object": "John Ternus", "object_kind": "entity",
+           "claim_type": "factual", "polarity": "positive", "modality": "asserted",
+           "context": {}, "confidence": 0.9, "source_chunk": "c1", "evidence_quote": "苹果现任 CEO 是 John Ternus。"}
+        ],
+        "events": [], "ideas": [], "questions": []
+      },
+      "expect": {"compiler": {"predicate": "has_ceo", "temporal_signal": "new"}}
+    },
+    {
+      "id": "concept_object",
+      "text": "渐进式上下文加载是一种 Context Runtime 的机制。",
+      "llm_extraction": {
+        "entities": [
+          {"name": "Context Runtime", "types": ["Technology"], "aliases": []}
+        ],
+        "claims": [
+          {"subject": "Context Runtime", "predicate": "provides", "object": "渐进式上下文加载", "object_kind": "concept",
+           "claim_type": "factual", "polarity": "positive", "modality": "asserted",
+           "context": {}, "confidence": 0.9, "source_chunk": "c1", "evidence_quote": "渐进式上下文加载是一种 Context Runtime 的机制。"}
+        ],
+        "events": [], "ideas": [], "questions": []
+      },
+      "expect": {"compiler": {"predicate": "provides"}}
+    },
+    {
+      "id": "literal_object",
+      "text": "最大 chunk 为 8192 tokens。",
+      "llm_extraction": {
+        "entities": [
+          {"name": "chunk", "types": ["Concept"], "aliases": []}
+        ],
+        "claims": [
+          {"subject": "chunk", "predicate": "provides", "object": "8192", "object_kind": "literal",
+           "claim_type": "factual", "polarity": "positive", "modality": "asserted",
+           "context": {}, "confidence": 0.9, "source_chunk": "c1", "evidence_quote": "最大 chunk 为 8192 tokens。"}
+        ],
+        "events": [], "ideas": [], "questions": []
+      },
+      "expect": {"compiler": {"predicate": "provides"}}
+    },
+    {
+      "id": "invented_predicate_is_rejected",
+      "text": "苹果的 CEO 是某人。",
+      "expect_raise": true,
+      "llm_extraction": {
+        "entities": [{"name": "苹果", "types": ["Organization"], "aliases": []}],
+        "claims": [
+          {"subject": "苹果", "predicate": "totally_invented_predicate", "object": "某人", "object_kind": "unknown",
+           "claim_type": "factual", "polarity": "positive", "modality": "asserted",
+           "context": {}, "confidence": 0.9, "source_chunk": "c1", "evidence_quote": "苹果的 CEO 是某人。"}
+        ],
+        "events": [], "ideas": [], "questions": []
+      }
+    },
+    {
+      "id": "illegal_object_kind_is_rejected",
+      "text": "苹果是一个组织。",
+      "expect_raise": true,
+      "llm_extraction": {
+        "entities": [{"name": "苹果", "types": ["Organization"], "aliases": []}],
+        "claims": [
+          {"subject": "苹果", "predicate": "is", "object": "组织", "object_kind": "banana",
+           "claim_type": "factual", "polarity": "positive", "modality": "asserted",
+           "context": {}, "confidence": 0.9, "source_chunk": "c1", "evidence_quote": "苹果是一个组织。"}
+        ],
+        "events": [], "ideas": [], "questions": []
+      }
+    }
+  ],
+  "live_cases": [
+    {
+      "id": "entity_context_runtime",
+      "covers": "entity",
+      "text": "Context Runtime 负责管理 Agent 的上下文。",
+      "invariants": {
+        "min_claims": 1,
+        "evidence_required": true,
+        "predicate_in_registry": true,
+        "no_rejected_items": true,
+        "entity_candidates": ["Context Runtime"],
+        "referenced_any": ["Context Runtime"]
+      },
+      "semantic_expected": {
+        "claim_about": "Context Runtime",
+        "subject_contains": "Context Runtime"
+      }
+    },
+    {
+      "id": "concept_progressive_loading",
+      "covers": "concept",
+      "text": "渐进式上下文加载是一种上下文管理机制。",
+      "invariants": {
+        "min_claims": 1,
+        "evidence_required": true,
+        "predicate_in_registry": true,
+        "no_rejected_items": true,
+        "no_literal_object": ["渐进式上下文加载", "机制"]
+      },
+      "semantic_expected": {
+        "claim_about": "渐进式上下文加载",
+        "object_kind": "concept",
+        "declared_kind_consistency": true
+      }
+    },
+    {
+      "id": "literal_weekly_frequency",
+      "kind": "abstention",
+      "covers": "abstention",
+      "text": "任务每周执行一次。",
+      "note": "ABSTENTION case, not a literal-accuracy case (Step 13.2 §2). The sentence has no stable subject, no clear predicate and no knowledge relation, so an EMPTY envelope is a legitimate outcome — the contract says 'empty arrays are valid' and 'prefer precision over recall'. Keeping it in the literal denominator was the Step 13.1 mistake: it made an unfalsifiable expectation look like a model failure. What IS asserted here: abstaining must not force an Entity or a Claim, and anything the model does extract must still be compiler-clean. The 2026-09-17 runs: pre-fix extract `任务 is 每周执行一次` (literal), post-fix empty envelope — both pass.",
+      "invariants": {
+        "no_rejected_items": true,
+        "no_declared_entity": ["每周", "一次", "每周执行一次"],
+        "no_entity_object": ["每周", "一次"]
+      },
+      "semantic_expected": {
+        "abstain_ok": true
+      }
+    },
+    {
+      "id": "literal_chunk_size",
+      "kind": "semantic",
+      "covers": "literal",
+      "text": "最大 chunk 为 8192 tokens。",
+      "note": "The literal case that actually holds (Step 13.3 §1-2). Replaces `literal_retry_limit`, whose object could never be a bare value: the model answered `允许 3 次` + `context:{\"retry_limit\": 3}` twice, which the contract permits (a capability phrase with the condition in `context`), so `object_kind=literal` was undecidable there — TEST_INVARIANT_ERROR, recorded in live_failures.json and docs/development/step13-2-semantic-and-cost.md. Here the object is a bare value with nothing to describe: subject `chunk`, relation `is` (`为`), object `8192 tokens`. `allows`/`is`/`defined_as` are all registered with no domain/range. Crucially `8192 tokens` matches the deterministic value guardrail, so the literal verdict does NOT depend on the model's kind: classify_object('8192 tokens', object_kind='concept') is still `literal`. The case therefore tests the contract, not the model's mood.",
+      "invariants": {
+        "min_claims": 1,
+        "evidence_required": true,
+        "predicate_in_registry": true,
+        "no_rejected_items": true,
+        "no_declared_entity": ["8192 tokens", "8192"],
+        "no_entity_object": ["8192 tokens", "8192"]
+      },
+      "semantic_expected": {
+        "claim_about": "chunk",
+        "subject_contains": "chunk",
+        "object_kind": "literal"
+      }
+    },
+    {
+      "id": "path_source_artifact",
+      "covers": "path",
+      "text": "配置文件位于 docs/context/runtime.md。",
+      "note": "Contract, not expectation: a path is a source artefact, so it must never become an Entity. The live run of 2026-09-17 returned an EMPTY envelope for this sentence — legitimate under the current contract, because the sentence carries a location and nothing else, and eligibility would drop a path entity anyway. This is a recall WATCH ITEM (a path's location is arguably knowledge), not a contract violation; the deterministic half of the case (is_source_artefact) is asserted in the test body.",
+      "invariants": {
+        "evidence_required": true,
+        "predicate_in_registry": true,
+        "no_declared_entity": ["docs/context/runtime.md"],
+        "no_entity_object": ["docs/context/runtime.md"],
+        "no_rejected_items": true
+      },
+      "semantic_expected": {
+        "forbidden_entity": "docs/context/runtime.md"
+      }
+    },
+    {
+      "id": "prose_slash_architecture",
+      "covers": "slash-prose",
+      "text": "客户端/服务端架构需要统一认证。",
+      "invariants": {
+        "min_claims": 1,
+        "evidence_required": true,
+        "predicate_in_registry": true,
+        "no_rejected_items": true,
+        "entity_candidates": ["客户端/服务端架构"],
+        "no_literal_object": ["客户端/服务端架构"],
+        "referenced_any": ["客户端/服务端架构", "客户端", "服务端"]
+      },
+      "semantic_expected": {
+        "claim_about": "客户端",
+        "subject_contains": "客户端/服务端架构"
+      },
+      "gold_note": "The object `统一认证` is deliberately NOT pinned to entity or concept: the contract defines both as legal for a capability, and pinning either would be fitting the gold to one run's wording. The contract-decidable facts are pinned instead — the architecture itself is a stable-identity Entity candidate (invariant) and it must not be read as a source artefact (invariant)."
+    },
+    {
+      "id": "prose_slash_concept_pair",
+      "covers": "slash-concept",
+      "text": "Static Context / Dynamic Context 是两种上下文模式。",
+      "invariants": {
+        "min_claims": 1,
+        "evidence_required": true,
+        "predicate_in_registry": true,
+        "no_rejected_items": true,
+        "no_literal_object": ["Static Context / Dynamic Context"],
+        "referenced_any": ["Static Context / Dynamic Context", "Static Context", "Dynamic Context"]
+      },
+      "semantic_expected": {
+        "claim_about": "Static Context",
+        "object_kind": "concept",
+        "declared_kind_consistency": true
+      }
+    },
+    {
+      "id": "predicate_registry_ceo",
+      "covers": "predicate",
+      "text": "苹果现任 CEO 是 John Ternus。",
+      "invariants": {
+        "min_claims": 1,
+        "evidence_required": true,
+        "predicate_in_registry": true,
+        "no_rejected_items": true,
+        "predicate_not": ["new_ceo"],
+        "referenced_any": ["John Ternus"]
+      },
+      "semantic_expected": {
+        "claim_about": "John Ternus",
+        "subject_contains": "苹果",
+        "object_contains": "John Ternus",
+        "predicate": "has_ceo",
+        "temporal_signal": "current"
+      }
+    },
+    {
+      "id": "temporal_former_ceo",
+      "covers": "temporal",
+      "text": "Tim Cook 曾经担任苹果 CEO。",
+      "invariants": {
+        "min_claims": 1,
+        "evidence_required": true,
+        "predicate_in_registry": true,
+        "no_rejected_items": true,
+        "predicate_not_containing": ["former", "past", "previous"]
+      },
+      "semantic_expected": {
+        "claim_about": "Tim Cook",
+        "subject_contains": "苹果",
+        "object_contains": "Tim Cook",
+        "predicate": "has_ceo",
+        "temporal_signal": "former"
+      }
+    },
+    {
+      "id": "negative_polarity",
+      "covers": "polarity",
+      "text": "苹果不是微软的一部分。",
+      "note": "No part-of predicate is registered, so the Registry cannot express this claim precisely. The semantic gold therefore pins the polarity (the meaning the sentence actually carries) and not the predicate: the gap is REGISTRY, not MODEL.",
+      "invariants": {
+        "min_claims": 1,
+        "evidence_required": true,
+        "predicate_in_registry": true,
+        "no_rejected_items": true
+      },
+      "semantic_expected": {
+        "claim_about": "微软",
+        "polarity": "negative"
+      }
+    },
+    {
+      "id": "evidence_attachment",
+      "covers": "evidence",
+      "text": "文档明确指出，Context Runtime 支持按需加载上下文。",
+      "invariants": {
+        "min_claims": 1,
+        "evidence_required": true,
+        "predicate_in_registry": true,
+        "no_rejected_items": true,
+        "referenced_any": ["Context Runtime"]
+      },
+      "semantic_expected": {
+        "claim_about": "Context Runtime",
+        "subject_contains": "Context Runtime",
+        "object_kind": "concept"
+      }
+    }
+  ]
+}

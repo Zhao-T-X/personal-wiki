@@ -1,0 +1,289 @@
+{
+  "definition": {
+    "keep": "has future Knowledge/Search/QA/Research value",
+    "remove": "document structure / path / relation or schema metadata / noise",
+    "unclear": "cannot be decided from the standard alone"
+  },
+  "labels": [
+    {
+      "id": "ADR-005",
+      "type": "entity",
+      "expected": "unclear",
+      "classification": "unclear",
+      "reason": "document id; \"decision\" objects can be knowledge",
+      "source_evidence": "docs/architecture/KNOWLEDGE-OPERATIONS.md"
+    },
+    {
+      "id": "ARCHIVE",
+      "type": "entity",
+      "expected": "keep",
+      "classification": "valid_entity",
+      "reason": "registered operation name; aborted-doc loss",
+      "source_evidence": "docs/architecture/KNOWLEDGE-OPERATIONS.md"
+    },
+    {
+      "id": "CONTRADICT",
+      "type": "entity",
+      "expected": "keep",
+      "classification": "valid_entity",
+      "reason": "registered operation name; aborted-doc loss",
+      "source_evidence": "docs/architecture/KNOWLEDGE-OPERATIONS.md"
+    },
+    {
+      "id": "CORRECT",
+      "type": "entity",
+      "expected": "keep",
+      "classification": "valid_entity",
+      "reason": "registered operation name; aborted-doc loss",
+      "source_evidence": "docs/architecture/KNOWLEDGE-OPERATIONS.md"
+    },
+    {
+      "id": "CREATE",
+      "type": "entity",
+      "expected": "keep",
+      "classification": "valid_entity",
+      "reason": "registered operation name; aborted-doc loss",
+      "source_evidence": "docs/architecture/KNOWLEDGE-OPERATIONS.md"
+    },
+    {
+      "id": "Claim Predicate",
+      "type": "entity",
+      "expected": "unclear",
+      "classification": "domain_term",
+      "reason": "ontology meta-term; core concept of THIS project",
+      "source_evidence": "docs/standards/11-NORMALIZATION-ENGINE-STANDARD.md"
+    },
+    {
+      "id": "Claim Predicate Registry",
+      "type": "entity",
+      "expected": "unclear",
+      "classification": "domain_term",
+      "reason": "named system component; component vs concept is a judgement call",
+      "source_evidence": "docs/standards/11-NORMALIZATION-ENGINE-STANDARD.md; docs/architecture/DOMAIN-MODEL.md"
+    },
+    {
+      "id": "ClaimStateResolver",
+      "type": "entity",
+      "expected": "keep",
+      "classification": "valid_entity",
+      "reason": "a code class; legitimate Technical Entity — removed by the DOMAIN-MODEL run (filter/contract effect)",
+      "source_evidence": "docs/architecture/DOMAIN-MODEL.md; docs/architecture/KNOWLEDGE-OPERATIONS.md"
+    },
+    {
+      "id": "Current Knowledge",
+      "type": "entity",
+      "expected": "unclear",
+      "classification": "valid_concept",
+      "reason": "a defined layer concept; borderline keep",
+      "source_evidence": "docs/architecture/DOMAIN-MODEL.md; docs/architecture/KNOWLEDGE-OPERATIONS.md"
+    },
+    {
+      "id": "Deduplication",
+      "type": "entity",
+      "expected": "unclear",
+      "classification": "domain_term",
+      "reason": "abstract process; no stable identity as a knowledge object",
+      "source_evidence": "docs/standards/11-NORMALIZATION-ENGINE-STANDARD.md"
+    },
+    {
+      "id": "Deterministic post-processing",
+      "type": "entity",
+      "expected": "remove",
+      "classification": "structural",
+      "reason": "document section heading, not a knowledge object",
+      "source_evidence": "docs/standards/10-EXTRACTION-V2-STANDARD.md"
+    },
+    {
+      "id": "Dynamic Context",
+      "type": "entity",
+      "expected": "unclear",
+      "classification": "valid_concept",
+      "reason": "design concept",
+      "source_evidence": "docs/superpowers/specs/2026-09-11-context-runtime-design.md"
+    },
+    {
+      "id": "EXTENSION-POINTS.md",
+      "type": "entity",
+      "expected": "remove",
+      "classification": "structural",
+      "reason": "file reference",
+      "source_evidence": "docs/architecture/KNOWLEDGE-OPERATIONS.md"
+    },
+    {
+      "id": "Entity Type Registry",
+      "type": "entity",
+      "expected": "unclear",
+      "classification": "domain_term",
+      "reason": "named system component",
+      "source_evidence": "docs/standards/11-NORMALIZATION-ENGINE-STANDARD.md"
+    },
+    {
+      "id": "Extraction Agent",
+      "type": "entity",
+      "expected": "unclear",
+      "classification": "unclear",
+      "reason": "naming variant: \"ExtractionAgent\" is present after the run",
+      "source_evidence": "docs/superpowers/specs/2026-09-11-context-runtime-design.md"
+    },
+    {
+      "id": "Extraction procedure",
+      "type": "entity",
+      "expected": "remove",
+      "classification": "structural",
+      "reason": "document section heading",
+      "source_evidence": "docs/standards/10-EXTRACTION-V2-STANDARD.md"
+    },
+    {
+      "id": "LLM-Wiki Extraction Standard v2.0",
+      "type": "entity",
+      "expected": "unclear",
+      "classification": "unclear",
+      "reason": "document title; a bound \"Standard\" object could be legitimate",
+      "source_evidence": "docs/standards/10-EXTRACTION-V2-STANDARD.md"
+    },
+    {
+      "id": "MERGE",
+      "type": "entity",
+      "expected": "keep",
+      "classification": "valid_entity",
+      "reason": "registered operation name; aborted-doc loss",
+      "source_evidence": "docs/architecture/KNOWLEDGE-OPERATIONS.md"
+    },
+    {
+      "id": "On-Demand Context",
+      "type": "entity",
+      "expected": "unclear",
+      "classification": "valid_concept",
+      "reason": "design concept",
+      "source_evidence": "docs/superpowers/specs/2026-09-11-context-runtime-design.md"
+    },
+    {
+      "id": "Operation",
+      "type": "entity",
+      "expected": "keep",
+      "classification": "valid_entity",
+      "reason": "registered operation concept; loss is from the ABORTED doc, not filtering",
+      "source_evidence": "docs/architecture/KNOWLEDGE-OPERATIONS.md"
+    },
+    {
+      "id": "OperationRequest",
+      "type": "entity",
+      "expected": "keep",
+      "classification": "valid_entity",
+      "reason": "a DTO Class — exactly the Technical Entity the contract protects; aborted-doc loss",
+      "source_evidence": "docs/architecture/KNOWLEDGE-OPERATIONS.md"
+    },
+    {
+      "id": "OperationResult",
+      "type": "entity",
+      "expected": "keep",
+      "classification": "valid_entity",
+      "reason": "a DTO Class; aborted-doc loss",
+      "source_evidence": "docs/architecture/KNOWLEDGE-OPERATIONS.md"
+    },
+    {
+      "id": "Progressive Disclosure",
+      "type": "entity",
+      "expected": "unclear",
+      "classification": "valid_concept",
+      "reason": "design concept",
+      "source_evidence": "docs/superpowers/specs/2026-09-11-context-runtime-design.md"
+    },
+    {
+      "id": "RESTORE",
+      "type": "entity",
+      "expected": "keep",
+      "classification": "valid_entity",
+      "reason": "registered operation name; aborted-doc loss",
+      "source_evidence": "docs/architecture/KNOWLEDGE-OPERATIONS.md"
+    },
+    {
+      "id": "Relation Predicate Registry",
+      "type": "entity",
+      "expected": "unclear",
+      "classification": "domain_term",
+      "reason": "named system component",
+      "source_evidence": "docs/architecture/DOMAIN-MODEL.md"
+    },
+    {
+      "id": "Relation Registry",
+      "type": "entity",
+      "expected": "unclear",
+      "classification": "domain_term",
+      "reason": "named system component",
+      "source_evidence": "docs/standards/11-NORMALIZATION-ENGINE-STANDARD.md"
+    },
+    {
+      "id": "Repair policy",
+      "type": "entity",
+      "expected": "remove",
+      "classification": "structural",
+      "reason": "document section heading",
+      "source_evidence": "docs/standards/10-EXTRACTION-V2-STANDARD.md"
+    },
+    {
+      "id": "SPLIT",
+      "type": "entity",
+      "expected": "keep",
+      "classification": "valid_entity",
+      "reason": "registered operation name; aborted-doc loss",
+      "source_evidence": "docs/architecture/KNOWLEDGE-OPERATIONS.md"
+    },
+    {
+      "id": "SUPERSEDE",
+      "type": "entity",
+      "expected": "keep",
+      "classification": "valid_entity",
+      "reason": "registered operation name; aborted-doc loss",
+      "source_evidence": "docs/architecture/KNOWLEDGE-OPERATIONS.md"
+    },
+    {
+      "id": "Static Context",
+      "type": "entity",
+      "expected": "unclear",
+      "classification": "valid_concept",
+      "reason": "design concept from the spec; dropped when the model collapsed the three tiers",
+      "source_evidence": "docs/superpowers/specs/2026-09-11-context-runtime-design.md"
+    },
+    {
+      "id": "Verification",
+      "type": "entity",
+      "expected": "unclear",
+      "classification": "domain_term",
+      "reason": "abstract process",
+      "source_evidence": "docs/standards/11-NORMALIZATION-ENGINE-STANDARD.md"
+    },
+    {
+      "id": "app/claim_relations.py",
+      "type": "entity",
+      "expected": "remove",
+      "classification": "structural",
+      "reason": "file path",
+      "source_evidence": "docs/architecture/KNOWLEDGE-OPERATIONS.md"
+    },
+    {
+      "id": "app/domain/operations.py",
+      "type": "entity",
+      "expected": "remove",
+      "classification": "structural",
+      "reason": "file path, not a domain entity",
+      "source_evidence": "docs/architecture/KNOWLEDGE-OPERATIONS.md"
+    },
+    {
+      "id": "app/retrieval.py::_current_claims",
+      "type": "entity",
+      "expected": "remove",
+      "classification": "structural",
+      "reason": "path::symbol reference",
+      "source_evidence": "docs/architecture/KNOWLEDGE-OPERATIONS.md"
+    },
+    {
+      "id": "supersedes",
+      "type": "entity",
+      "expected": "remove",
+      "classification": "structural",
+      "reason": "relation/predicate name, not an entity",
+      "source_evidence": "docs/architecture/KNOWLEDGE-OPERATIONS.md"
+    }
+  ]
+}

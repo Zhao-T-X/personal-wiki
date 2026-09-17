@@ -78,6 +78,7 @@ Each Claim contains:
 subject
 predicate
 object?
+object_kind?
 temporal_signal?
 claim_type
 polarity
@@ -88,6 +89,19 @@ confidence
 source_chunk
 evidence_quote
 ```
+
+`object_kind` is the model's own verdict on what the object *is*:
+`entity | concept | literal | unknown`. Emit it whenever `object` is present:
+
+- `entity`  — the object names another extracted Entity (a real knowledge object);
+- `concept` — the object is a description of a mechanism/behaviour;
+- `literal` — the object is a value (8192, true, 高风险, 每天) or a source artefact;
+- `unknown` — you cannot responsibly decide.
+
+The application validates this value and keeps deterministic guardrails for the
+unambiguous cases (numbers, paths, technical identifiers); it does **not** re-guess the
+kind from keywords. A Claim `object` is an Entity reference only when
+`object_kind = entity` *and* the object names an extracted Entity.
 
 `predicate` must be a registered Claim Predicate (see `claim-predicates.md`).
 It is a *candidate*: a deterministic compiler resolves it against the closed

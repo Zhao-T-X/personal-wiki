@@ -1,0 +1,408 @@
+{
+  "source": {
+    "before": "semantic_before.json",
+    "after": "semantic_after.json"
+  },
+  "note": "Before and After are two INDEPENDENT LLM runs. Deltas therefore mix (a) contract/filter effects, (b) model run-to-run variance, and (c) one aborted document. Claim-level detail was not captured.",
+  "documents": [
+    {
+      "doc": "docs/standards/10-EXTRACTION-V2-STANDARD.md",
+      "error": null,
+      "before_entities": [
+        "Claim",
+        "Deterministic post-processing",
+        "Entity",
+        "Event",
+        "Extraction engine",
+        "Extraction procedure",
+        "Idea",
+        "LLM",
+        "LLM-Wiki Extraction Standard v2.0",
+        "Question",
+        "Relation",
+        "Repair policy"
+      ],
+      "after_entities": [
+        "Extraction engine",
+        "LLM"
+      ],
+      "removed": [
+        "Claim",
+        "Deterministic post-processing",
+        "Entity",
+        "Event",
+        "Extraction procedure",
+        "Idea",
+        "LLM-Wiki Extraction Standard v2.0",
+        "Question",
+        "Relation",
+        "Repair policy"
+      ],
+      "added": [],
+      "kept_both": [
+        "Extraction engine",
+        "LLM"
+      ],
+      "before_claims": 12,
+      "after_claims": 4
+    },
+    {
+      "doc": "docs/standards/11-NORMALIZATION-ENGINE-STANDARD.md",
+      "error": null,
+      "before_entities": [
+        "Claim",
+        "Claim Predicate",
+        "Claim Predicate Registry",
+        "Deduplication",
+        "Entity",
+        "Entity Resolution",
+        "Entity Type Registry",
+        "Event",
+        "Knowledge Normalization Engine",
+        "LLM",
+        "Relation",
+        "Relation Registry",
+        "Verification"
+      ],
+      "after_entities": [
+        "Entity Resolution",
+        "Knowledge Normalization Engine"
+      ],
+      "removed": [
+        "Claim",
+        "Claim Predicate",
+        "Claim Predicate Registry",
+        "Deduplication",
+        "Entity",
+        "Entity Type Registry",
+        "Event",
+        "LLM",
+        "Relation",
+        "Relation Registry",
+        "Verification"
+      ],
+      "added": [],
+      "kept_both": [
+        "Entity Resolution",
+        "Knowledge Normalization Engine"
+      ],
+      "before_claims": 16,
+      "after_claims": 5
+    },
+    {
+      "doc": "docs/architecture/DOMAIN-MODEL.md",
+      "error": null,
+      "before_entities": [
+        "Chunk",
+        "Claim",
+        "Claim Evolution",
+        "Claim Predicate Registry",
+        "ClaimStateResolver",
+        "Current Knowledge",
+        "Document",
+        "Entity",
+        "Event",
+        "Evidence",
+        "Idea",
+        "Question",
+        "Relation",
+        "Relation Predicate Registry",
+        "Research Task"
+      ],
+      "after_entities": [
+        "Chunk",
+        "Claim",
+        "Claim Evolution",
+        "Document",
+        "Entity",
+        "Event",
+        "Evidence",
+        "Idea",
+        "Question",
+        "Relation",
+        "Research Task"
+      ],
+      "removed": [
+        "Claim Predicate Registry",
+        "ClaimStateResolver",
+        "Current Knowledge",
+        "Relation Predicate Registry"
+      ],
+      "added": [],
+      "kept_both": [
+        "Chunk",
+        "Claim",
+        "Claim Evolution",
+        "Document",
+        "Entity",
+        "Event",
+        "Evidence",
+        "Idea",
+        "Question",
+        "Relation",
+        "Research Task"
+      ],
+      "before_claims": 37,
+      "after_claims": 12
+    },
+    {
+      "doc": "docs/architecture/KNOWLEDGE-OPERATIONS.md",
+      "error": "ValueError: Claim violates ontology domain/range: CORRECT creates Claim. `creates` declares domain=*, range=*.",
+      "before_entities": [
+        "ADR-005",
+        "ARCHIVE",
+        "CONTRADICT",
+        "CORRECT",
+        "CREATE",
+        "Claim Evolution",
+        "ClaimStateResolver",
+        "Current Knowledge",
+        "EXTENSION-POINTS.md",
+        "MERGE",
+        "Operation",
+        "OperationRequest",
+        "OperationResult",
+        "RESTORE",
+        "SPLIT",
+        "SUPERSEDE",
+        "app/claim_relations.py",
+        "app/domain/operations.py",
+        "app/retrieval.py::_current_claims",
+        "supersedes"
+      ],
+      "after_entities": [],
+      "removed": [
+        "ADR-005",
+        "ARCHIVE",
+        "CONTRADICT",
+        "CORRECT",
+        "CREATE",
+        "Claim Evolution",
+        "ClaimStateResolver",
+        "Current Knowledge",
+        "EXTENSION-POINTS.md",
+        "MERGE",
+        "Operation",
+        "OperationRequest",
+        "OperationResult",
+        "RESTORE",
+        "SPLIT",
+        "SUPERSEDE",
+        "app/claim_relations.py",
+        "app/domain/operations.py",
+        "app/retrieval.py::_current_claims",
+        "supersedes"
+      ],
+      "added": [],
+      "kept_both": [],
+      "before_claims": 18,
+      "after_claims": null
+    },
+    {
+      "doc": "docs/superpowers/specs/2026-09-11-context-runtime-design.md",
+      "error": null,
+      "before_entities": [
+        "Budget Manager",
+        "Context Cache",
+        "Context Inspector",
+        "Context Manager",
+        "Context Runtime",
+        "Context Trace",
+        "Dynamic Context",
+        "Evidence Escalation",
+        "Extraction Agent",
+        "LLM-Wiki",
+        "On-Demand Context",
+        "Progressive Context Loading",
+        "Progressive Disclosure",
+        "SQLite",
+        "Static Context",
+        "Task Packet"
+      ],
+      "after_entities": [
+        "AgentScope",
+        "Bootstrap",
+        "Budget Manager",
+        "Context Cache",
+        "Context Inspector",
+        "Context Manager",
+        "Context Runtime",
+        "Context Trace",
+        "CuratorAgent",
+        "Evidence Escalation",
+        "ExtractionAgent",
+        "KnowledgeAgent",
+        "LLM-Wiki",
+        "LocalSkillLoader",
+        "PersonalAgent",
+        "Progressive Context Loading",
+        "ResearchAgent",
+        "ReviewAgent",
+        "SQLite",
+        "Skill",
+        "Task Packet"
+      ],
+      "removed": [
+        "Dynamic Context",
+        "Extraction Agent",
+        "On-Demand Context",
+        "Progressive Disclosure",
+        "Static Context"
+      ],
+      "added": [
+        "AgentScope",
+        "Bootstrap",
+        "CuratorAgent",
+        "ExtractionAgent",
+        "KnowledgeAgent",
+        "LocalSkillLoader",
+        "PersonalAgent",
+        "ResearchAgent",
+        "ReviewAgent",
+        "Skill"
+      ],
+      "kept_both": [
+        "Budget Manager",
+        "Context Cache",
+        "Context Inspector",
+        "Context Manager",
+        "Context Runtime",
+        "Context Trace",
+        "Evidence Escalation",
+        "LLM-Wiki",
+        "Progressive Context Loading",
+        "SQLite",
+        "Task Packet"
+      ],
+      "before_claims": 18,
+      "after_claims": 41
+    }
+  ],
+  "entities": {
+    "removed_global": [
+      "ADR-005",
+      "ARCHIVE",
+      "CONTRADICT",
+      "CORRECT",
+      "CREATE",
+      "Claim Predicate",
+      "Claim Predicate Registry",
+      "ClaimStateResolver",
+      "Current Knowledge",
+      "Deduplication",
+      "Deterministic post-processing",
+      "Dynamic Context",
+      "EXTENSION-POINTS.md",
+      "Entity Type Registry",
+      "Extraction Agent",
+      "Extraction procedure",
+      "LLM-Wiki Extraction Standard v2.0",
+      "MERGE",
+      "On-Demand Context",
+      "Operation",
+      "OperationRequest",
+      "OperationResult",
+      "Progressive Disclosure",
+      "RESTORE",
+      "Relation Predicate Registry",
+      "Relation Registry",
+      "Repair policy",
+      "SPLIT",
+      "SUPERSEDE",
+      "Static Context",
+      "Verification",
+      "app/claim_relations.py",
+      "app/domain/operations.py",
+      "app/retrieval.py::_current_claims",
+      "supersedes"
+    ],
+    "added_global": [
+      "AgentScope",
+      "Bootstrap",
+      "CuratorAgent",
+      "ExtractionAgent",
+      "KnowledgeAgent",
+      "LocalSkillLoader",
+      "PersonalAgent",
+      "ResearchAgent",
+      "ReviewAgent",
+      "Skill"
+    ],
+    "removed_count": 35,
+    "added_count": 10
+  },
+  "claims": {
+    "before_total": 101,
+    "after_total": 62,
+    "delta": -39,
+    "by_document": [
+      {
+        "doc": "docs/standards/10-EXTRACTION-V2-STANDARD.md",
+        "before_claims": 12,
+        "after_claims": 4,
+        "delta": -8,
+        "attribution": "not_reextracted_or_contract"
+      },
+      {
+        "doc": "docs/standards/11-NORMALIZATION-ENGINE-STANDARD.md",
+        "before_claims": 16,
+        "after_claims": 5,
+        "delta": -11,
+        "attribution": "not_reextracted_or_contract"
+      },
+      {
+        "doc": "docs/architecture/DOMAIN-MODEL.md",
+        "before_claims": 37,
+        "after_claims": 12,
+        "delta": -25,
+        "attribution": "not_reextracted_or_contract"
+      },
+      {
+        "doc": "docs/architecture/KNOWLEDGE-OPERATIONS.md",
+        "before_claims": 18,
+        "after_claims": 0,
+        "delta": -18,
+        "attribution": "document_aborted"
+      },
+      {
+        "doc": "docs/superpowers/specs/2026-09-11-context-runtime-design.md",
+        "before_claims": 18,
+        "after_claims": 41,
+        "delta": 23,
+        "attribution": "not_reextracted_or_contract"
+      }
+    ]
+  },
+  "global_counts": {
+    "before": {
+      "entity_total": 65,
+      "claim_total": 101,
+      "duplicate_candidates": 16,
+      "unlinked_object_proposals": 42,
+      "non_entity_object_proposals": 40,
+      "review_total": 190,
+      "object_link_suggestions": 42
+    },
+    "after": {
+      "entity_total": 34,
+      "claim_total": 62,
+      "entity_eligibility": {
+        "keep": 31,
+        "review": 3,
+        "missing": 0
+      },
+      "object_classes": {
+        "entity": 1,
+        "literal": 40,
+        "concept": 13,
+        "unknown": 0,
+        "none": 0
+      },
+      "duplicate_candidates": 7,
+      "unlinked_object_proposals": 14,
+      "non_entity_object_proposals": 0,
+      "review_total": 76,
+      "object_link_suggestions": 14
+    }
+  }
+}

@@ -27,12 +27,18 @@ from app.entity_eligibility import entity_eligibility, is_plausible_subject
     ('FTS5', ENTITY),
     ('GomsInventoryPagingRequestDTO', ENTITY),
     ('RAG', ENTITY),
-    ('indexes raw document titles and bodies', CONCEPT),
-    ('only the selected evidence pack is given to the LLM', CONCEPT),
+    # Concept is the LLM's verdict now (Step 10), not a keyword rule.
+    ('indexes raw document titles and bodies', UNKNOWN),
+    ('only the selected evidence pack is given to the LLM', UNKNOWN),
     ('', UNKNOWN),
 ])
 def test_classify_object(text, expected):
     assert classify_object(text)[0] == expected
+
+
+def test_object_kind_from_llm_drives_concept():
+    assert classify_object('indexes raw document titles and bodies',
+                           object_kind='concept')[0] == CONCEPT
 
 
 def test_known_entity_wins():
@@ -45,11 +51,12 @@ def test_is_entity_like_predicate():
     assert is_entity_like('the mechanism that feeds the LLM') is False
 
 
-def test_plausible_subject_rejects_literals_and_descriptions():
+def test_plausible_subject_rejects_literals_but_not_descriptions_by_keyword():
     assert is_plausible_subject('苹果公司') is True
     assert is_plausible_subject('FTS5') is True
     assert is_plausible_subject('8192') is False
-    assert is_plausible_subject('只给 LLM 选定证据包的机制') is False
+    # Step 10: whether a phrase is a description is the LLM's verdict, not a keyword reject.
+    assert is_plausible_subject('只给 LLM 选定证据包的机制') is True
 
 
 def test_entity_eligibility_still_drops_structural_garbage():

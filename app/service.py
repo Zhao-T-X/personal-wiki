@@ -5,6 +5,8 @@ from .db import transaction
 from .llm import extract
 from .config import runtime
 from .extraction import normalize_extraction
+from .extraction_items import (COMPLETED, COMPLETED_WITH_WARNINGS, FAILED,
+                               compile_extraction_items)
 from .knowledge import persist_extraction
 from .claim_relations import detect_claim_relations
 from .integrity import autolink_object_literals
@@ -123,9 +125,13 @@ async def index_document(document_id: str, *, use_llm=True, experiment_tag: str 
         return report
 
     async with record_run('extract', document_id=document_id, agent_role='extractor') as run:
-        result = normalize_extraction(await extract(stale_rows))
+        # The extraction layer isolates each item it can (one bad claim no longer costs
+        # its batch); this second pass is the document's own safety net: whatever reaches
+        # here is compiled per item, so persistence only ever sees accepted knowledge.
+        outcome = compile_extraction_items(await extract(stale_rows))
+        extraction_issues = list(getattr(run, 'extraction_issues', []) or [])
         with transaction() as conn:
-            counts = persist_extraction(conn, document_id=document_id, extraction=result)
+            counts = persist_extraction(conn, document_id=document_id, extraction=outcome.envelope)
             # Relationship detection shares this transaction so a claim can never be
             # committed without the relation explaining how it fits what we knew.
             counts['claim_relations'] = detect_claim_relations(conn, document_id=document_id)
@@ -138,6 +144,18 @@ async def index_document(document_id: str, *, use_llm=True, experiment_tag: str 
             # Record which extractor+ontology produced this chunk's knowledge, so a
             # registry change makes it stale again on the next index run.
             DocumentRepository(conn).set_extraction_version(stale_ids, version)
+        # Every refusal is kept: the model-level ones, the ones this pass refused and the
+        # ones persistence could not write. A failure is never silent.
+        failures = [*extraction_issues,
+                    *(r.failure_view() for r in outcome.failures),
+                    *counts.get('persistence_failures', [])]
+        persisted_knowledge = (counts['claims'] + counts['events'] + counts['ideas']
+                               + counts['questions'])
+        if persisted_knowledge or counts['entities']:
+            status = COMPLETED_WITH_WARNINGS if failures else COMPLETED
+        else:
+            # Nothing legal was kept. That is a real, reported outcome — not a success.
+            status = FAILED if failures else COMPLETED
         # The extraction snapshot: everything needed to replay "what did the model pull
         # out of this document, and what did we keep?" is captured under the run id, so
         # a later experiment can diff Before/After without re-running the model.
@@ -146,9 +164,13 @@ async def index_document(document_id: str, *, use_llm=True, experiment_tag: str 
             'chunks': len(stale_rows),
             'extraction_version': version,
             'experiment_tag': experiment_tag,
-            'extraction': result,
+            'document_status': status,
+            'rejected_items': failures,
+            'extraction': outcome.envelope,
         }
-        report.update(llm='success', counts=counts, extracted_chunks=len(stale_rows),
+        report.update(llm='success' if status != FAILED else 'failed', status=status,
+                      warnings=len(failures), rejected_items=failures, counts=counts,
+                      extracted_chunks=len(stale_rows),
                       embedded=await _maybe_embed(document_id))
         return report
 

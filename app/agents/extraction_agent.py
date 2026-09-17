@@ -51,6 +51,7 @@ ClaimType = Literal[
     "hypothetical",
 ]
 Polarity = Literal["positive", "negative"]
+ObjectKind = Literal["entity", "concept", "literal", "unknown"]
 TemporalSignal = Literal[
     "new",
     "current",
@@ -157,6 +158,9 @@ class Claim(_Strict):
     subject: str = Field(min_length=1)
     predicate: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
     object: Optional[str] = None
+    # The LLM's own verdict on what the object *is* (Step 10). Code validates the value
+    # and guards the unambiguous cases; it never re-guesses this from keywords.
+    object_kind: Optional[ObjectKind] = None
     # Temporal/evolution meaning ("new", "former", "current") is carried here,
     # never inside the predicate name (ONTOLOGY MUTATION POLICY; ADR-011).
     temporal_signal: Optional[TemporalSignal] = None
@@ -248,13 +252,21 @@ def wanted_kinds(detection: dict | Detection | None) -> set[str]:
     return {key for key in KIND_KEYS if bool(detection.get(key))}
 
 
-# References are no longer inlined into every extraction call. The closed
-# vocabularies already ship as the structured-output contract (Pydantic Literal
-# enums, which the provider receives as a machine schema), so inlining
-# entity-types.md + claim-predicates.md duplicated ~5.8 KB of context per call.
-# The agent pulls a reference through `read_skill_reference` only when it needs
-# the detailed rules. Rollback: list the file names here again to re-inline them.
-EXTRACTION_REFERENCES: list[str] = []
+# Which skill references ship inside every extraction prompt.
+#
+# This list used to be empty: the closed vocabularies were believed to ship as the
+# structured-output schema. They do not — the schema constrains *shapes* (entity types,
+# object_kind, claim_type are Literal enums) but `predicate` is a free-form pattern the
+# compiler resolves afterwards. The live semantic smoke showed the consequence: asked for
+# a CEO statement the model answered `is`, because `is` was the only predicate it could
+# see. It cannot select from a vocabulary it was never given.
+#
+# claim-predicates.md is therefore inlined (~0.45k tokens). entity-types.md (1.4k) and
+# extraction-v2.md (1.8k) stay on demand: their rules are either already enforced by the
+# schema or summarised in SKILL.md, and inlining both would triple the prompt for no
+# measured gain. Rollback: set this list back to [] and watch Predicate Semantic
+# Accuracy in `pytest -m smoke`.
+EXTRACTION_REFERENCES: list[str] = ['claim-predicates.md']
 
 # The extraction agent only needs skill access. It must not call knowledge-base
 # query tools while extracting a document.

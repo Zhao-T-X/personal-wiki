@@ -20,7 +20,8 @@ def _conn(rows):
     for i, (name, etype) in enumerate(rows, 1):
         conn.execute('INSERT INTO entities(id,type,types_json,name,status,properties_json,updated_at)'
                      ' VALUES(?,?,?,?,?,?,?)',
-                     (f'e{i}', etype, f'["{etype}"]', name, 'candidate', '{}', f'2026-01-{i:02d}'))
+                     (f'e{i}', etype, f'["{etype}"]', name, 'candidate',
+                      '{"eligibility": "keep"}', f'2026-01-{i:02d}'))
     return conn
 
 

@@ -25,6 +25,14 @@ from .tokens import estimate_tokens
 from .value import rank, utility, utility_per_1k
 
 
+# `render()` emits only the system and context blocks, and each block is built from a
+# fixed order of item types. An item whose type is in NEITHER order is counted by the
+# ledger yet never reaches the model — that is what happened to `reference` (see
+# REFERENCE_NOT_RENDERED in tests/fixtures/extraction_cases/). Keeping the two numbers
+# apart is what stops a cost report from banking tokens that were never spent.
+RENDERED_TYPES: tuple[str, ...] = tuple(SYSTEM_ORDER) + tuple(CONTEXT_ORDER)
+
+
 @dataclass
 class CompiledContext:
     """The compiled result of one plan: messages plus the ledger behind them."""
@@ -52,6 +60,21 @@ class CompiledContext:
     @property
     def saved_tokens(self) -> int:
         return sum(w.get('tokens', 0) for w in self.withheld) + self.trimmed_tokens
+
+    @property
+    def rendered_tokens(self) -> int:
+        """Tokens that actually reach the model, as opposed to what the ledger holds."""
+        return sum(i.estimated_tokens for i in self.items if i.type in RENDERED_TYPES)
+
+    @property
+    def not_rendered(self) -> list[dict]:
+        """Loaded items that ``render()`` drops, itemised.
+
+        They still count against the budget (the planner reserved room for them), but they
+        are not in the request — so a *sent* token total must exclude them.
+        """
+        return [{'type': i.type, 'source': i.source, 'tokens': i.estimated_tokens}
+                for i in self.items if i.content.strip() and i.type not in RENDERED_TYPES]
 
     @property
     def required_tokens(self) -> int:
@@ -90,6 +113,10 @@ class CompiledContext:
             'agent': self.agent,
             'budget_tokens': self.plan.hard_budget,
             'actual_tokens': self.total_tokens,
+            # What the model actually receives. `actual_tokens` is the ledger (budget
+            # accounting); the two differ whenever an item is loaded but not rendered.
+            'rendered_tokens': self.rendered_tokens,
+            'not_rendered': self.not_rendered,
             'trimmed_tokens': self.trimmed_tokens,
             'saved_tokens': self.saved_tokens,
             'efficiency': self.efficiency,

@@ -1,0 +1,49 @@
+{
+  "limitation": "semantic_before/after.json store only per-document claim COUNTS, not per-claim subject/predicate/object. A claim-by-claim audit is therefore not possible from these artifacts; the deltas are attributed to source instead.",
+  "totals": {
+    "before": 101,
+    "after": 62,
+    "removed": 39
+  },
+  "attribution": {
+    "document_aborted_not_reextracted": 18,
+    "contract_or_reextraction_variance": 21
+  },
+  "by_document": [
+    {
+      "doc": "docs/standards/10-EXTRACTION-V2-STANDARD.md",
+      "before_claims": 12,
+      "after_claims": 4,
+      "delta": -8,
+      "attribution": "not_reextracted_or_contract"
+    },
+    {
+      "doc": "docs/standards/11-NORMALIZATION-ENGINE-STANDARD.md",
+      "before_claims": 16,
+      "after_claims": 5,
+      "delta": -11,
+      "attribution": "not_reextracted_or_contract"
+    },
+    {
+      "doc": "docs/architecture/DOMAIN-MODEL.md",
+      "before_claims": 37,
+      "after_claims": 12,
+      "delta": -25,
+      "attribution": "not_reextracted_or_contract"
+    },
+    {
+      "doc": "docs/architecture/KNOWLEDGE-OPERATIONS.md",
+      "before_claims": 18,
+      "after_claims": 0,
+      "delta": -18,
+      "attribution": "document_aborted"
+    },
+    {
+      "doc": "docs/superpowers/specs/2026-09-11-context-runtime-design.md",
+      "before_claims": 18,
+      "after_claims": 41,
+      "delta": 23,
+      "attribution": "not_reextracted_or_contract"
+    }
+  ]
+}

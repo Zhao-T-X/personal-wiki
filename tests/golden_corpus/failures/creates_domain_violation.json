@@ -1,0 +1,126 @@
+{
+  "id": "creates_domain_violation",
+  "what": "The real failure that made KNOWLEDGE-OPERATIONS.md lose everything: the model read the operation list as a claim (CORRECT creates Claim) and `creates` is registered as a relation predicate whose source_types are Person/Organization, so the Resource-typed CORRECT is an illegal endpoint. The single repair attempt repeated it, and the whole document rolled back.",
+  "document": "docs/architecture/KNOWLEDGE-OPERATIONS.md",
+  "chunk_excerpt": "```text\nCREATE      创建新知识\nCORRECT     纠正既有知识（产生新 Claim，而非覆盖）\nMERGE       合并重复实体 / 断言\nSPLIT       拆分被错误合并的实体 / 断言\nSUPERSEDE   新知识取代旧知识（旧知识保留为历史）\nARCHIVE     归档（退出 current，但保留可检索历史）\nRESTORE     从归档 / 被取代状态恢复\n```",
+  "capture": {
+    "method": "reconstructed from the observed real error, then verified to reproduce it deterministically at 0 tokens",
+    "evidence": "semantic_after.json / step10-recall-audit.md recorded: \"ValueError: Claim violates ontology domain/range: CORRECT creates Claim. `creates` declares domain=*, range=*.\" (also observed as 'Context Runtime creates (none)' in another run)",
+    "verified_repro": "app.extraction.compile_extraction_items(first_output) rejects exactly one item with DOMAIN_RANGE_INVALID",
+    "live_capture": "not required for the replay: this shape is the observed one. The raw live envelope for this document is NOT stored (it would have to be re-generated)."
+  },
+  "first_output": {
+    "entities": [
+      { "name": "CORRECT", "types": ["Resource"], "aliases": [], "properties": {} },
+      { "name": "Claim", "types": ["Concept"], "aliases": [], "properties": {} },
+      { "name": "CREATE", "types": ["Resource"], "aliases": [], "properties": {} },
+      { "name": "MERGE", "types": ["Resource"], "aliases": [], "properties": {} },
+      { "name": "SUPERSEDE", "types": ["Resource"], "aliases": [], "properties": {} },
+      { "name": "ARCHIVE", "types": ["Resource"], "aliases": [], "properties": {} }
+    ],
+    "claims": [
+      {
+        "subject": "CORRECT",
+        "predicate": "creates",
+        "object": "Claim",
+        "claim_type": "factual",
+        "polarity": "positive",
+        "modality": "asserted",
+        "confidence": 0.7,
+        "source_chunk": "chunk-knowledge-operations-1",
+        "evidence_quote": "CORRECT     纠正既有知识（产生新 Claim，而非覆盖）"
+      },
+      {
+        "subject": "CORRECT",
+        "predicate": "used_for",
+        "object": "纠正既有知识（产生新 Claim，而非覆盖）",
+        "object_kind": "concept",
+        "claim_type": "definitional",
+        "polarity": "positive",
+        "modality": "asserted",
+        "confidence": 0.8,
+        "source_chunk": "chunk-knowledge-operations-1",
+        "evidence_quote": "CORRECT     纠正既有知识（产生新 Claim，而非覆盖）"
+      },
+      {
+        "subject": "CREATE",
+        "predicate": "used_for",
+        "object": "创建新知识",
+        "object_kind": "concept",
+        "claim_type": "definitional",
+        "polarity": "positive",
+        "modality": "asserted",
+        "confidence": 0.8,
+        "source_chunk": "chunk-knowledge-operations-1",
+        "evidence_quote": "CREATE      创建新知识"
+      },
+      {
+        "subject": "MERGE",
+        "predicate": "used_for",
+        "object": "合并重复实体 / 断言",
+        "object_kind": "concept",
+        "claim_type": "definitional",
+        "polarity": "positive",
+        "modality": "asserted",
+        "confidence": 0.8,
+        "source_chunk": "chunk-knowledge-operations-1",
+        "evidence_quote": "MERGE       合并重复实体 / 断言"
+      },
+      {
+        "subject": "SUPERSEDE",
+        "predicate": "used_for",
+        "object": "新知识取代旧知识（旧知识保留为历史）",
+        "object_kind": "concept",
+        "claim_type": "definitional",
+        "polarity": "positive",
+        "modality": "asserted",
+        "confidence": 0.8,
+        "source_chunk": "chunk-knowledge-operations-1",
+        "evidence_quote": "SUPERSEDE   新知识取代旧知识（旧知识保留为历史）"
+      }
+    ],
+    "events": [],
+    "ideas": [],
+    "questions": []
+  },
+  "first_error": "Claim violates ontology domain/range: CORRECT creates Claim. `creates` declares domain=*, range=*.",
+  "first_error_code": "DOMAIN_RANGE_INVALID",
+  "repair_output": {
+    "entities": [
+      { "name": "CORRECT", "types": ["Resource"], "aliases": [], "properties": {} },
+      { "name": "Claim", "types": ["Concept"], "aliases": [], "properties": {} }
+    ],
+    "claims": [
+      {
+        "subject": "CORRECT",
+        "predicate": "creates",
+        "object": "Claim",
+        "claim_type": "factual",
+        "polarity": "positive",
+        "modality": "asserted",
+        "confidence": 0.7,
+        "source_chunk": "chunk-knowledge-operations-1",
+        "evidence_quote": "CORRECT     纠正既有知识（产生新 Claim，而非覆盖）"
+      }
+    ],
+    "events": [],
+    "ideas": [],
+    "questions": []
+  },
+  "repair_error": "Claim violates ontology domain/range: CORRECT creates Claim. `creates` declares domain=*, range=*.",
+  "before_step11": {
+    "final_status": "FAILED",
+    "entities_lost": 19,
+    "claims_lost": 18,
+    "behaviour": "the second normalize_extraction() raised and the document transaction rolled back"
+  },
+  "after_step11": {
+    "final_status": "COMPLETED_WITH_WARNINGS",
+    "entities_kept": 6,
+    "claims_kept": 4,
+    "rejected_items": 1,
+    "behaviour": "the one illegal claim is rejected and reported; the other four claims and six entities persist"
+  },
+  "final_status": "COMPLETED_WITH_WARNINGS",
+  "interpretation": "`creates` is registered BOTH as a claim predicate (no domain/range) and as a relation predicate (source_types: Person, Organization). The rejection is correct; the message is misleading because it prints the claim spec's empty domain/range instead of the relation's source_types. Recorded as a known limitation, not fixed here."
+}

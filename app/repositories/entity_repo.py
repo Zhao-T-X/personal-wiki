@@ -3,9 +3,26 @@ from __future__ import annotations
 
 from ..db import dumps, loads
 from .base import Repository, one, row, rows
+# NOTE: the canonical eligibility helpers live in app.domain. They are imported
+# lazily inside the methods below because app.repositories is imported from
+# app.domain.operations, so a module-level import here would be circular.
 
 # Columns an entity update is allowed to touch (guards against arbitrary SQL).
 _UPDATABLE = {'name', 'aliases_json', 'description', 'type', 'types_json', 'properties_json', 'status'}
+
+
+def merge_properties(existing: dict | None, incoming: dict | None) -> dict:
+    """Safe properties merge: incoming keys win, existing-only keys are preserved.
+
+    The point is eligibility: an incoming write that does not mention
+    ``eligibility`` must **not** erase a stored verdict (a merge that silently wiped
+    ``keep`` would reopen exactly the boundary this contract closes). A write that
+    *does* carry eligibility updates it — the caller owns that judgement, not the
+    Repository.
+    """
+    out = dict(existing or {})
+    out.update(incoming or {})
+    return out
 
 
 class EntityRepository(Repository):
@@ -89,9 +106,25 @@ class EntityRepository(Repository):
         return out
 
     def resolution_candidates(self, limit: int = 500) -> list[dict]:
+        """The semantic Entity Resolution pool: eligible (``KEEP``) entities only.
+
+        REVIEW entities and unlabelled legacy rows are not automatic resolution
+        targets (Step 9.1 boundary) — resolution must not fold new knowledge into an
+        entity nobody has qualified yet.
+        """
+        from ..domain.entity_eligibility import is_entity_eligible_for_semantic_pool
         with self.read() as conn:
-            return rows(conn.execute(
-                'SELECT id,types_json,name FROM entities ORDER BY updated_at DESC LIMIT ?', (limit,)))
+            found = rows(conn.execute(
+                'SELECT id,types_json,name,properties_json FROM entities '
+                'ORDER BY updated_at DESC LIMIT ?', (limit,)))
+        out = []
+        for r in found:
+            props = loads(r.pop('properties_json', '{}') or '{}', {})
+            if not is_entity_eligible_for_semantic_pool(props):
+                continue
+            r['properties'] = props
+            out.append(r)
+        return out
 
     def resolve_many(self, names: list[str], limit: int = 500) -> dict[str, list[str]]:
         """Normalized surface form -> *all* matching entity ids, in two queries.
@@ -131,9 +164,14 @@ class EntityRepository(Repository):
         """
         where, params = ('WHERE id != ?', [exclude_id]) if exclude_id else ('', [])
         with self.read() as conn:
-            return rows(conn.execute(
+            found = rows(conn.execute(
                 f'SELECT id,name,type,types_json,status,properties_json FROM entities {where} '
                 'ORDER BY updated_at DESC LIMIT ?', (*params, limit)))
+        out = []
+        for r in found:
+            r['properties'] = loads(r.pop('properties_json', '{}') or '{}', {})
+            out.append(r)
+        return out
 
     def insert(self, entity_id: str, *, type: str, types: list[str], name: str,
                aliases: list[str], description: str | None, properties: dict,
@@ -169,12 +207,23 @@ class EntityRepository(Repository):
 
     def merge(self, entity_id: str, *, types: list[str], aliases: list[str],
               description: str | None, properties: dict) -> None:
-        """Resolution merge: widen types/aliases, never narrow."""
+        """Resolution merge: widen types/aliases, never narrow.
+
+        Properties are *merged*, not replaced, so a write that omits ``eligibility``
+        cannot silently drop a stored verdict (see :func:`merge_properties`). The
+        Repository only persists safely; whether an entity should be ``keep`` is a
+        business decision made in the domain/application layer.
+        """
         with self.write() as conn:
+            existing = row(conn.execute(
+                'SELECT properties_json FROM entities WHERE id=?', (entity_id,)))
+            merged = merge_properties(
+                loads(existing['properties_json'], {}) if existing else {},
+                properties)
             conn.execute(
                 'UPDATE entities SET type=?, types_json=?, aliases_json=?, description=COALESCE(?,description), '
                 'properties_json=?, updated_at=CURRENT_TIMESTAMP WHERE id=?',
-                (types[0], dumps(types), dumps(aliases), description, dumps(properties or {}), entity_id))
+                (types[0], dumps(types), dumps(aliases), description, dumps(merged), entity_id))
 
     def insert_alias(self, entity_id: str, alias: str, alias_normalized: str) -> None:
         with self.write() as conn:
@@ -232,6 +281,7 @@ class EntityRepository(Repository):
         person should actually judge (the ``review`` ones). Rows without the marker
         (e.g. manually seeded) are kept, so nothing is hidden by default.
         """
+        from ..domain.entity_eligibility import should_enter_entity_review
         with self.read() as conn:
             found = rows(conn.execute(
                 "SELECT id,name,type,description,status,created_at,properties_json FROM entities "
@@ -239,9 +289,8 @@ class EntityRepository(Repository):
         out = []
         for r in found:
             props = loads(r.pop('properties_json', '{}') or '{}', {})
-            if props.get('eligibility') == 'keep':
-                continue
-            out.append(r)
+            if should_enter_entity_review(props):
+                out.append(r)
         return out
 
     def count_claims_for(self, entity_id: str) -> list[dict]:

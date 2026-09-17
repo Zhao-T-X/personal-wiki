@@ -1,0 +1,38 @@
+{
+  "id": "knowledge_operations_abort",
+  "what": "A real document whose extraction aborted: the model produced a claim the compiler rejected, and the single repair attempt still failed, so the whole document was rolled back (0 knowledge persisted).",
+  "documents": [
+    {
+      "doc": "docs/architecture/KNOWLEDGE-OPERATIONS.md",
+      "phase": "after",
+      "char_budget": 6000,
+      "observed_runs": [
+        {
+          "final_error": "ValueError: Claim violates ontology domain/range: CORRECT creates Claim. `creates` declares domain=*, range=*.",
+          "validation_error_scope": "domain/range rejected a Claim whose predicate `creates` was used with a subject/object pair the registry does not allow"
+        },
+        {
+          "final_error": "ValueError: Claim violates ontology domain/range: Context Runtime creates (none). `creates` declares domain=*, range=*."
+        }
+      ],
+      "input": {
+        "document_path": "docs/architecture/KNOWLEDGE-OPERATIONS.md",
+        "note": "Input is the document content, first 6000 chars, chunked by the real pipeline."
+      },
+      "capture_gap": "The raw first_output and repair_output were NOT stored by the experiment at the time (only the final error). To make this a 0-token replay fixture, capture them once with scripts/semantic_boundary_experiment.py extended to persist the raw extraction envelope on failure.",
+      "consequences": {
+        "knowledge_persisted_for_doc": 0,
+        "entities_lost": 17,
+        "entities_lost_list": [
+          "ADR-005", "ARCHIVE", "CONTRADICT", "CORRECT", "CREATE", "EXTENSION-POINTS.md",
+          "MERGE", "Operation", "OperationRequest", "OperationResult", "RESTORE", "SPLIT",
+          "SUPERSEDE", "app/claim_relations.py", "app/domain/operations.py",
+          "app/retrieval.py::_current_claims", "supersedes"
+        ],
+        "claims_lost": 18
+      },
+      "classification": "process_failure_not_filter",
+      "note": "This is NOT a Step 10 boundary effect: the compiler correctly rejected an invalid claim. The loss comes from all-or-nothing document persistence (no partial commit), which is a separate task."
+    }
+  ]
+}

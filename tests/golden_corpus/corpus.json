@@ -68,6 +68,110 @@
         "ideas": [],
         "questions": []
       }
+    },
+    {
+      "id": "ctx_runtime_manages",
+      "name": "Context Runtime 管理上下文 (Case1)",
+      "source": "Step10 Case1",
+      "content": "Context Runtime 负责管理 Agent 的上下文。",
+      "expected_entities": ["Context Runtime"],
+      "expected_non_entities": ["Agent Context"],
+      "extraction": {
+        "entities": [
+          {"name": "Context Runtime", "types": ["Technology"], "aliases": []}
+        ],
+        "claims": [
+          {"subject": "Context Runtime", "predicate": "provides", "object": "Agent Context", "object_kind": "concept", "claim_type": "factual", "polarity": "positive", "modality": "asserted", "context": {}, "confidence": 0.9}
+        ],
+        "events": [], "ideas": [], "questions": []
+      }
+    },
+    {
+      "id": "ctx_progressive_concept",
+      "name": "渐进式上下文加载 (Case2)",
+      "source": "Step10 Case2",
+      "content": "渐进式上下文加载是一种 Context Runtime 的机制。",
+      "expected_entities": ["Context Runtime", "上下文渐进加载"],
+      "expected_non_entities": [],
+      "extraction": {
+        "entities": [
+          {"name": "Context Runtime", "types": ["Technology"], "aliases": []},
+          {"name": "上下文渐进加载", "types": ["Concept"], "aliases": []}
+        ],
+        "claims": [
+          {"subject": "上下文渐进加载", "predicate": "is", "object": "Context Runtime", "object_kind": "entity", "claim_type": "definitional", "polarity": "positive", "modality": "asserted", "context": {}, "confidence": 0.9}
+        ],
+        "events": [], "ideas": [], "questions": []
+      }
+    },
+    {
+      "id": "literal_frequency",
+      "name": "每周执行一次 (Case3)",
+      "source": "Step10 Case3",
+      "content": "定时任务每周执行一次。",
+      "expected_entities": ["定时任务"],
+      "expected_non_entities": ["每周"],
+      "extraction": {
+        "entities": [
+          {"name": "定时任务", "types": ["Concept"], "aliases": []}
+        ],
+        "claims": [
+          {"subject": "定时任务", "predicate": "provides", "object": "每周", "object_kind": "literal", "claim_type": "factual", "polarity": "positive", "modality": "asserted", "context": {}, "confidence": 0.9}
+        ],
+        "events": [], "ideas": [], "questions": []
+      }
+    },
+    {
+      "id": "path_literal",
+      "name": "配置文件路径 (Case4)",
+      "source": "Step10 Case4",
+      "content": "配置文件见 docs/context/runtime.md。",
+      "expected_entities": ["配置文件"],
+      "expected_non_entities": ["docs/context/runtime.md"],
+      "extraction": {
+        "entities": [
+          {"name": "配置文件", "types": ["Concept"], "aliases": []}
+        ],
+        "claims": [
+          {"subject": "配置文件", "predicate": "is", "object": "docs/context/runtime.md", "object_kind": "literal", "claim_type": "factual", "polarity": "positive", "modality": "asserted", "context": {}, "confidence": 0.9}
+        ],
+        "events": [], "ideas": [], "questions": []
+      }
+    },
+    {
+      "id": "bare_capability_word",
+      "name": "能力词汇不建实体 (Case5)",
+      "source": "Step10 Case5",
+      "content": "这个系统提供能力。",
+      "expected_entities": ["系统"],
+      "expected_non_entities": ["能力"],
+      "extraction": {
+        "entities": [
+          {"name": "系统", "types": ["Concept"], "aliases": []}
+        ],
+        "claims": [
+          {"subject": "系统", "predicate": "provides", "object": "能力", "object_kind": "concept", "claim_type": "factual", "polarity": "positive", "modality": "asserted", "context": {}, "confidence": 0.9}
+        ],
+        "events": [], "ideas": [], "questions": []
+      }
+    },
+    {
+      "id": "technical_entity_with_keyword",
+      "name": "KnowledgeCompiler 支持 SQLite (Case6)",
+      "source": "Step10 Case6",
+      "content": "支持 SQLite 的 KnowledgeCompiler 是本项目核心。",
+      "expected_entities": ["KnowledgeCompiler", "SQLite"],
+      "expected_non_entities": [],
+      "extraction": {
+        "entities": [
+          {"name": "KnowledgeCompiler", "types": ["Technology"], "aliases": []},
+          {"name": "SQLite", "types": ["Software"], "aliases": []}
+        ],
+        "claims": [
+          {"subject": "KnowledgeCompiler", "predicate": "uses", "object": "SQLite", "object_kind": "entity", "claim_type": "factual", "polarity": "positive", "modality": "asserted", "context": {}, "confidence": 0.9}
+        ],
+        "events": [], "ideas": [], "questions": []
+      }
     }
   ]
 }

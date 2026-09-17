@@ -1,0 +1,975 @@
+{
+  "ran_at": "2026-09-17T08:11:56+00:00",
+  "model": "deepseek-v4-flash",
+  "cost": {
+    "steps": 20,
+    "prompt_tokens": 83265,
+    "completion_tokens": 13074,
+    "cases": 10,
+    "estimated_cost_usd": 0.061244,
+    "price_per_1k_in": 0.0005,
+    "price_per_1k_out": 0.0015
+  },
+  "cases": [
+    {
+      "id": "entity_context_runtime",
+      "covers": "entity",
+      "text": "Context Runtime 负责管理 Agent 的上下文。",
+      "passed": true,
+      "checks": [
+        {
+          "check": "min_claims",
+          "ok": true,
+          "detail": "claims=1"
+        },
+        {
+          "check": "evidence_present",
+          "ok": true,
+          "detail": "missing=[]"
+        },
+        {
+          "check": "evidence_located",
+          "ok": true,
+          "detail": "imprecise_quotes=0"
+        },
+        {
+          "check": "predicate_in_registry",
+          "ok": true,
+          "detail": "unregistered=[]"
+        },
+        {
+          "check": "entity_candidates",
+          "ok": true,
+          "detail": "hit=['Context Runtime'] declared=['context runtime']"
+        },
+        {
+          "check": "referenced_any",
+          "ok": true,
+          "detail": "want_any=['Context Runtime']"
+        }
+      ],
+      "steps": 2,
+      "observed": {
+        "status": "COMPLETED",
+        "entities": [
+          "Context Runtime"
+        ],
+        "claims": [
+          {
+            "subject": "Context Runtime",
+            "predicate": "used_for",
+            "object": "管理 Agent 的上下文",
+            "object_kind": "concept",
+            "object_class": "concept",
+            "polarity": "positive",
+            "temporal_signal": null,
+            "evidence_quote": "Context Runtime 负责管理 Agent 的上下文。"
+          }
+        ],
+        "rejected": [],
+        "persistence_failures": [],
+        "imprecise_quotes": 0
+      },
+      "raw_envelope": {
+        "entities": [
+          {
+            "name": "Context Runtime",
+            "types": [
+              "Software"
+            ],
+            "aliases": [],
+            "description": "A runtime component responsible for managing an Agent's context.",
+            "properties": {}
+          }
+        ],
+        "claims": [
+          {
+            "subject": "Context Runtime",
+            "predicate": "used_for",
+            "object": "管理 Agent 的上下文",
+            "object_kind": "concept",
+            "temporal_signal": null,
+            "claim_type": "definitional",
+            "polarity": "positive",
+            "modality": "asserted",
+            "content": null,
+            "context": {},
+            "confidence": 0.85,
+            "source_chunk": "2d0b18c2-482d-42ec-9738-51b4fe308e6d",
+            "evidence_quote": "Context Runtime 负责管理 Agent 的上下文。"
+          }
+        ],
+        "events": [],
+        "ideas": [],
+        "questions": []
+      }
+    },
+    {
+      "id": "concept_progressive_loading",
+      "covers": "concept",
+      "text": "渐进式上下文加载是一种上下文管理机制。",
+      "passed": true,
+      "checks": [
+        {
+          "check": "min_claims",
+          "ok": true,
+          "detail": "claims=1"
+        },
+        {
+          "check": "evidence_present",
+          "ok": true,
+          "detail": "missing=[]"
+        },
+        {
+          "check": "evidence_located",
+          "ok": true,
+          "detail": "imprecise_quotes=0"
+        },
+        {
+          "check": "predicate_in_registry",
+          "ok": true,
+          "detail": "unregistered=[]"
+        },
+        {
+          "check": "no_literal_object",
+          "ok": true,
+          "detail": "literal_objects=[]"
+        },
+        {
+          "check": "object_kind_in",
+          "ok": true,
+          "detail": "classes=['concept'] allowed=['concept']"
+        }
+      ],
+      "steps": 2,
+      "observed": {
+        "status": "COMPLETED",
+        "entities": [
+          "渐进式上下文加载"
+        ],
+        "claims": [
+          {
+            "subject": "渐进式上下文加载",
+            "predicate": "classified_as",
+            "object": "上下文管理机制",
+            "object_kind": "concept",
+            "object_class": "concept",
+            "polarity": "positive",
+            "temporal_signal": null,
+            "evidence_quote": "渐进式上下文加载是一种上下文管理机制。"
+          }
+        ],
+        "rejected": [],
+        "persistence_failures": [],
+        "imprecise_quotes": 0
+      },
+      "raw_envelope": {
+        "entities": [
+          {
+            "name": "渐进式上下文加载",
+            "types": [
+              "Concept",
+              "Method"
+            ],
+            "aliases": [],
+            "description": "一种上下文管理机制",
+            "properties": {}
+          }
+        ],
+        "claims": [
+          {
+            "subject": "渐进式上下文加载",
+            "predicate": "classified_as",
+            "object": "上下文管理机制",
+            "object_kind": "concept",
+            "temporal_signal": null,
+            "claim_type": "definitional",
+            "polarity": "positive",
+            "modality": "asserted",
+            "content": "渐进式上下文加载是一种上下文管理机制。",
+            "context": {},
+            "confidence": 0.9,
+            "source_chunk": "d59bcb15-366a-422a-a72f-b7540271fcb7",
+            "evidence_quote": "渐进式上下文加载是一种上下文管理机制。"
+          }
+        ],
+        "events": [],
+        "ideas": [],
+        "questions": []
+      }
+    },
+    {
+      "id": "literal_weekly_frequency",
+      "covers": "literal",
+      "text": "任务每周执行一次。",
+      "passed": true,
+      "checks": [
+        {
+          "check": "min_claims",
+          "ok": true,
+          "detail": "claims=1"
+        },
+        {
+          "check": "evidence_present",
+          "ok": true,
+          "detail": "missing=[]"
+        },
+        {
+          "check": "evidence_located",
+          "ok": true,
+          "detail": "imprecise_quotes=0"
+        },
+        {
+          "check": "predicate_in_registry",
+          "ok": true,
+          "detail": "unregistered=[]"
+        },
+        {
+          "check": "no_declared_entity",
+          "ok": true,
+          "detail": "bad=[]"
+        },
+        {
+          "check": "no_entity_object",
+          "ok": true,
+          "detail": "entity_objects=[]"
+        }
+      ],
+      "steps": 2,
+      "observed": {
+        "status": "COMPLETED",
+        "entities": [],
+        "claims": [
+          {
+            "subject": "任务",
+            "predicate": "is",
+            "object": "每周执行一次",
+            "object_kind": "literal",
+            "object_class": "literal",
+            "polarity": "positive",
+            "temporal_signal": null,
+            "evidence_quote": "任务每周执行一次。"
+          }
+        ],
+        "rejected": [],
+        "persistence_failures": [],
+        "imprecise_quotes": 0
+      },
+      "raw_envelope": {
+        "entities": [],
+        "claims": [
+          {
+            "subject": "任务",
+            "predicate": "is",
+            "object": "每周执行一次",
+            "object_kind": "literal",
+            "temporal_signal": null,
+            "claim_type": "factual",
+            "polarity": "positive",
+            "modality": "asserted",
+            "content": "任务每周执行一次。",
+            "context": {
+              "frequency": "weekly",
+              "reference": "3bef99ea"
+            },
+            "confidence": 0.5,
+            "source_chunk": "c69919f4-d770-4b45-98d3-aa7d0a42d232",
+            "evidence_quote": "任务每周执行一次。"
+          }
+        ],
+        "events": [],
+        "ideas": [],
+        "questions": []
+      }
+    },
+    {
+      "id": "path_source_artifact",
+      "covers": "path",
+      "text": "配置文件位于 docs/context/runtime.md。",
+      "passed": true,
+      "checks": [
+        {
+          "check": "evidence_present",
+          "ok": true,
+          "detail": "missing=[]"
+        },
+        {
+          "check": "evidence_located",
+          "ok": true,
+          "detail": "imprecise_quotes=0"
+        },
+        {
+          "check": "predicate_in_registry",
+          "ok": true,
+          "detail": "unregistered=[]"
+        },
+        {
+          "check": "no_declared_entity",
+          "ok": true,
+          "detail": "bad=[]"
+        },
+        {
+          "check": "no_entity_object",
+          "ok": true,
+          "detail": "entity_objects=[]"
+        },
+        {
+          "check": "no_rejected_items",
+          "ok": true,
+          "detail": "rejected=[]"
+        }
+      ],
+      "steps": 2,
+      "observed": {
+        "status": "COMPLETED",
+        "entities": [],
+        "claims": [],
+        "rejected": [],
+        "persistence_failures": [],
+        "imprecise_quotes": 0
+      },
+      "raw_envelope": {
+        "entities": [],
+        "claims": [],
+        "events": [],
+        "ideas": [],
+        "questions": []
+      }
+    },
+    {
+      "id": "prose_slash_architecture",
+      "covers": "slash-prose",
+      "text": "客户端/服务端架构需要统一认证。",
+      "passed": true,
+      "checks": [
+        {
+          "check": "min_claims",
+          "ok": true,
+          "detail": "claims=1"
+        },
+        {
+          "check": "evidence_present",
+          "ok": true,
+          "detail": "missing=[]"
+        },
+        {
+          "check": "evidence_located",
+          "ok": true,
+          "detail": "imprecise_quotes=0"
+        },
+        {
+          "check": "predicate_in_registry",
+          "ok": true,
+          "detail": "unregistered=[]"
+        },
+        {
+          "check": "referenced_any",
+          "ok": true,
+          "detail": "want_any=['客户端/服务端架构', '客户端', '服务端']"
+        },
+        {
+          "check": "no_literal_object",
+          "ok": true,
+          "detail": "literal_objects=[]"
+        }
+      ],
+      "steps": 2,
+      "observed": {
+        "status": "COMPLETED",
+        "entities": [
+          "客户端/服务端架构",
+          "统一认证"
+        ],
+        "claims": [
+          {
+            "subject": "客户端/服务端架构",
+            "predicate": "requires",
+            "object": "统一认证",
+            "object_kind": "entity",
+            "object_class": "entity",
+            "polarity": "positive",
+            "temporal_signal": null,
+            "evidence_quote": "客户端/服务端架构需要统一认证。"
+          }
+        ],
+        "rejected": [],
+        "persistence_failures": [],
+        "imprecise_quotes": 0
+      },
+      "raw_envelope": {
+        "entities": [
+          {
+            "name": "客户端/服务端架构",
+            "types": [
+              "Technology"
+            ],
+            "aliases": [],
+            "description": "一种客户端/服务端（C/S）架构，本批次中提出其需要统一认证。",
+            "properties": {}
+          },
+          {
+            "name": "统一认证",
+            "types": [
+              "Technology"
+            ],
+            "aliases": [],
+            "description": "统一认证能力，本批次中被指出为客户端/服务端架构所需。",
+            "properties": {}
+          }
+        ],
+        "claims": [
+          {
+            "subject": "客户端/服务端架构",
+            "predicate": "requires",
+            "object": "统一认证",
+            "object_kind": "entity",
+            "temporal_signal": null,
+            "claim_type": "normative",
+            "polarity": "positive",
+            "modality": "necessary",
+            "content": null,
+            "context": {},
+            "confidence": 0.72,
+            "source_chunk": "7a9bbfbf-8128-41ca-9f60-5e8526919d1b",
+            "evidence_quote": "客户端/服务端架构需要统一认证。"
+          }
+        ],
+        "events": [],
+        "ideas": [
+          {
+            "content": "客户端/服务端架构需要统一认证。",
+            "status": "candidate",
+            "confidence": 0.7,
+            "source_chunk": "7a9bbfbf-8128-41ca-9f60-5e8526919d1b",
+            "evidence_quote": "客户端/服务端架构需要统一认证。"
+          }
+        ],
+        "questions": []
+      }
+    },
+    {
+      "id": "prose_slash_concept_pair",
+      "covers": "slash-concept",
+      "text": "Static Context / Dynamic Context 是两种上下文模式。",
+      "passed": true,
+      "checks": [
+        {
+          "check": "min_claims",
+          "ok": true,
+          "detail": "claims=2"
+        },
+        {
+          "check": "evidence_present",
+          "ok": true,
+          "detail": "missing=[]"
+        },
+        {
+          "check": "evidence_located",
+          "ok": true,
+          "detail": "imprecise_quotes=0"
+        },
+        {
+          "check": "predicate_in_registry",
+          "ok": true,
+          "detail": "unregistered=[]"
+        },
+        {
+          "check": "referenced_any",
+          "ok": true,
+          "detail": "want_any=['Static Context / Dynamic Context', 'Static Context', 'Dynamic Context']"
+        },
+        {
+          "check": "no_literal_object",
+          "ok": true,
+          "detail": "literal_objects=[]"
+        }
+      ],
+      "steps": 2,
+      "observed": {
+        "status": "COMPLETED",
+        "entities": [
+          "Static Context",
+          "Dynamic Context"
+        ],
+        "claims": [
+          {
+            "subject": "Static Context",
+            "predicate": "classified_as",
+            "object": "context mode",
+            "object_kind": "concept",
+            "object_class": "concept",
+            "polarity": "positive",
+            "temporal_signal": null,
+            "evidence_quote": "Static Context / Dynamic Context 是两种上下文模式。"
+          },
+          {
+            "subject": "Dynamic Context",
+            "predicate": "classified_as",
+            "object": "context mode",
+            "object_kind": "concept",
+            "object_class": "concept",
+            "polarity": "positive",
+            "temporal_signal": null,
+            "evidence_quote": "Static Context / Dynamic Context 是两种上下文模式。"
+          }
+        ],
+        "rejected": [],
+        "persistence_failures": [],
+        "imprecise_quotes": 0
+      },
+      "raw_envelope": {
+        "entities": [
+          {
+            "name": "Static Context",
+            "types": [
+              "Concept"
+            ],
+            "aliases": [],
+            "description": "One of two context modes, contrasted with Dynamic Context.",
+            "properties": {}
+          },
+          {
+            "name": "Dynamic Context",
+            "types": [
+              "Concept"
+            ],
+            "aliases": [],
+            "description": "One of two context modes, contrasted with Static Context.",
+            "properties": {}
+          }
+        ],
+        "claims": [
+          {
+            "subject": "Static Context",
+            "predicate": "classified_as",
+            "object": "context mode",
+            "object_kind": "concept",
+            "temporal_signal": null,
+            "claim_type": "definitional",
+            "polarity": "positive",
+            "modality": "asserted",
+            "content": "Static Context is one of the two context modes.",
+            "context": {},
+            "confidence": 0.87,
+            "source_chunk": "b9b4de01-6bda-44ea-9b83-6ade2645dc99",
+            "evidence_quote": "Static Context / Dynamic Context 是两种上下文模式。"
+          },
+          {
+            "subject": "Dynamic Context",
+            "predicate": "classified_as",
+            "object": "context mode",
+            "object_kind": "concept",
+            "temporal_signal": null,
+            "claim_type": "definitional",
+            "polarity": "positive",
+            "modality": "asserted",
+            "content": "Dynamic Context is one of the two context modes.",
+            "context": {},
+            "confidence": 0.87,
+            "source_chunk": "b9b4de01-6bda-44ea-9b83-6ade2645dc99",
+            "evidence_quote": "Static Context / Dynamic Context 是两种上下文模式。"
+          }
+        ],
+        "events": [],
+        "ideas": [],
+        "questions": []
+      }
+    },
+    {
+      "id": "predicate_registry_ceo",
+      "covers": "predicate",
+      "text": "苹果现任 CEO 是 John Ternus。",
+      "passed": true,
+      "checks": [
+        {
+          "check": "min_claims",
+          "ok": true,
+          "detail": "claims=1"
+        },
+        {
+          "check": "evidence_present",
+          "ok": true,
+          "detail": "missing=[]"
+        },
+        {
+          "check": "evidence_located",
+          "ok": true,
+          "detail": "imprecise_quotes=0"
+        },
+        {
+          "check": "predicate_in_registry",
+          "ok": true,
+          "detail": "unregistered=[]"
+        },
+        {
+          "check": "predicate_not",
+          "ok": true,
+          "detail": "forbidden=[]"
+        },
+        {
+          "check": "referenced_any",
+          "ok": true,
+          "detail": "want_any=['John Ternus']"
+        }
+      ],
+      "steps": 2,
+      "observed": {
+        "status": "COMPLETED",
+        "entities": [
+          "苹果",
+          "John Ternus"
+        ],
+        "claims": [
+          {
+            "subject": "苹果",
+            "predicate": "is",
+            "object": "John Ternus",
+            "object_kind": "entity",
+            "object_class": "entity",
+            "polarity": "positive",
+            "temporal_signal": "current",
+            "evidence_quote": "苹果现任 CEO 是 John Ternus。 [c7a8df01]"
+          }
+        ],
+        "rejected": [],
+        "persistence_failures": [],
+        "imprecise_quotes": 0
+      },
+      "raw_envelope": {
+        "entities": [
+          {
+            "name": "苹果",
+            "types": [
+              "Organization"
+            ],
+            "aliases": [],
+            "description": "该公司，其现任 CEO 为 John Ternus",
+            "properties": {}
+          },
+          {
+            "name": "John Ternus",
+            "types": [
+              "Person"
+            ],
+            "aliases": [],
+            "description": "苹果现任 CEO",
+            "properties": {}
+          }
+        ],
+        "claims": [
+          {
+            "subject": "苹果",
+            "predicate": "is",
+            "object": "John Ternus",
+            "object_kind": "entity",
+            "temporal_signal": "current",
+            "claim_type": "factual",
+            "polarity": "positive",
+            "modality": "asserted",
+            "content": "苹果现任 CEO 是 John Ternus。",
+            "context": {},
+            "confidence": 0.9,
+            "source_chunk": "9ea81fff-f8e1-425a-8439-4db2338837bd",
+            "evidence_quote": "苹果现任 CEO 是 John Ternus。 [c7a8df01]"
+          }
+        ],
+        "events": [],
+        "ideas": [],
+        "questions": []
+      }
+    },
+    {
+      "id": "temporal_former_ceo",
+      "covers": "temporal",
+      "text": "Tim Cook 曾经担任苹果 CEO。",
+      "passed": true,
+      "checks": [
+        {
+          "check": "min_claims",
+          "ok": true,
+          "detail": "claims=1"
+        },
+        {
+          "check": "evidence_present",
+          "ok": true,
+          "detail": "missing=[]"
+        },
+        {
+          "check": "evidence_located",
+          "ok": true,
+          "detail": "imprecise_quotes=0"
+        },
+        {
+          "check": "predicate_in_registry",
+          "ok": true,
+          "detail": "unregistered=[]"
+        },
+        {
+          "check": "predicate_not_containing",
+          "ok": true,
+          "detail": "bad=[]"
+        },
+        {
+          "check": "temporal_signal_in",
+          "ok": true,
+          "detail": "temporal_signals=['former']"
+        }
+      ],
+      "steps": 2,
+      "observed": {
+        "status": "COMPLETED",
+        "entities": [
+          "Tim Cook",
+          "苹果"
+        ],
+        "claims": [
+          {
+            "subject": "Tim Cook",
+            "predicate": "is",
+            "object": "苹果",
+            "object_kind": "entity",
+            "object_class": "entity",
+            "polarity": "positive",
+            "temporal_signal": "former",
+            "evidence_quote": "Tim Cook 曾经担任苹果 CEO。"
+          }
+        ],
+        "rejected": [],
+        "persistence_failures": [],
+        "imprecise_quotes": 0
+      },
+      "raw_envelope": {
+        "entities": [
+          {
+            "name": "Tim Cook",
+            "types": [
+              "Person"
+            ],
+            "aliases": [],
+            "description": "Person who formerly served as CEO of Apple",
+            "properties": {}
+          },
+          {
+            "name": "苹果",
+            "types": [
+              "Organization"
+            ],
+            "aliases": [],
+            "description": "Company whose CEO was formerly Tim Cook",
+            "properties": {}
+          }
+        ],
+        "claims": [
+          {
+            "subject": "Tim Cook",
+            "predicate": "is",
+            "object": "苹果",
+            "object_kind": "entity",
+            "temporal_signal": "former",
+            "claim_type": "factual",
+            "polarity": "positive",
+            "modality": "asserted",
+            "content": "Tim Cook 曾经担任苹果 CEO。",
+            "context": {
+              "role": "CEO"
+            },
+            "confidence": 0.9,
+            "source_chunk": "4dbb91ef-0376-497e-9916-74f8ab5a2512",
+            "evidence_quote": "Tim Cook 曾经担任苹果 CEO。"
+          }
+        ],
+        "events": [],
+        "ideas": [],
+        "questions": []
+      }
+    },
+    {
+      "id": "negative_polarity",
+      "covers": "polarity",
+      "text": "苹果不是微软的一部分。",
+      "passed": true,
+      "checks": [
+        {
+          "check": "min_claims",
+          "ok": true,
+          "detail": "claims=1"
+        },
+        {
+          "check": "evidence_present",
+          "ok": true,
+          "detail": "missing=[]"
+        },
+        {
+          "check": "evidence_located",
+          "ok": true,
+          "detail": "imprecise_quotes=0"
+        },
+        {
+          "check": "predicate_in_registry",
+          "ok": true,
+          "detail": "unregistered=[]"
+        },
+        {
+          "check": "polarity_in",
+          "ok": true,
+          "detail": "polarities=['negative']"
+        }
+      ],
+      "steps": 2,
+      "observed": {
+        "status": "COMPLETED",
+        "entities": [
+          "苹果",
+          "微软"
+        ],
+        "claims": [
+          {
+            "subject": "苹果",
+            "predicate": "is",
+            "object": "微软",
+            "object_kind": "entity",
+            "object_class": "entity",
+            "polarity": "negative",
+            "temporal_signal": null,
+            "evidence_quote": "苹果不是微软的一部分。"
+          }
+        ],
+        "rejected": [],
+        "persistence_failures": [],
+        "imprecise_quotes": 0
+      },
+      "raw_envelope": {
+        "entities": [
+          {
+            "name": "苹果",
+            "types": [
+              "Organization"
+            ],
+            "aliases": [],
+            "description": null,
+            "properties": {}
+          },
+          {
+            "name": "微软",
+            "types": [
+              "Organization"
+            ],
+            "aliases": [],
+            "description": null,
+            "properties": {}
+          }
+        ],
+        "claims": [
+          {
+            "subject": "苹果",
+            "predicate": "is",
+            "object": "微软",
+            "object_kind": "entity",
+            "temporal_signal": null,
+            "claim_type": "factual",
+            "polarity": "negative",
+            "modality": "asserted",
+            "content": "苹果不是微软的一部分。",
+            "context": {},
+            "confidence": 0.9,
+            "source_chunk": "c0c3cb28-74bb-4c82-b4d8-bfa78f6d383f",
+            "evidence_quote": "苹果不是微软的一部分。"
+          }
+        ],
+        "events": [],
+        "ideas": [],
+        "questions": []
+      }
+    },
+    {
+      "id": "evidence_attachment",
+      "covers": "evidence",
+      "text": "文档明确指出，Context Runtime 支持按需加载上下文。",
+      "passed": true,
+      "checks": [
+        {
+          "check": "min_claims",
+          "ok": true,
+          "detail": "claims=1"
+        },
+        {
+          "check": "evidence_present",
+          "ok": true,
+          "detail": "missing=[]"
+        },
+        {
+          "check": "evidence_located",
+          "ok": true,
+          "detail": "imprecise_quotes=0"
+        },
+        {
+          "check": "predicate_in_registry",
+          "ok": true,
+          "detail": "unregistered=[]"
+        },
+        {
+          "check": "referenced_any",
+          "ok": true,
+          "detail": "want_any=['Context Runtime']"
+        }
+      ],
+      "steps": 2,
+      "observed": {
+        "status": "COMPLETED",
+        "entities": [
+          "Context Runtime"
+        ],
+        "claims": [
+          {
+            "subject": "Context Runtime",
+            "predicate": "supports",
+            "object": "按需加载上下文",
+            "object_kind": "literal",
+            "object_class": "literal",
+            "polarity": "positive",
+            "temporal_signal": null,
+            "evidence_quote": "Context Runtime 支持按需加载上下文"
+          }
+        ],
+        "rejected": [],
+        "persistence_failures": [],
+        "imprecise_quotes": 0
+      },
+      "raw_envelope": {
+        "entities": [
+          {
+            "name": "Context Runtime",
+            "types": [
+              "Software"
+            ],
+            "aliases": [],
+            "description": "A runtime component that supports on-demand loading of context.",
+            "properties": {}
+          }
+        ],
+        "claims": [
+          {
+            "subject": "Context Runtime",
+            "predicate": "supports",
+            "object": "按需加载上下文",
+            "object_kind": "literal",
+            "temporal_signal": null,
+            "claim_type": "factual",
+            "polarity": "positive",
+            "modality": "capable",
+            "content": "Context Runtime supports loading context on demand.",
+            "context": {},
+            "confidence": 0.7,
+            "source_chunk": "8f7c7ba2-6c73-4335-bfac-6f9ef1faf729",
+            "evidence_quote": "Context Runtime 支持按需加载上下文"
+          }
+        ],
+        "events": [],
+        "ideas": [],
+        "questions": []
+      }
+    }
+  ],
+  "approved": true,
+  "approval": "human-reviewed: every semantic invariant passed on the real model"
+}
