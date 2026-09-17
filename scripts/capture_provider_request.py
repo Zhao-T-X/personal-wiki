@@ -248,25 +248,42 @@ def _tool_audit(captures: list[dict]) -> dict:
     }
 
 
+def _paths(tag: str) -> tuple[Path, Path]:
+    """Snapshot files for one capture round.
+
+    A tag keeps a later round from overwriting the evidence of an earlier one: the
+    Step 13.4 capture is the "Before" that Step 14's saving is measured against, so
+    re-capturing into it would destroy the baseline the comparison needs.
+    """
+    suffix = f'_{tag}' if tag else ''
+    return (FIXTURE_DIR / f'provider_request_snapshot{suffix}.json',
+            FIXTURE_DIR / f'tool_usage_audit{suffix}.json')
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument('--both', action='store_true',
                     help='also capture the high end of the 8k-10k spread (2 calls total)')
+    ap.add_argument('--tag', default='',
+                    help='round label, e.g. step14 -> provider_request_snapshot_step14.json '
+                         '(default: overwrite the untagged snapshot)')
     ap.add_argument('--reaggregate', action='store_true',
-                    help='rebuild tool_usage_audit.json from the stored snapshot (0 calls)')
+                    help='rebuild the tool audit from the stored snapshot (0 calls)')
     args = ap.parse_args()
 
+    snapshot_path, tool_audit_path = _paths(args.tag)
+
     if args.reaggregate:
-        if not SNAPSHOT.exists():
-            print('no snapshot to re-aggregate')
+        if not snapshot_path.exists():
+            print(f'no snapshot to re-aggregate: {snapshot_path.name}')
             return 3
-        stored = json.loads(SNAPSHOT.read_text(encoding='utf-8'))
-        TOOL_AUDIT.write_text(json.dumps(_tool_audit(stored['captures']), ensure_ascii=False,
-                                         indent=2), encoding='utf-8')
+        stored = json.loads(snapshot_path.read_text(encoding='utf-8'))
+        tool_audit_path.write_text(json.dumps(_tool_audit(stored['captures']),
+                                              ensure_ascii=False, indent=2), encoding='utf-8')
         for row in _tool_audit(stored['captures'])['tools']:
             print(f"  {row['case']:<26} {row['tool']:<26} used={row['used']} "
                   f"every_call={row['sent_in_every_call']} tokens={row['schema_tokens']}")
-        print(f'wrote {TOOL_AUDIT.relative_to(ROOT)} (no provider calls)')
+        print(f'wrote {tool_audit_path.relative_to(ROOT)} (no provider calls)')
         return 0
 
     _bootstrap_env()
@@ -282,13 +299,15 @@ def main() -> int:
         'what': 'The real provider request at the client boundary '
                 '(agentscope _openai_chat _call_api -> client.chat.completions.create). '
                 'Credentials, auth headers and base URLs are stripped.',
+        'tag': args.tag or None,
         'secrets_included': False,
         'model': runtime().get('openai_model'),
         'captures': captures,
     }
-    SNAPSHOT.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding='utf-8')
-    TOOL_AUDIT.write_text(json.dumps(_tool_audit(captures), ensure_ascii=False, indent=2),
-                          encoding='utf-8')
+    snapshot_path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2),
+                             encoding='utf-8')
+    tool_audit_path.write_text(json.dumps(_tool_audit(captures), ensure_ascii=False, indent=2),
+                               encoding='utf-8')
 
     for capture_ in captures:
         request = capture_['request']
@@ -313,8 +332,41 @@ def main() -> int:
         print(f"  provider prompt (base call): {layers['provider_reported_prompt_base_call']}")
         print(f"  provider prompt (step sum) : {layers['provider_reported_prompt_step_total']}")
         print(f"  provider unattributed      : {layers['provider_unattributed']}")
-    print(f"\nwrote {SNAPSHOT.relative_to(ROOT)} and {TOOL_AUDIT.relative_to(ROOT)}")
+    print(f"\nwrote {snapshot_path.relative_to(ROOT)} and {tool_audit_path.relative_to(ROOT)}")
+
+    # A tagged round is a change to the tool surface, so report the delta against the
+    # untagged baseline it replaced. Two calls per step means the per-request saving
+    # counts twice.
+    baseline = FIXTURE_DIR / 'provider_request_snapshot.json'
+    if args.tag and baseline.exists():
+        base = json.loads(baseline.read_text(encoding='utf-8'))['captures'][0]
+        print(f'\nTOOL SURFACE DELTA (vs {baseline.name})')
+        print(f"  tools sent                : {base['calls'][0]['tool_names']} -> "
+              f"{captures[0]['calls'][0]['tool_names']}")
+        # The system prompt is the first message of the base call and is byte-identical
+        # apart from what the tool surface changed, so this delta is structural.
+        for label, path in (('system prompt', ('messages', 0, 'chars')),
+                            ('system prompt est tokens', ('messages', 0, 'estimated_tokens'))):
+            field = path[-1]
+            before_value = base['request'][path[0]][path[1]][field]
+            after_value = captures[0]['request'][path[0]][path[1]][field]
+            print(f'  {label:<26}: {before_value} -> {after_value} '
+                  f'({after_value - before_value:+})')
+        before_tools = _tool_schema_tokens(base)
+        after_tools = _tool_schema_tokens(captures[0])
+        step_calls = captures[0]['provider_calls_in_one_step']
+        print(f"  tool schema tokens/request: {before_tools} -> {after_tools} "
+              f"(-{before_tools - after_tools})")
+        print(f"  tool schema tokens/step   : {before_tools * step_calls} -> "
+              f"{after_tools * step_calls} (-{(before_tools - after_tools) * step_calls}, "
+              f"{step_calls} calls/step)")
+        print('  note: the provider-reported step total is NOT comparable between rounds '
+              '(call 1 grows with however many references the model decides to fetch).')
     return 0
+
+
+def _tool_schema_tokens(capture_: dict) -> int:
+    return _tokens(json.dumps(capture_['calls'][0]['tools'], ensure_ascii=False))
 
 
 if __name__ == '__main__':

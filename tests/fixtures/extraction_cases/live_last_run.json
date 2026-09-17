@@ -1,47 +1,47 @@
 {
-  "ran_at": "2026-09-17T09:04:00+00:00",
+  "ran_at": "2026-09-17T09:26:58+00:00",
   "model": "deepseek-v4-flash",
   "metrics": {
-    "cases": 1,
-    "semantic_cases": 1,
+    "cases": 2,
+    "semantic_cases": 2,
     "abstention_cases": 0,
-    "structural_compliance": "1/1",
-    "registry_compliance": "1/1",
-    "semantic_accuracy": "1/1",
+    "structural_compliance": "2/2",
+    "registry_compliance": "2/2",
+    "semantic_accuracy": "2/2",
     "abstention_behavior": "n/a",
-    "semantic_checks_passed": "3/3",
+    "semantic_checks_passed": "8/8",
     "failed_cases": [],
     "failed_abstention": []
   },
   "cost": {
-    "steps": 2,
-    "prompt_tokens": 8852,
-    "completion_tokens": 1418,
-    "model_calls": 2,
-    "cases": 1,
-    "estimated_cost_usd": 0.006553,
+    "steps": 4,
+    "prompt_tokens": 16102,
+    "completion_tokens": 1867,
+    "model_calls": 4,
+    "cases": 2,
+    "estimated_cost_usd": 0.010852,
     "price_per_1k_in": 0.0005,
     "price_per_1k_out": 0.0015,
-    "prompt_tokens_per_step": 4426,
+    "prompt_tokens_per_step": 4026,
     "by_step": {
       "detect_batch": {
-        "calls": 1,
-        "prompt_tokens": 811,
-        "completion_tokens": 93
+        "calls": 2,
+        "prompt_tokens": 1636,
+        "completion_tokens": 289
       },
       "extract_batch": {
-        "calls": 1,
-        "prompt_tokens": 8041,
-        "completion_tokens": 1325
+        "calls": 2,
+        "prompt_tokens": 14466,
+        "completion_tokens": 1578
       }
     }
   },
   "cases": [
     {
-      "id": "literal_chunk_size",
+      "id": "concept_progressive_loading",
       "kind": "semantic",
-      "covers": "literal",
-      "text": "最大 chunk 为 8192 tokens。",
+      "covers": "concept",
+      "text": "渐进式上下文加载是一种上下文管理机制。",
       "checks": [
         {
           "layer": "structural",
@@ -69,15 +69,9 @@
         },
         {
           "layer": "structural",
-          "check": "no_entity_object",
+          "check": "no_literal_object",
           "ok": true,
-          "detail": "entity_objects=[]"
-        },
-        {
-          "layer": "structural",
-          "check": "no_declared_entity",
-          "ok": true,
-          "detail": "bad=[]"
+          "detail": "literal_objects=[]"
         },
         {
           "layer": "registry",
@@ -89,24 +83,23 @@
           "layer": "semantic",
           "check": "claim_exists",
           "ok": true,
-          "detail": "about=chunk subjects=['chunk']"
-        },
-        {
-          "layer": "semantic",
-          "check": "subject_is",
-          "ok": true,
-          "detail": "subjects=['chunk'] want=chunk"
+          "detail": "about=渐进式上下文加载 subjects=['渐进式上下文加载']"
         },
         {
           "layer": "semantic",
           "check": "object_kind_is",
           "ok": true,
-          "detail": "kinds=['literal'] want=literal"
+          "detail": "kinds=['concept'] want=concept"
+        },
+        {
+          "layer": "semantic",
+          "check": "declared_kind_consistency",
+          "ok": true,
+          "detail": "object_declared_as_entity_but_kinded=[]"
         }
       ],
       "by_layer": {
         "structural": [
-          true,
           true,
           true,
           true,
@@ -133,38 +126,46 @@
         {
           "step": "detect_batch",
           "calls": 1,
-          "prompt_tokens": 811,
-          "completion_tokens": 93
+          "prompt_tokens": 817,
+          "completion_tokens": 148
         },
         {
           "step": "extract_batch",
           "calls": 1,
-          "prompt_tokens": 8041,
-          "completion_tokens": 1325
+          "prompt_tokens": 7231,
+          "completion_tokens": 906
         }
       ],
-      "prompt_tokens": 8852,
-      "completion_tokens": 1418,
+      "prompt_tokens": 8048,
+      "completion_tokens": 1054,
       "raw_envelope": {
-        "entities": [],
+        "entities": [
+          {
+            "name": "渐进式上下文加载",
+            "types": [
+              "Concept",
+              "Method"
+            ],
+            "aliases": [],
+            "description": "一种上下文管理机制",
+            "properties": {}
+          }
+        ],
         "claims": [
           {
-            "subject": "chunk",
-            "predicate": "is",
-            "object": "8192 tokens",
-            "object_kind": "literal",
+            "subject": "渐进式上下文加载",
+            "predicate": "defined_as",
+            "object": "上下文管理机制",
+            "object_kind": "concept",
             "temporal_signal": null,
-            "claim_type": "factual",
+            "claim_type": "definitional",
             "polarity": "positive",
             "modality": "asserted",
-            "content": "最大 chunk 为 8192 tokens",
-            "context": {
-              "constraint": "maximum",
-              "unit": "tokens"
-            },
-            "confidence": 0.65,
-            "source_chunk": "aa97491d-1daa-46c6-b933-b35492be903c",
-            "evidence_quote": "最大 chunk 为 8192 tokens。"
+            "content": null,
+            "context": {},
+            "confidence": 0.9,
+            "source_chunk": "5287167b-7b32-4e2e-be45-19e0f31b42a0",
+            "evidence_quote": "渐进式上下文加载是一种上下文管理机制。"
           }
         ],
         "events": [],
@@ -173,25 +174,244 @@
       },
       "observed": {
         "status": "COMPLETED",
-        "entities": [],
+        "entities": [
+          {
+            "name": "渐进式上下文加载",
+            "types": [
+              "Concept",
+              "Method"
+            ],
+            "aliases": [],
+            "description": "一种上下文管理机制",
+            "properties": {}
+          }
+        ],
         "claims": [
           {
-            "subject": "chunk",
-            "predicate": "is",
-            "object": "8192 tokens",
-            "object_kind": "literal",
+            "subject": "渐进式上下文加载",
+            "predicate": "defined_as",
+            "object": "上下文管理机制",
+            "object_kind": "concept",
             "temporal_signal": null,
+            "claim_type": "definitional",
+            "polarity": "positive",
+            "modality": "asserted",
+            "content": null,
+            "context": {},
+            "confidence": 0.9,
+            "source_chunk": "5287167b-7b32-4e2e-be45-19e0f31b42a0",
+            "evidence_quote": "渐进式上下文加载是一种上下文管理机制。"
+          }
+        ],
+        "rejected": [],
+        "imprecise_quotes": 0
+      }
+    },
+    {
+      "id": "predicate_registry_ceo",
+      "kind": "semantic",
+      "covers": "predicate",
+      "text": "苹果现任 CEO 是 John Ternus。",
+      "checks": [
+        {
+          "layer": "structural",
+          "check": "min_claims",
+          "ok": true,
+          "detail": "claims=1"
+        },
+        {
+          "layer": "structural",
+          "check": "evidence_present",
+          "ok": true,
+          "detail": "missing=[]"
+        },
+        {
+          "layer": "structural",
+          "check": "evidence_located",
+          "ok": true,
+          "detail": "imprecise_quotes=0"
+        },
+        {
+          "layer": "structural",
+          "check": "no_rejected_items",
+          "ok": true,
+          "detail": "rejected=[]"
+        },
+        {
+          "layer": "structural",
+          "check": "referenced_any",
+          "ok": true,
+          "detail": "want_any=['John Ternus']"
+        },
+        {
+          "layer": "registry",
+          "check": "predicate_in_registry",
+          "ok": true,
+          "detail": "unregistered=[]"
+        },
+        {
+          "layer": "registry",
+          "check": "predicate_not",
+          "ok": true,
+          "detail": "forbidden=[]"
+        },
+        {
+          "layer": "semantic",
+          "check": "claim_exists",
+          "ok": true,
+          "detail": "about=John Ternus subjects=['苹果']"
+        },
+        {
+          "layer": "semantic",
+          "check": "subject_is",
+          "ok": true,
+          "detail": "subjects=['苹果'] want=苹果"
+        },
+        {
+          "layer": "semantic",
+          "check": "object_is",
+          "ok": true,
+          "detail": "objects=['John Ternus'] want=John Ternus"
+        },
+        {
+          "layer": "semantic",
+          "check": "predicate_is",
+          "ok": true,
+          "detail": "predicates=['has_ceo'] want=has_ceo"
+        },
+        {
+          "layer": "semantic",
+          "check": "temporal_is",
+          "ok": true,
+          "detail": "temporal=['current'] want=current"
+        }
+      ],
+      "by_layer": {
+        "structural": [
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "registry": [
+          true,
+          true
+        ],
+        "semantic": [
+          true,
+          true,
+          true,
+          true,
+          true
+        ]
+      },
+      "passed": {
+        "structural": true,
+        "registry": true,
+        "semantic": true
+      },
+      "steps": 2,
+      "model_calls": 2,
+      "by_step": [
+        {
+          "step": "detect_batch",
+          "calls": 1,
+          "prompt_tokens": 819,
+          "completion_tokens": 141
+        },
+        {
+          "step": "extract_batch",
+          "calls": 1,
+          "prompt_tokens": 7235,
+          "completion_tokens": 672
+        }
+      ],
+      "prompt_tokens": 8054,
+      "completion_tokens": 813,
+      "raw_envelope": {
+        "entities": [
+          {
+            "name": "苹果",
+            "types": [
+              "Organization"
+            ],
+            "aliases": [
+              "Apple"
+            ],
+            "description": "被描述为拥有现任 CEO John Ternus 的公司实体。",
+            "properties": {}
+          },
+          {
+            "name": "John Ternus",
+            "types": [
+              "Person"
+            ],
+            "aliases": [],
+            "description": "被描述为苹果现任 CEO 的人物。",
+            "properties": {}
+          }
+        ],
+        "claims": [
+          {
+            "subject": "苹果",
+            "predicate": "has_ceo",
+            "object": "John Ternus",
+            "object_kind": "entity",
+            "temporal_signal": "current",
             "claim_type": "factual",
             "polarity": "positive",
             "modality": "asserted",
-            "content": "最大 chunk 为 8192 tokens",
-            "context": {
-              "constraint": "maximum",
-              "unit": "tokens"
-            },
-            "confidence": 0.65,
-            "source_chunk": "aa97491d-1daa-46c6-b933-b35492be903c",
-            "evidence_quote": "最大 chunk 为 8192 tokens。"
+            "content": null,
+            "context": {},
+            "confidence": 0.9,
+            "source_chunk": "752c50a2-3093-4141-8ce5-40c8f7fb3f44",
+            "evidence_quote": "苹果现任 CEO 是 John Ternus。"
+          }
+        ],
+        "events": [],
+        "ideas": [],
+        "questions": []
+      },
+      "observed": {
+        "status": "COMPLETED",
+        "entities": [
+          {
+            "name": "苹果",
+            "types": [
+              "Organization"
+            ],
+            "aliases": [
+              "Apple"
+            ],
+            "description": "被描述为拥有现任 CEO John Ternus 的公司实体。",
+            "properties": {}
+          },
+          {
+            "name": "John Ternus",
+            "types": [
+              "Person"
+            ],
+            "aliases": [],
+            "description": "被描述为苹果现任 CEO 的人物。",
+            "properties": {}
+          }
+        ],
+        "claims": [
+          {
+            "subject": "苹果",
+            "predicate": "has_ceo",
+            "object": "John Ternus",
+            "object_kind": "entity",
+            "temporal_signal": "current",
+            "claim_type": "factual",
+            "polarity": "positive",
+            "modality": "asserted",
+            "content": null,
+            "context": {},
+            "confidence": 0.9,
+            "source_chunk": "752c50a2-3093-4141-8ce5-40c8f7fb3f44",
+            "evidence_quote": "苹果现任 CEO 是 John Ternus。"
           }
         ],
         "rejected": [],

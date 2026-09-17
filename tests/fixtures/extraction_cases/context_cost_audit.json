@@ -10,12 +10,12 @@
     "case_input_chars": "~20-40"
   },
   "composition": {
-    "system_prompt_tokens": 1149,
-    "system_prompt_tokens_estimated": 600,
+    "system_prompt_tokens": 1135,
+    "system_prompt_tokens_estimated": 587,
     "structured_output_schema_tokens": 1555,
-    "tool_schema_tokens": 145,
+    "tool_schema_tokens": 103,
     "user_chunk_tokens": 20,
-    "system_prompt_chars": 2331,
+    "system_prompt_chars": 2276,
     "structured_output_schema_chars": 6218
   },
   "system_prompt_sections": [
@@ -46,15 +46,11 @@
     {
       "name": "tools",
       "source": "context.providers.tools.TOOL_CATALOG",
-      "tokens": 31,
+      "tokens": 17,
       "required": false
     }
   ],
   "tool_schemas": [
-    {
-      "name": "list_skills",
-      "tokens": 42
-    },
     {
       "name": "read_skill_reference",
       "tokens": 103
@@ -117,13 +113,13 @@
     },
     {
       "component": "tool catalogue line",
-      "tokens": 31,
+      "tokens": 17,
       "source": "context.providers.tools.TOOL_CATALOG",
       "injected_as": "inline"
     },
     {
       "component": "agent-skills block",
-      "tokens": 271,
+      "tokens": 1,
       "source": "AgentScope Toolkit.get_skill_instructions() from skills/",
       "injected_as": "system prompt, every call"
     },
@@ -134,8 +130,8 @@
       "injected_as": "every call"
     },
     {
-      "component": "tool schemas (Skill/list_skills/read_skill_reference)",
-      "tokens": 317,
+      "component": "tool schemas (read_skill_reference)",
+      "tokens": 146,
       "source": "Toolkit.get_tool_schemas()",
       "injected_as": "every call"
     },
@@ -149,20 +145,20 @@
   "context_budget": {
     "target_tokens": 2000,
     "hard_tokens": 3000,
-    "project_controlled_tokens": 2763,
+    "project_controlled_tokens": 2308,
     "within_target": false,
     "within_hard": true,
-    "warning": "EXTRACTION_CONTEXT_BUDGET_WARNING: project-controlled input context is 2763 tokens, above the 2000 target"
+    "warning": "EXTRACTION_CONTEXT_BUDGET_WARNING: project-controlled input context is 2308 tokens, above the 2000 target"
   },
-  "known_project_total_tokens": 2763,
-  "provider_total_tokens_per_call": 8041,
+  "known_project_total_tokens": 2308,
+  "provider_total_tokens_per_call": 7233,
   "provider_per_call_by_kind": {
-    "detect": 811,
-    "extract": 8041
+    "detect": 818,
+    "extract": 7233
   },
-  "unattributed_tokens": 5278,
+  "unattributed_tokens": 4925,
   "estimator_bias": {
-    "provider_over_estimate": 2.91,
+    "provider_over_estimate": 3.13,
     "note": "`estimate_tokens` charges 1 token per 4 ASCII chars, which under-counts JSON/punctuation-heavy text against a real tokenizer. The provider number is the truth; the composition above is a structure map, not a ledger. The remainder is therefore NOT \"AgentScope tokens\" — it is AgentScope scaffolding PLUS estimator bias, and the two cannot be separated offline."
   },
   "unattributed_note": "provider_total - known_project. NOT a measured figure and NOT purely AgentScope: it mixes AgentScope's final message assembly (agent identity, ReAct/tool-call contract, framing, provider-side tool/response-format wrapping) with the estimator's under-count of JSON. Reported separately from the components so it is never read as a fact.",
@@ -556,6 +552,51 @@
           "model_calls": 2,
           "prompt_tokens": 8852,
           "completion_tokens": 1418,
+          "chars_in": 23
+        }
+      ]
+    },
+    {
+      "ran_at": "2026-09-17T09:26:58+00:00",
+      "model": "deepseek-v4-flash",
+      "cost": {
+        "steps": 4,
+        "prompt_tokens": 16102,
+        "completion_tokens": 1867,
+        "model_calls": 4,
+        "cases": 2,
+        "estimated_cost_usd": 0.010852,
+        "price_per_1k_in": 0.0005,
+        "price_per_1k_out": 0.0015,
+        "prompt_tokens_per_step": 4026,
+        "by_step": {
+          "detect_batch": {
+            "calls": 2,
+            "prompt_tokens": 1636,
+            "completion_tokens": 289
+          },
+          "extract_batch": {
+            "calls": 2,
+            "prompt_tokens": 14466,
+            "completion_tokens": 1578
+          }
+        }
+      },
+      "cases": [
+        {
+          "case": "concept_progressive_loading",
+          "steps": 2,
+          "model_calls": 2,
+          "prompt_tokens": 8048,
+          "completion_tokens": 1054,
+          "chars_in": 19
+        },
+        {
+          "case": "predicate_registry_ceo",
+          "steps": 2,
+          "model_calls": 2,
+          "prompt_tokens": 8054,
+          "completion_tokens": 813,
           "chars_in": 23
         }
       ]

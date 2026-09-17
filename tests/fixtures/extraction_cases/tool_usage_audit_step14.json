@@ -1,0 +1,23 @@
+{
+  "what": "Which tools the extraction request carries, and which the model actually called. Sent schemas are not automatically useful ones.",
+  "provider_calls": 2,
+  "tools": [
+    {
+      "case": "literal_chunk_size",
+      "tool": "read_skill_reference",
+      "sent": true,
+      "used": true,
+      "sent_in_every_call": true,
+      "schema_tokens": 145
+    },
+    {
+      "case": "literal_chunk_size",
+      "tool": "GenerateStructuredOutput",
+      "sent": true,
+      "used": true,
+      "sent_in_every_call": true,
+      "schema_tokens": 1383
+    }
+  ],
+  "note": "Sent != needed. This round measures only; no tool was removed. A tool the model never calls is a candidate for a later round, not a finding by itself."
+}

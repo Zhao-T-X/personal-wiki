@@ -30,30 +30,37 @@ _ALLOW = PermissionDecision(
 )
 
 
-def build_toolkit(tools=None) -> Toolkit:
-    """Create a Toolkit with the LLM-Wiki tools and the local Agent Skills.
+def build_toolkit(tools=None, *, skills: bool = True) -> Toolkit:
+    """Create a Toolkit with the LLM-Wiki tools and (optionally) the local Agent Skills.
 
     Skills are registered through AgentScope's native skill loader, so the
     agent receives the skill catalogue in its system prompt and can open a
     skill contract with the built-in skill viewer tool.
+
+    ``skills=False`` registers no loader at all. That removes two things the loader
+    brings as a pair: the ``Skill`` viewer tool and the ``<agent-skills>`` catalogue
+    block AgentScope appends to the system prompt. They must go together — the block
+    instructs the model to use the ``Skill`` tool, so keeping the text without the tool
+    would advertise something that no longer exists. The extraction agent opts out
+    (Step 14): its skill contract is already inlined by the Context Runtime, and the
+    only registry tool its contract actually calls is ``read_skill_reference``.
     """
     # NOTE: an explicit empty list means "no custom tools", so only None
     # falls back to the default tool set.
     functions = DEFAULT_TOOLS if tools is None else list(tools)
     return Toolkit(
         tools=[FunctionTool(fn, permission=_ALLOW) for fn in functions],
-        skills_or_loaders=[
-            LocalSkillLoader(directory=str(SKILLS_DIR), scan_subdir=True),
-        ],
+        skills_or_loaders=([LocalSkillLoader(directory=str(SKILLS_DIR), scan_subdir=True)]
+                           if skills else []),
     )
 
 
-def build_agent(name: str, sys_prompt: str, tools=None) -> Agent:
+def build_agent(name: str, sys_prompt: str, tools=None, *, skills: bool = True) -> Agent:
     cfg = runtime()
     if not cfg.get("openai_api_key"):
         raise RuntimeError("LLM API key is not configured")
 
-    toolkit = build_toolkit(tools)
+    toolkit = build_toolkit(tools, skills=skills)
 
     credential = OpenAICredential(
         api_key=cfg["openai_api_key"],

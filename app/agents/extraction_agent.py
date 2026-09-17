@@ -1,9 +1,10 @@
 """The agent-driven knowledge extraction pipeline.
 
 Extraction is not a raw chat completion any more: it runs on an AgentScope
-``Agent`` that owns the reasoning-acting loop, can open the Knowledge
-Extraction skill, can load registries on demand through the skill tools, and
-must return its answer through the structured-output contract defined below.
+``Agent`` that owns the reasoning-acting loop, carries the Knowledge Extraction
+skill contract in its prompt, can load a registry reference on demand through
+``read_skill_reference``, and must return its answer through the
+structured-output contract defined below.
 
 The Pydantic models mirror ``schemas/extraction.schema.json``. Because
 AgentScope delivers the schema through tool calling, the closed vocabularies
@@ -22,7 +23,7 @@ from agentscope.message import UserMsg
 from .base import build_agent
 from ..config import runtime
 from ..prompt_profiles import compose_prompt
-from ..tools.skill_tools import list_skills, read_skill_reference
+from ..tools.skill_tools import read_skill_reference
 
 EntityType = Literal[
     "Person",
@@ -268,17 +269,42 @@ def wanted_kinds(detection: dict | Detection | None) -> set[str]:
 # Accuracy in `pytest -m smoke`.
 EXTRACTION_REFERENCES: list[str] = ['claim-predicates.md']
 
-# The extraction agent only needs skill access. It must not call knowledge-base
-# query tools while extracting a document.
-_SKILL_TOOLS = [list_skills, read_skill_reference]
+# The extraction agent's ENTIRE tool surface.
+#
+# It only needs registry access. It must not call knowledge-base query tools while
+# extracting a document — retrieving what we already know would let the model answer
+# from memory instead of from the source.
+#
+# Step 14 removed two tools from this list. `Skill` (AgentScope's skill viewer, added
+# by the skill loader) and `list_skills` were sent on every request of every extraction
+# step, and the captured real requests show the model never called either one: the only
+# registry access the extraction contract uses is `read_skill_reference`. Dropping the
+# loader also drops the `<agent-skills>` catalogue AgentScope appends to the system
+# prompt — text that advertised the removed tool and shipped an absolute local skill
+# path to the provider on every call.
+#
+# What stays, and why:
+#   read_skill_reference     the model's only way to pull claim-predicates.md /
+#                            entity-types.md on demand. The live semantic runs show this
+#                            access is what makes `has_ceo` and `concept` come out right.
+#   GenerateStructuredOutput not listed here: AgentScope adds it from the structured
+#                            schema passed to `reply()`. It is the extraction output
+#                            contract and cannot be removed (Step 12 §4).
+EXTRACTION_TOOLS = [read_skill_reference]
 
 
 def build_extraction_agent() -> Agent:
-    """Create the extraction agent with skill access and the v2 contract."""
+    """Create the extraction agent with the slimmest tool surface that still extracts.
+
+    No skill loader: the Context Runtime already inlines the skill contract into this
+    prompt (`EXTRACTION_REFERENCES`), and no path in the extraction workflow opens a
+    skill through the viewer tool.
+    """
     return build_agent(
         "ExtractionAgent",
-        compose_prompt("extractor", references=EXTRACTION_REFERENCES, tools=_SKILL_TOOLS),
-        tools=_SKILL_TOOLS,
+        compose_prompt("extractor", references=EXTRACTION_REFERENCES, tools=EXTRACTION_TOOLS),
+        tools=EXTRACTION_TOOLS,
+        skills=False,
     )
 
 

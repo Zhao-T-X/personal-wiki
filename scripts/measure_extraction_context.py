@@ -72,14 +72,14 @@ def last_run_per_call() -> dict:
 
 def measure() -> dict:
     _isolate()
-    from app.agents.extraction_agent import (EXTRACTION_REFERENCES, _SKILL_TOOLS,
+    from app.agents.extraction_agent import (EXTRACTION_REFERENCES, EXTRACTION_TOOLS,
                                              KIND_KEYS, Extraction)
     from app.db import init_db
     from app.prompt_profiles import build_context, CORE_PROMPTS, NON_NEGOTIABLE
 
     init_db()
     compiled = build_context('extractor', include_reference=True,
-                             references=EXTRACTION_REFERENCES, tools=_SKILL_TOOLS,
+                             references=EXTRACTION_REFERENCES, tools=EXTRACTION_TOOLS,
                              persist=False, use_cache=False)
     trace = compiled.to_trace()
     system_prompt = compiled.render()
@@ -90,7 +90,7 @@ def measure() -> dict:
 
     schema = json.dumps(Extraction.model_json_schema(), ensure_ascii=False)
     tool_schemas = []
-    for fn in _SKILL_TOOLS:
+    for fn in EXTRACTION_TOOLS:
         tool_schemas.append({'name': fn.__name__,
                              'tokens': _tokens(fn.__doc__ or '') + _tokens(
                                  json.dumps(getattr(fn, '__annotations__', {}), default=str))})
@@ -160,12 +160,15 @@ def measure() -> dict:
         live_agent = build_extraction_agent()
         live_schemas = _asyncio.run(live_agent.toolkit.get_tool_schemas())
         tool_schema_tokens = _tokens(json.dumps(live_schemas, ensure_ascii=False, default=str))
+        tool_schema_names = [((s.get('function') or {}).get('name') or s.get('name'))
+                             for s in live_schemas]
         skill_block = _asyncio.run(live_agent.toolkit.get_skill_instructions())
         skill_block = (skill_block if isinstance(skill_block, str)
                        else json.dumps(skill_block, ensure_ascii=False, default=str))
         skill_block_tokens = _tokens(skill_block)
     except Exception as exc:  # introspection must never break the audit
         tool_schema_tokens = sum(t['tokens'] for t in tool_schemas)
+        tool_schema_names = [t['name'] for t in tool_schemas]
         skill_block_tokens = 0
         print(f'  (toolkit introspection unavailable: {type(exc).__name__})')
 
@@ -184,10 +187,11 @@ def measure() -> dict:
          'source': 'context.providers.tools.TOOL_CATALOG', 'injected_as': 'inline'},
         {'component': 'agent-skills block', 'tokens': skill_block_tokens,
          'source': 'AgentScope Toolkit.get_skill_instructions() from skills/',
-         'injected_as': 'system prompt, every call'},
+         'injected_as': ('system prompt, every call' if skill_block_tokens
+                         else 'not sent (Step 14: extraction agent registers no skill loader)')},
         {'component': 'structured-output schema', 'tokens': schema_tokens,
          'source': 'agents.extraction_agent.Extraction', 'injected_as': 'every call'},
-        {'component': 'tool schemas (Skill/list_skills/read_skill_reference)',
+        {'component': f"tool schemas ({'/'.join(tool_schema_names) or 'none'})",
          'tokens': tool_schema_tokens, 'source': 'Toolkit.get_tool_schemas()',
          'injected_as': 'every call'},
         {'component': 'user chunk', 'tokens': 20, 'source': 'the document batch',
