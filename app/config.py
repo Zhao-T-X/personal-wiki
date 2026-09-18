@@ -39,6 +39,12 @@ DEFAULTS = {
     # detection call. The audit switch exists so the A/B can compare the two pipelines
     # with everything else identical. It does NOT change the production default.
     'extraction_detection_mode': os.getenv('EXTRACTION_DETECTION_MODE', 'on').strip().lower(),
+    # Extraction skill variant (Step 17 minimality audit): "current" ships
+    # skills/knowledge-extraction/SKILL.md; "compact" ships SKILL_COMPACT.md — the same
+    # behavioural contract with the registry/schema restatements removed (557 -> 378 est.
+    # tokens). A/B only: production stays on "current" until a live canary shows semantic
+    # parity (see docs/development/extraction-skill-audit.md).
+    'extraction_skill_variant': os.getenv('EXTRACTION_SKILL_VARIANT', 'current').strip().lower(),
     # Per-agent context budgets in tokens, e.g. {"KnowledgeAgent": 2500}.
     # Empty means "use app/context/budget.py::AGENT_BUDGETS".
     'agent_context_budgets': {},

@@ -14,7 +14,7 @@ from ..planner import ContextPlan
 from ..policies import Load
 from ...runtime.task import TaskContext
 from ...skills import (load_skill, read_reference, reference_costs,
-                       reference_version, references_for, skill_version)
+                       reference_version, references_for, skill_source, skill_version)
 
 
 class SkillProvider:
@@ -29,7 +29,7 @@ class SkillProvider:
             id=f'skill:{skill}',
             type=TYPE_SKILL,
             content=f'[SKILL]\n{load_skill(skill)}',
-            source=f'skills/{skill}/SKILL.md',
+            source=skill_source(skill),
             priority=1.0, relevance=1.0, information_gain=0.8, evidence_strength=0.5,
             required=True,
             version=skill_version(skill),

@@ -25,14 +25,62 @@ def _strip_frontmatter(text: str) -> str:
     return text
 
 
-def load_skill(name: str, *, references: Iterable[str] = ()) -> str:
+# Named alternative contracts a skill ships *alongside* SKILL.md. Only the extraction
+# skill has one: Step 17's minimality audit added `compact` so the short contract can be
+# A/B'd against the production one without ever editing SKILL.md in place. An unknown
+# variant (or a skill with no variants) falls back to SKILL.md.
+SKILL_VARIANTS: dict[str, dict[str, str]] = {
+    'knowledge-extraction': {'compact': 'SKILL_COMPACT.md'},
+}
+
+# Config key that selects the extraction skill's variant. Read lazily so a test can flip it
+# per-run (config._OVERRIDES). Production default is 'current' -> SKILL.md.
+_VARIANT_CONFIG_KEY = 'extraction_skill_variant'
+
+
+def configured_variant(name: str) -> str | None:
+    """The variant name ``EXTRACTION_SKILL_VARIANT`` selects for ``name``, if any.
+
+    Returns ``None`` for the default (``current``), for a skill with no variants, or for
+    an unknown variant name — every one of those means "ship SKILL.md".
+    """
+    wanted = str(_runtime().get(_VARIANT_CONFIG_KEY) or 'current').strip().lower()
+    if wanted in {'', 'current', 'default'}:
+        return None
+    return wanted if wanted in SKILL_VARIANTS.get(name, {}) else None
+
+
+def _skill_file(name: str, variant: str | None = None) -> Path:
+    """The contract file to load: the named variant if it exists, else SKILL.md."""
+    skill_dir = SKILLS_DIR / _safe_name(name)
+    key = variant if variant is not None else configured_variant(name)
+    if key and key != 'current':
+        alt = SKILL_VARIANTS.get(name, {}).get(key)
+        if alt and (skill_dir / alt).exists():
+            return skill_dir / alt
+    return skill_dir / 'SKILL.md'
+
+
+def _runtime():
+    from .config import runtime
+    return runtime()
+
+
+def skill_source(name: str, variant: str | None = None) -> str:
+    """Repo-relative label of the contract file a load will use (trace/debug)."""
+    return f'skills/{_safe_name(name)}/{_skill_file(name, variant).name}'
+
+
+def load_skill(name: str, *, references: Iterable[str] = (), variant: str | None = None) -> str:
     """Load a compact skill contract and optional reference documents.
 
     SKILL.md is intentionally concise. Reference files are loaded only when the
     agent explicitly declares that it needs them, keeping the default context small.
+    ``variant`` picks an alternative contract (Step 17 ``compact``); the default reads the
+    variant ``EXTRACTION_SKILL_VARIANT`` names.
     """
     skill_dir = SKILLS_DIR / _safe_name(name)
-    skill_file = skill_dir / 'SKILL.md'
+    skill_file = _skill_file(name, variant)
     if not skill_file.exists():
         raise FileNotFoundError(f'Skill not found: {name}')
     parts = [_strip_frontmatter(skill_file.read_text(encoding='utf-8')).strip()]
@@ -83,9 +131,9 @@ def describe_skills() -> list[dict[str, Any]]:
     ]
 
 
-def read_skill_contract(name: str) -> str:
-    """Read a skill's SKILL.md contract."""
-    skill_file = SKILLS_DIR / _safe_name(name) / 'SKILL.md'
+def read_skill_contract(name: str, *, variant: str | None = None) -> str:
+    """Read a skill's contract body (SKILL.md, or the named variant)."""
+    skill_file = _skill_file(name, variant)
     if not skill_file.exists():
         raise ValueError(f'Skill not found: {name}')
     return _strip_frontmatter(skill_file.read_text(encoding='utf-8')).strip()
@@ -106,9 +154,13 @@ def _content_version(path: Path) -> str:
     return hashlib.sha1(path.read_bytes()).hexdigest()[:12]
 
 
-def skill_version(name: str) -> str:
-    """Content version of a skill contract."""
-    return _content_version(SKILLS_DIR / _safe_name(name) / 'SKILL.md')
+def skill_version(name: str, *, variant: str | None = None) -> str:
+    """Content version of the contract a load would use (variant-aware).
+
+    The cache key hashes this, so switching the extraction skill's variant invalidates
+    the compiled-prompt cache by construction instead of replaying the other contract.
+    """
+    return _content_version(_skill_file(name, variant))
 
 
 def reference_version(name: str, reference: str) -> str:
