@@ -49,7 +49,8 @@ def _reload_db(tmp_path):
 def test_planner_produces_budgets_and_keeps_references_lazy(tmp_path):
     _reload_db(tmp_path)
     from app.context import PLANNER as planner
-    from app.context.items import TYPE_REFERENCE, TYPE_SKILL, TYPE_TOOLS
+    from app.context.items import (TYPE_EXTRACTION_CONTEXT, TYPE_REFERENCE, TYPE_SKILL,
+                                   TYPE_TOOLS)
     from app.runtime import TaskContext, features_for
 
     task = TaskContext(task_type='extract', agent='ExtractionAgent', skill='knowledge-extraction',
@@ -63,11 +64,17 @@ def test_planner_produces_budgets_and_keeps_references_lazy(tmp_path):
     assert plan.section(TYPE_TOOLS).provider == 'tools'
     reference = plan.section(TYPE_REFERENCE)
     assert reference.lazy is True and reference.budget == 0
+    # Step 15: the prefetched extraction context is the opposite of a lazy reference —
+    # it is loaded content that replaces the fetch, so it gets a real budget and a cap.
+    prefetch = plan.section(TYPE_EXTRACTION_CONTEXT)
+    assert prefetch is not None
+    assert prefetch.lazy is False and prefetch.budget > 0
 
     trace = plan.to_trace()
     assert trace['agent'] == 'ExtractionAgent'
     assert {s['type'] for s in trace['sections']} == {
-        'bootstrap', 'skill', 'reference', 'tools', 'custom', 'constraints'}
+        'bootstrap', 'skill', 'reference', 'extraction_context', 'tools', 'custom',
+        'constraints'}
 
 
 def test_reasoning_level_adapts_to_task_signals(tmp_path):

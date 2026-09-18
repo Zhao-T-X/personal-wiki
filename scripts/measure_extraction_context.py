@@ -73,13 +73,20 @@ def last_run_per_call() -> dict:
 def measure() -> dict:
     _isolate()
     from app.agents.extraction_agent import (EXTRACTION_REFERENCES, EXTRACTION_TOOLS,
-                                             KIND_KEYS, Extraction)
+                                             KIND_KEYS, Extraction,
+                                             extraction_prompt_inputs)
     from app.db import init_db
     from app.prompt_profiles import build_context, CORE_PROMPTS, NON_NEGOTIABLE
 
     init_db()
+    # Measure the assembly the configured mode actually sends, through the same function
+    # the agent builder uses — a hand-rolled copy is how a report describes a prompt that
+    # no call ever makes.
+    sample_chunk = ('[CHUNK audit]\n苹果现任 CEO 是 John Ternus。')
+    inputs = extraction_prompt_inputs(sample_chunk)
     compiled = build_context('extractor', include_reference=True,
-                             references=EXTRACTION_REFERENCES, tools=EXTRACTION_TOOLS,
+                             references=inputs['references'], tools=inputs['tools'],
+                             extra_items=inputs['extra_items'],
                              persist=False, use_cache=False)
     trace = compiled.to_trace()
     system_prompt = compiled.render()
@@ -152,20 +159,41 @@ def measure() -> dict:
 
     skill_text = (ROOT / 'skills/knowledge-extraction/SKILL.md').read_text(encoding='utf-8')
 
+    # Step 15 prefetch: the three parts the planner contributes, itemised so the
+    # composition table can show them separately rather than as one opaque block.
+    plan = inputs['plan']
+    prefetch_parts = {
+        'general': _tokens(plan.general_extraction_context) if plan else 0,
+        'predicate': _tokens(plan.predicate_context) if plan else 0,
+        'entity_type': _tokens(plan.entity_type_context) if plan else 0,
+    }
+
     # The real tool schemas and the AgentScope skill block, measured from the live agent
     # rather than guessed from docstrings (the first audit under-counted both).
     import asyncio as _asyncio
-    from app.agents.extraction_agent import build_extraction_agent
+    from app.agents.extraction_agent import build_extraction_agent, extraction_context_mode
     try:
-        live_agent = build_extraction_agent()
+        # Built with a representative chunk: in prefetch mode the context (and therefore
+        # the tool surface and the prompt) depends on the payload, and an empty one would
+        # measure a shape no real call ever has.
+        live_agent = build_extraction_agent(sample_chunk)
         live_schemas = _asyncio.run(live_agent.toolkit.get_tool_schemas())
-        tool_schema_tokens = _tokens(json.dumps(live_schemas, ensure_ascii=False, default=str))
+        # An empty surface is zero tokens, not one: `json.dumps([])` is two characters and
+        # the estimator would charge for them, which reads as "a tool costs 1 token".
+        tool_schema_tokens = (_tokens(json.dumps(live_schemas, ensure_ascii=False, default=str))
+                              if live_schemas else 0)
         tool_schema_names = [((s.get('function') or {}).get('name') or s.get('name'))
                              for s in live_schemas]
-        skill_block = _asyncio.run(live_agent.toolkit.get_skill_instructions())
-        skill_block = (skill_block if isinstance(skill_block, str)
-                       else json.dumps(skill_block, ensure_ascii=False, default=str))
-        skill_block_tokens = _tokens(skill_block)
+        tool_schemas = [{'name': name,
+                         'tokens': _tokens(json.dumps(schema, ensure_ascii=False, default=str))}
+                        for name, schema in zip(tool_schema_names, live_schemas)]
+        block = _asyncio.run(live_agent.toolkit.get_skill_instructions())
+        if not block:
+            skill_block_tokens = 0
+        elif isinstance(block, str):
+            skill_block_tokens = _tokens(block)
+        else:
+            skill_block_tokens = _tokens(json.dumps(block, ensure_ascii=False, default=str))
     except Exception as exc:  # introspection must never break the audit
         tool_schema_tokens = sum(t['tokens'] for t in tool_schemas)
         tool_schema_names = [t['name'] for t in tool_schemas]
@@ -183,6 +211,18 @@ def measure() -> dict:
         {'component': 'reference (LEDGER ONLY, never rendered)', 'tokens': reference_tokens,
          'source': 'references/claim-predicates.md',
          'injected_as': 'ledger only — dropped by render()'},
+        {'component': 'extraction context header (prefetch)', 'tokens': prefetch_parts['general'],
+         'source': 'context.extraction_context._general_extraction_context',
+         'injected_as': 'rendered once' if prefetch_parts['general'] else 'not sent'},
+        {'component': 'predicate context (prefetch)', 'tokens': prefetch_parts['predicate'],
+         'source': 'context.extraction_context + claim-predicate-registry.json',
+         'injected_as': 'rendered once' if prefetch_parts['predicate'] else 'not sent'},
+        {'component': 'entity type context (prefetch)', 'tokens': prefetch_parts['entity_type'],
+         'source': 'references/entity-types.md (index + relevant boundaries)',
+         'injected_as': 'rendered once' if prefetch_parts['entity_type'] else 'not sent'},
+        {'component': 'object kind context', 'tokens': 0,
+         'source': 'references/../SKILL.md', 'injected_as':
+         'not re-injected — the skill contract is the single source (§8)'},
         {'component': 'tool catalogue line', 'tokens': tool_catalogue_tokens,
          'source': 'context.providers.tools.TOOL_CATALOG', 'injected_as': 'inline'},
         {'component': 'agent-skills block', 'tokens': skill_block_tokens,
@@ -190,10 +230,14 @@ def measure() -> dict:
          'injected_as': ('system prompt, every call' if skill_block_tokens
                          else 'not sent (Step 14: extraction agent registers no skill loader)')},
         {'component': 'structured-output schema', 'tokens': schema_tokens,
-         'source': 'agents.extraction_agent.Extraction', 'injected_as': 'every call'},
-        {'component': f"tool schemas ({'/'.join(tool_schema_names) or 'none'})",
+         'source': 'agents.extraction_agent.Extraction',
+         # This *is* the tools row: AgentScope ships it as the GenerateStructuredOutput
+         # tool schema, added during reply(), so `get_tool_schemas()` cannot see it.
+         'injected_as': 'every call, as the GenerateStructuredOutput tool schema'},
+        {'component': f"tool schemas ({'/'.join(tool_schema_names) or 'none registered'})",
          'tokens': tool_schema_tokens, 'source': 'Toolkit.get_tool_schemas()',
-         'injected_as': 'every call'},
+         'injected_as': ('every call' if tool_schema_tokens else
+                         'not sent (prefetch registers no function tool)')},
         {'component': 'user chunk', 'tokens': 20, 'source': 'the document batch',
          'injected_as': 'inline'},
     ]
@@ -229,6 +273,9 @@ def measure() -> dict:
     return {
         'what': 'Where the prompt tokens of ONE extraction call come from. Measured '
                 'offline from the same assembly the production path uses; no model call.',
+        # Step 15: the mode decides whether a step makes one provider call or two, so the
+        # measurement is meaningless without it.
+        'extraction_context_mode': extraction_context_mode(),
         'model_calls': 0,
         'observed_live': {
             'note': 'provider-reported, from the Step 13 live smoke (10 cases, 20 calls)',

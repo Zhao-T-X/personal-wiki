@@ -1,0 +1,457 @@
+{
+  "what": "Step 16 live canary: Detection ON vs OFF, three cases, provider seam.",
+  "model": "deepseek-v4-flash",
+  "case_ids": [
+    "predicate_registry_ceo",
+    "concept_progressive_loading",
+    "path_source_artifact"
+  ],
+  "summary": {
+    "on": {
+      "cases": 3,
+      "detection_calls": 3,
+      "detection_tokens": 2938,
+      "extraction_calls": 3,
+      "extraction_prompt_tokens": 9345,
+      "extraction_completion_tokens": 2112,
+      "semantic_passed": "3/3"
+    },
+    "off": {
+      "cases": 3,
+      "detection_calls": 0,
+      "detection_tokens": 0,
+      "extraction_calls": 3,
+      "extraction_prompt_tokens": 9212,
+      "extraction_completion_tokens": 1240,
+      "semantic_passed": "3/3"
+    }
+  },
+  "runs": [
+    {
+      "case": "predicate_registry_ceo",
+      "mode": "on",
+      "text": "苹果现任 CEO 是 John Ternus。",
+      "detection_calls": 1,
+      "detection_tokens": 966,
+      "extraction_calls": 1,
+      "extraction_prompt_tokens": 3149,
+      "extraction_completion_tokens": 530,
+      "passed": {
+        "structural": true,
+        "registry": true,
+        "semantic": true
+      },
+      "semantic_checks": [
+        {
+          "layer": "semantic",
+          "check": "claim_exists",
+          "ok": true,
+          "detail": "about=John Ternus subjects=['苹果']"
+        },
+        {
+          "layer": "semantic",
+          "check": "subject_is",
+          "ok": true,
+          "detail": "subjects=['苹果'] want=苹果"
+        },
+        {
+          "layer": "semantic",
+          "check": "object_is",
+          "ok": true,
+          "detail": "objects=['John Ternus'] want=John Ternus"
+        },
+        {
+          "layer": "semantic",
+          "check": "predicate_is",
+          "ok": true,
+          "detail": "predicates=['has_ceo'] want=has_ceo"
+        },
+        {
+          "layer": "semantic",
+          "check": "temporal_is",
+          "ok": true,
+          "detail": "temporal=['current'] want=current"
+        }
+      ],
+      "rejected": [],
+      "observed_claims": [
+        {
+          "subject": "苹果",
+          "predicate": "has_ceo",
+          "object": "John Ternus",
+          "object_kind": "entity",
+          "temporal_signal": "current"
+        }
+      ],
+      "document_status": "COMPLETED",
+      "raw_envelope": {
+        "entities": [
+          {
+            "name": "苹果",
+            "types": [
+              "Organization"
+            ],
+            "aliases": [
+              "Apple"
+            ],
+            "description": "文本中提及的公司，其现任 CEO 为 John Ternus。",
+            "properties": {}
+          },
+          {
+            "name": "John Ternus",
+            "types": [
+              "Person"
+            ],
+            "aliases": [],
+            "description": "文本中被称为苹果现任 CEO 的人。",
+            "properties": {}
+          }
+        ],
+        "claims": [
+          {
+            "subject": "苹果",
+            "predicate": "has_ceo",
+            "object": "John Ternus",
+            "object_kind": "entity",
+            "temporal_signal": "current",
+            "claim_type": "factual",
+            "polarity": "positive",
+            "modality": "asserted",
+            "content": null,
+            "context": {},
+            "confidence": 0.95,
+            "source_chunk": "b6fb7d1d-1a5a-4b11-a0dd-731115f38fb8",
+            "evidence_quote": "苹果现任 CEO 是 John Ternus。"
+          }
+        ],
+        "events": [],
+        "ideas": [],
+        "questions": []
+      }
+    },
+    {
+      "case": "predicate_registry_ceo",
+      "mode": "off",
+      "text": "苹果现任 CEO 是 John Ternus。",
+      "detection_calls": 0,
+      "detection_tokens": 0,
+      "extraction_calls": 1,
+      "extraction_prompt_tokens": 3098,
+      "extraction_completion_tokens": 497,
+      "passed": {
+        "structural": true,
+        "registry": true,
+        "semantic": true
+      },
+      "semantic_checks": [
+        {
+          "layer": "semantic",
+          "check": "claim_exists",
+          "ok": true,
+          "detail": "about=John Ternus subjects=['苹果']"
+        },
+        {
+          "layer": "semantic",
+          "check": "subject_is",
+          "ok": true,
+          "detail": "subjects=['苹果'] want=苹果"
+        },
+        {
+          "layer": "semantic",
+          "check": "object_is",
+          "ok": true,
+          "detail": "objects=['John Ternus'] want=John Ternus"
+        },
+        {
+          "layer": "semantic",
+          "check": "predicate_is",
+          "ok": true,
+          "detail": "predicates=['has_ceo'] want=has_ceo"
+        },
+        {
+          "layer": "semantic",
+          "check": "temporal_is",
+          "ok": true,
+          "detail": "temporal=['current'] want=current"
+        }
+      ],
+      "rejected": [],
+      "observed_claims": [
+        {
+          "subject": "苹果",
+          "predicate": "has_ceo",
+          "object": "John Ternus",
+          "object_kind": "entity",
+          "temporal_signal": "current"
+        }
+      ],
+      "document_status": "COMPLETED",
+      "raw_envelope": {
+        "entities": [
+          {
+            "name": "苹果",
+            "types": [
+              "Organization"
+            ],
+            "aliases": [],
+            "description": "被提及的公司组织，其首席执行官为 John Ternus。",
+            "properties": {}
+          },
+          {
+            "name": "John Ternus",
+            "types": [
+              "Person"
+            ],
+            "aliases": [],
+            "description": "被描述为苹果现任首席执行官的人物。",
+            "properties": {}
+          }
+        ],
+        "claims": [
+          {
+            "subject": "苹果",
+            "predicate": "has_ceo",
+            "object": "John Ternus",
+            "object_kind": "entity",
+            "temporal_signal": "current",
+            "claim_type": "factual",
+            "polarity": "positive",
+            "modality": "asserted",
+            "content": null,
+            "context": {},
+            "confidence": 0.9,
+            "source_chunk": "17d0f0ad-be40-45d9-bc4d-036e962a64c4",
+            "evidence_quote": "苹果现任 CEO 是 John Ternus。"
+          }
+        ],
+        "events": [],
+        "ideas": [],
+        "questions": []
+      }
+    },
+    {
+      "case": "concept_progressive_loading",
+      "mode": "on",
+      "text": "渐进式上下文加载是一种上下文管理机制。",
+      "detection_calls": 1,
+      "detection_tokens": 989,
+      "extraction_calls": 1,
+      "extraction_prompt_tokens": 3119,
+      "extraction_completion_tokens": 1319,
+      "passed": {
+        "structural": true,
+        "registry": true,
+        "semantic": true
+      },
+      "semantic_checks": [
+        {
+          "layer": "semantic",
+          "check": "claim_exists",
+          "ok": true,
+          "detail": "about=渐进式上下文加载 subjects=['渐进式上下文加载']"
+        },
+        {
+          "layer": "semantic",
+          "check": "object_kind_is",
+          "ok": true,
+          "detail": "kinds=['concept'] want=concept"
+        },
+        {
+          "layer": "semantic",
+          "check": "declared_kind_consistency",
+          "ok": true,
+          "detail": "object_declared_as_entity_but_kinded=[]"
+        }
+      ],
+      "rejected": [],
+      "observed_claims": [
+        {
+          "subject": "渐进式上下文加载",
+          "predicate": "defined_as",
+          "object": "上下文管理机制",
+          "object_kind": "concept",
+          "temporal_signal": null
+        }
+      ],
+      "document_status": "COMPLETED",
+      "raw_envelope": {
+        "entities": [
+          {
+            "name": "渐进式上下文加载",
+            "types": [
+              "Method"
+            ],
+            "aliases": [],
+            "description": "一种上下文管理机制，用于渐进式地加载上下文。",
+            "properties": {}
+          }
+        ],
+        "claims": [
+          {
+            "subject": "渐进式上下文加载",
+            "predicate": "defined_as",
+            "object": "上下文管理机制",
+            "object_kind": "concept",
+            "temporal_signal": null,
+            "claim_type": "definitional",
+            "polarity": "positive",
+            "modality": "asserted",
+            "content": "渐进式上下文加载是一种上下文管理机制。",
+            "context": {},
+            "confidence": 0.92,
+            "source_chunk": "30f2c1f4-d086-46da-a2e5-6a1258c9a0c0",
+            "evidence_quote": "渐进式上下文加载是一种上下文管理机制。"
+          }
+        ],
+        "events": [],
+        "ideas": [],
+        "questions": []
+      }
+    },
+    {
+      "case": "concept_progressive_loading",
+      "mode": "off",
+      "text": "渐进式上下文加载是一种上下文管理机制。",
+      "detection_calls": 0,
+      "detection_tokens": 0,
+      "extraction_calls": 1,
+      "extraction_prompt_tokens": 3063,
+      "extraction_completion_tokens": 507,
+      "passed": {
+        "structural": true,
+        "registry": true,
+        "semantic": true
+      },
+      "semantic_checks": [
+        {
+          "layer": "semantic",
+          "check": "claim_exists",
+          "ok": true,
+          "detail": "about=渐进式上下文加载 subjects=['渐进式上下文加载']"
+        },
+        {
+          "layer": "semantic",
+          "check": "object_kind_is",
+          "ok": true,
+          "detail": "kinds=['concept'] want=concept"
+        },
+        {
+          "layer": "semantic",
+          "check": "declared_kind_consistency",
+          "ok": true,
+          "detail": "object_declared_as_entity_but_kinded=[]"
+        }
+      ],
+      "rejected": [],
+      "observed_claims": [
+        {
+          "subject": "渐进式上下文加载",
+          "predicate": "is",
+          "object": "上下文管理机制",
+          "object_kind": "concept",
+          "temporal_signal": null
+        }
+      ],
+      "document_status": "COMPLETED",
+      "raw_envelope": {
+        "entities": [
+          {
+            "name": "渐进式上下文加载",
+            "types": [
+              "Concept"
+            ],
+            "aliases": [],
+            "description": "一种上下文管理机制",
+            "properties": {}
+          }
+        ],
+        "claims": [
+          {
+            "subject": "渐进式上下文加载",
+            "predicate": "is",
+            "object": "上下文管理机制",
+            "object_kind": "concept",
+            "temporal_signal": null,
+            "claim_type": "definitional",
+            "polarity": "positive",
+            "modality": "asserted",
+            "content": null,
+            "context": {},
+            "confidence": 0.95,
+            "source_chunk": "74a6a474-0038-496b-93f4-7d7332c03a6e",
+            "evidence_quote": "渐进式上下文加载是一种上下文管理机制。"
+          }
+        ],
+        "events": [],
+        "ideas": [],
+        "questions": []
+      }
+    },
+    {
+      "case": "path_source_artifact",
+      "mode": "on",
+      "text": "配置文件位于 docs/context/runtime.md。",
+      "detection_calls": 1,
+      "detection_tokens": 983,
+      "extraction_calls": 1,
+      "extraction_prompt_tokens": 3077,
+      "extraction_completion_tokens": 263,
+      "passed": {
+        "structural": true,
+        "registry": true,
+        "semantic": true
+      },
+      "semantic_checks": [
+        {
+          "layer": "semantic",
+          "check": "not_an_entity",
+          "ok": true,
+          "detail": "path=docs/context/runtime.md"
+        }
+      ],
+      "rejected": [],
+      "observed_claims": [],
+      "document_status": "COMPLETED",
+      "raw_envelope": {
+        "entities": [],
+        "claims": [],
+        "events": [],
+        "ideas": [],
+        "questions": []
+      }
+    },
+    {
+      "case": "path_source_artifact",
+      "mode": "off",
+      "text": "配置文件位于 docs/context/runtime.md。",
+      "detection_calls": 0,
+      "detection_tokens": 0,
+      "extraction_calls": 1,
+      "extraction_prompt_tokens": 3051,
+      "extraction_completion_tokens": 236,
+      "passed": {
+        "structural": true,
+        "registry": true,
+        "semantic": true
+      },
+      "semantic_checks": [
+        {
+          "layer": "semantic",
+          "check": "not_an_entity",
+          "ok": true,
+          "detail": "path=docs/context/runtime.md"
+        }
+      ],
+      "rejected": [],
+      "observed_claims": [],
+      "document_status": "COMPLETED",
+      "raw_envelope": {
+        "entities": [],
+        "claims": [],
+        "events": [],
+        "ideas": [],
+        "questions": []
+      }
+    }
+  ]
+}

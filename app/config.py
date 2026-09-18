@@ -26,6 +26,19 @@ DEFAULTS = {
     # only *entity*-like objects may enter Object Linking. Toggle OFF for A/B (Before).
     'object_classification_enabled': os.getenv('OBJECT_CLASSIFICATION', 'true').lower() in {'1','true','yes'},
     'agentscope_enabled': os.getenv('AGENTSCOPE_ENABLED', 'true').lower() in {'1','true','yes'},
+    # Extraction context mode (Step 15): "agentic" = the model fetches references itself
+    # through read_skill_reference (two provider calls per step); "prefetch" = the
+    # Context Planner selects the minimal context up front and the agent answers in one
+    # call. Switched to "prefetch" after the Step 15 A/B measured 5/5 semantic parity at
+    # -60.5% prompt tokens on the five contract cases
+    # (tests/fixtures/extraction_cases/step15_ab.json). Set EXTRACTION_CONTEXT_MODE=agentic
+    # to roll back — both arms are kept and tested.
+    'extraction_context_mode': os.getenv('EXTRACTION_CONTEXT_MODE', 'prefetch').strip().lower(),
+    # Pass 1 detection (Step 16 audit): "on" = triage each batch before extracting (the
+    # historical behaviour, still the production default); "off" = extract directly, no
+    # detection call. The audit switch exists so the A/B can compare the two pipelines
+    # with everything else identical. It does NOT change the production default.
+    'extraction_detection_mode': os.getenv('EXTRACTION_DETECTION_MODE', 'on').strip().lower(),
     # Per-agent context budgets in tokens, e.g. {"KnowledgeAgent": 2500}.
     # Empty means "use app/context/budget.py::AGENT_BUDGETS".
     'agent_context_budgets': {},

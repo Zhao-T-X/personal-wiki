@@ -47,11 +47,17 @@ BASELINE_PATH = FIXTURE_DIR / 'live_baseline.json'
 LAST_RUN_PATH = FIXTURE_DIR / 'live_last_run.json'
 CONTEXT_COST_PATH = FIXTURE_DIR / 'live_context_cost.json'
 
-MAX_STEPS_PER_CASE = 3
-# 20 covered 10 cases x 2 steps (detect + extract). Step 13.2 adds an 11th case (the
-# real literal case) and keeps the 10th as an abstention case, so the floor is 22 steps;
-# 24 leaves room for one repair without loosening the per-case cap.
-MAX_STEPS_TOTAL = 24
+# Step 15.1: with prefetch, one case is exactly TWO steps — Pass 1 detection, then ONE
+# extraction. A third step means the extraction took a second round, which the cutover
+# forbids; the cap is now the assertion, not headroom for a repair.
+MAX_STEPS_PER_CASE = 2
+# 11 cases x 2 steps. A case whose Pass 1 names no kind skips Pass 2 entirely, so this is
+# a ceiling rather than an equality.
+MAX_STEPS_TOTAL = 22
+# §5: one extraction provider call per case, 11 in total. Detection is counted separately
+# and is not part of this gate.
+MAX_EXTRACTION_CALLS_PER_CASE = 1
+DETECTION_MARKER = 'fast triage classifier'
 PRICE_IN_PER_1K = float(os.getenv('LIVE_SMOKE_PRICE_IN_PER_1K', '0.0005'))
 PRICE_OUT_PER_1K = float(os.getenv('LIVE_SMOKE_PRICE_OUT_PER_1K', '0.0015'))
 
@@ -113,6 +119,50 @@ def _install_usage_spy(monkeypatch) -> list[dict]:
     return captured
 
 
+def _call_kind(request: dict) -> str:
+    """Which pass a provider call belongs to, read from the system prompt it carried.
+
+    Both passes ride the same client class and both ask for a structured output tool, so
+    tool names cannot tell them apart. The system prompt can: Pass 1 is a triage
+    classifier with its own prompt.
+    """
+    for message in request.get('messages') or []:
+        if message.get('role') != 'system':
+            continue
+        text = message.get('content')
+        if not isinstance(text, str):
+            text = json.dumps(text, ensure_ascii=False, default=str)
+        return 'detection' if DETECTION_MARKER in text else 'extraction'
+    return 'unknown'
+
+
+def _install_provider_counter(monkeypatch) -> list[dict]:
+    """Count the REAL provider calls, split by pass (Step 15.1 §5).
+
+    ``llm_run_steps`` records how the project *bookkept* a call; this counts how many
+    requests actually left the process. The one-call-per-extraction gate has to be about
+    the latter, or a hidden second round could hide behind a single step record.
+    """
+    from app.agents.extraction_agent import build_extraction_agent
+    probe = build_extraction_agent('probe', mode='prefetch')
+    completions_cls = type(probe.model.client.chat.completions)
+    original = completions_cls.create
+    calls: list[dict] = []
+
+    async def spy(self, **kwargs):
+        response = await original(self, **kwargs)
+        usage = getattr(response, 'usage', None)
+        calls.append({
+            'kind': _call_kind(kwargs),
+            'prompt_tokens': int(getattr(usage, 'prompt_tokens', 0) or 0),
+            'completion_tokens': int(getattr(usage, 'completion_tokens', 0) or 0),
+        })
+        return response
+
+    monkeypatch.setattr(completions_cls, 'create', spy)
+    return calls
+
+
 def _run_case(case: dict) -> dict:
     """One case through the REAL pipeline: create → chunk → extract → compile → persist."""
     marker = uuid.uuid4().hex[:8]
@@ -121,11 +171,14 @@ def _run_case(case: dict) -> dict:
     chunk = service.write_chunks(doc, content)[0]
     with record_run('extract', document_id=doc, agent_role='live-smoke') as run:
         raw = asyncio.run(llm.extract([{'id': chunk['id'], 'content': content}]))
+        # What the planner actually put in front of the model for THIS case (authoritative
+        # value, not a re-derivation of the payload).
+        context_plan = getattr(run, 'extraction_context_plan', None)
     outcome = compile_extraction_items(raw)
     with db.transaction() as conn:
         counts = persist_extraction(conn, document_id=doc, extraction=outcome.envelope)
     return {'doc': doc, 'chunk': chunk['id'], 'content': content, 'run_id': run.id,
-            'raw': raw, 'outcome': outcome, 'counts': counts}
+            'raw': raw, 'outcome': outcome, 'counts': counts, 'context_plan': context_plan}
 
 
 def test_live_semantic_contract_smoke(monkeypatch):
@@ -151,15 +204,33 @@ def test_live_semantic_contract_smoke(monkeypatch):
     assert is_source_artefact('Static Context / Dynamic Context') is False
     assert is_source_artefact('客户端/服务端架构') is False
 
+    # Step 15.1: this suite verifies the PRODUCTION default, so it must not silently run
+    # the mode it is supposed to be testing.
+    from app.agents.extraction_agent import extraction_context_mode
+    assert extraction_context_mode() == 'prefetch', (
+        f"running under {extraction_context_mode()!r}; this suite verifies the prefetch "
+        "cutover — set EXTRACTION_CONTEXT_MODE=prefetch")
+
     usage_events = _install_usage_spy(monkeypatch)
+    provider_calls = _install_provider_counter(monkeypatch)
     budget = {'steps': 0, 'prompt_tokens': 0, 'completion_tokens': 0, 'model_calls': 0}
     results: list[dict] = []
     for case in cases:
         before_events = len(usage_events)
+        before_calls = len(provider_calls)
         res = _run_case(case)
         events = usage_events[before_events:]
         used = _steps(res['run_id'])
         model_calls = sum(e.get('model_calls', 1) for e in events) or used['steps']
+
+        case_calls = provider_calls[before_calls:]
+        extraction_calls = [c for c in case_calls if c['kind'] == 'extraction']
+        if len(extraction_calls) != MAX_EXTRACTION_CALLS_PER_CASE:
+            raise AssertionError(
+                f"{case['id']}: {len(extraction_calls)} extraction provider calls "
+                f"(expected {MAX_EXTRACTION_CALLS_PER_CASE}); kinds="
+                f"{[c['kind'] for c in case_calls]} — prefetch has no second round to fall "
+                "back to, so this is a defect, not a variance")
         if used['steps'] > MAX_STEPS_PER_CASE:
             raise AssertionError(
                 f"{case['id']}: {used['steps']} LLM calls for one case "
@@ -173,12 +244,21 @@ def test_live_semantic_contract_smoke(monkeypatch):
 
         verdict = evaluate_case(case, res['outcome'].envelope, res['counts'],
                                 [r.failure_view() for r in res['outcome'].failures])
+        extraction_view = [c for c in case_calls if c['kind'] == 'extraction']
         results.append({
             'id': case['id'], 'kind': case.get('kind', 'semantic'), 'covers': case['covers'],
             'text': case['text'],
             'checks': verdict['checks'], 'by_layer': verdict['by_layer'],
             'passed': verdict['passed'],
             'steps': used['steps'], 'model_calls': model_calls,
+            'provider_calls': {
+                # Step 15.1: the extraction/detection split, provider-measured.
+                'extraction': len(extraction_view),
+                'detection': sum(1 for c in case_calls if c['kind'] == 'detection'),
+                'extraction_prompt_tokens': sum(c['prompt_tokens'] for c in extraction_view),
+                'extraction_completion_tokens': sum(c['completion_tokens'] for c in extraction_view),
+            },
+            'context_plan': res['context_plan'],
             'by_step': _steps_detail(res['run_id']),
             'prompt_tokens': used['prompt_tokens'],
             'completion_tokens': used['completion_tokens'],
@@ -191,6 +271,12 @@ def test_live_semantic_contract_smoke(monkeypatch):
                 'imprecise_quotes': res['counts'].get('imprecise_quotes', 0),
             },
         })
+
+    # §5, in total as well as per case: exactly one extraction request per case.
+    extraction_total = sum(r['provider_calls']['extraction'] for r in results)
+    assert extraction_total == len(results), (
+        f'{extraction_total} extraction provider calls for {len(results)} cases — '
+        'the prefetch cutover is one request per case, with no second round to fall back to')
 
     failed = [r for r in results if not r['passed'][SEMANTIC]]
     for r in results:
@@ -228,6 +314,16 @@ def test_live_semantic_contract_smoke(monkeypatch):
     run_record = {
         'ran_at': datetime.now(timezone.utc).isoformat(timespec='seconds'),
         'model': runtime().get('openai_model'),
+        'extraction_context_mode': extraction_context_mode(),
+        'provider_calls': {
+            'extraction': sum(r['provider_calls']['extraction'] for r in results),
+            'detection': sum(r['provider_calls']['detection'] for r in results),
+            'extraction_prompt_tokens': sum(r['provider_calls']['extraction_prompt_tokens']
+                                            for r in results),
+            'extraction_completion_tokens': sum(r['provider_calls']['extraction_completion_tokens']
+                                                for r in results),
+        },
+        'context_plan': {r['id']: r['context_plan'] for r in results if r['context_plan']},
         'metrics': score, 'cost': cost, 'cases': results,
     }
     LAST_RUN_PATH.write_text(json.dumps(run_record, ensure_ascii=False, indent=2),

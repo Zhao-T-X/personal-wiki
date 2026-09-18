@@ -57,7 +57,9 @@ def build() -> dict:
     from app.prompt_profiles import build_context
 
     init_db()
-    agent = build_extraction_agent()
+    # Built with a representative chunk: in prefetch mode (the Step 15 default) the
+    # prompt is chunk-derived, so an empty payload would dump a shape no call ever has.
+    agent = build_extraction_agent('[CHUNK snapshot]\n苹果现任 CEO 是 John Ternus。')
     compiled = build_context('extractor', include_reference=True,
                              references=EXTRACTION_REFERENCES, tools=None,
                              persist=False, use_cache=False)

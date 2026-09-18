@@ -256,7 +256,8 @@ def build_context(role: str, custom: str | None = None, *, include_reference: bo
                   task_type: str | None = None, persist: bool = False,
                   history: list[dict] | None = None,
                   history_summary: str | None = None,
-                  packet=None, use_cache: bool = True) -> CompiledContext:
+                  packet=None, use_cache: bool = True,
+                  extra_items: list[ContextItem] | None = None) -> CompiledContext:
     """Plan, provide and compile the context for one agent call.
 
     The planner decides the sections and their budgets, providers supply the
@@ -285,7 +286,10 @@ def build_context(role: str, custom: str | None = None, *, include_reference: bo
             role=role, task_type=task_type, references=requested_refs, tools=tools,
             custom=custom, history=history, history_summary=history_summary,
             packet=packet, skill=ROLE_META[role].get('skill'),
-            include_reference=include_reference)
+            include_reference=include_reference,
+            # Payload the caller injected. Only the extraction prefetch path uses this,
+            # and its content is chunk-derived, so it belongs in the key.
+            extra=[i.content for i in (extra_items or [])])
         hit = cache_get(key)
         if hit is not None:
             return CompiledContext(agent=hit['agent'], plan=None,
@@ -302,6 +306,11 @@ def build_context(role: str, custom: str | None = None, *, include_reference: bo
     )
     plan = PLANNER.plan(task)
     items = _filter_tool_item(list(REGISTRY.collect(task, plan)), tools)
+    # Caller-injected context (Step 15 extraction prefetch). It is compiled like any other
+    # item, so it is ranked, deduped and traced by the same code path — and a duplicate of
+    # something already loaded is dropped here rather than reaching the model twice.
+    if extra_items:
+        items.extend(extra_items)
     items.append(ContextItem(
         id='bootstrap', type=TYPE_BOOTSTRAP, content=CORE_PROMPTS[role],
         source='prompt_profiles.CORE_PROMPTS', priority=1.0, relevance=1.0,
@@ -343,9 +352,10 @@ def composition_preview(role: str) -> str:
 def compose_prompt(role: str, *, include_reference: bool = True, references: list[str] | None = None,
                    tools=None, history: list[dict] | None = None,
                    history_summary: str | None = None,
-                   packet=None) -> str:
+                   packet=None, extra_items: list[ContextItem] | None = None) -> str:
     """Build the system prompt for one LLM call and record its Context Trace."""
     compiled = build_context(role, include_reference=include_reference, references=references,
                              tools=tools, persist=True, history=history,
-                             history_summary=history_summary, packet=packet)
+                             history_summary=history_summary, packet=packet,
+                             extra_items=extra_items)
     return compiled.render()

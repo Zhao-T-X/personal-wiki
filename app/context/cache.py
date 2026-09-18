@@ -32,8 +32,15 @@ CACHE_SCHEMA = 'context-cache-v1'
 def context_cache_key(*, role: str, task_type: str, references: list[str] | None,
                       tools: list | None, custom: str, history: list[dict] | None,
                       history_summary: str | None, packet: Any,
-                      skill: str | None, include_reference: bool = True) -> str:
-    """Composite version-bound cache key (spec §10: 任一版本变化 → 自动失效)."""
+                      skill: str | None, include_reference: bool = True,
+                      extra: Any = None) -> str:
+    """Composite version-bound cache key (spec §10: 任一版本变化 → 自动失效).
+
+    ``extra`` carries payload a caller injected *and that the base prompt does not
+    depend on*. The extractor's system prompt is chunk-independent, but the prefetched
+    context (Step 15) is derived from the chunk — leaving it out of the key would replay
+    one chunk's predicate candidates for another chunk.
+    """
     from ..skills import reference_version, skill_version
 
     parts: list[Any] = [
@@ -45,6 +52,7 @@ def context_cache_key(*, role: str, task_type: str, references: list[str] | None
         history_summary,
         history or [],
         packet.to_dict() if hasattr(packet, 'to_dict') else packet,
+        extra if extra is not None else '',
         registry_version(),
     ]
     if skill:

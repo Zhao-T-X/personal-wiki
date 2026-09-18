@@ -18,7 +18,8 @@ from dataclasses import dataclass, field
 
 from .budget import NEVER_TRIM, budget_for
 from .items import (TYPE_BOOTSTRAP, TYPE_CONSTRAINTS, TYPE_CUSTOM, TYPE_EVIDENCE, TYPE_EXAMPLES,
-                    TYPE_HISTORY, TYPE_KNOWLEDGE, TYPE_REFERENCE, TYPE_SKILL, TYPE_TASK, TYPE_TOOLS)
+                    TYPE_EXTRACTION_CONTEXT, TYPE_HISTORY, TYPE_KNOWLEDGE, TYPE_REFERENCE,
+                    TYPE_SKILL, TYPE_TASK, TYPE_TOOLS)
 from .policies import Load
 from ..runtime.task import TaskContext, TaskFeatures, reasoning_level, INTENT_EXTRACT
 
@@ -53,6 +54,10 @@ _SYSTEM_SHARES = {
     TYPE_BOOTSTRAP: 0.10,
     TYPE_SKILL: 0.20,
     TYPE_REFERENCE: 0.35,
+    # Deterministically prefetched context (Step 15). Only the extractor produces it, and
+    # it replaces what would otherwise be a lazy reference fetch — so it is budgeted like
+    # loaded content, not like a lazy pointer.
+    TYPE_EXTRACTION_CONTEXT: 0.20,
     TYPE_TOOLS: 0.10,
     TYPE_CUSTOM: 0.15,
     TYPE_CONSTRAINTS: 0.05,
@@ -169,7 +174,10 @@ class ContextPlanner:
         )
 
 
-# Sections the compiler renders into the system message, in order.
-SYSTEM_ORDER = (TYPE_BOOTSTRAP, TYPE_SKILL, TYPE_CUSTOM, TYPE_CONSTRAINTS, TYPE_TOOLS)
+# Sections the compiler renders into the system message, in order. The prefetched
+# extraction context sits right after the skill contract it elaborates, and before the
+# tool catalogue — it is what the model reads instead of a reference round.
+SYSTEM_ORDER = (TYPE_BOOTSTRAP, TYPE_SKILL, TYPE_EXTRACTION_CONTEXT, TYPE_CUSTOM,
+                TYPE_CONSTRAINTS, TYPE_TOOLS)
 # Sections rendered into the dynamic context block.
 CONTEXT_ORDER = (TYPE_TASK, TYPE_KNOWLEDGE, TYPE_EVIDENCE, TYPE_EXAMPLES, TYPE_HISTORY)

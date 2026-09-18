@@ -1,42 +1,419 @@
 {
-  "ran_at": "2026-09-17T09:26:58+00:00",
+  "ran_at": "2026-09-17T10:26:56+00:00",
   "model": "deepseek-v4-flash",
+  "extraction_context_mode": "prefetch",
+  "provider_calls": {
+    "extraction": 11,
+    "detection": 11,
+    "extraction_prompt_tokens": 34091,
+    "extraction_completion_tokens": 8299
+  },
+  "context_plan": {
+    "entity_context_runtime": {
+      "predicate_candidates": [
+        "extracts"
+      ],
+      "predicate_context": "[CLAIM PREDICATE CONTEXT]\nRegistered predicates (closed vocabulary — select the most specific one; never invent a name):\naccesses, addresses, allows, analyzes, applied_to, based_on, better_than, causes, classified_as, compares_with, consists_of, contains, creates, decreases, defined_as, depends_on, derived_from, designed_for, enables, evaluated_on, evaluates, extends, extracts, generates, has_ceo, implements, improves, includes, increases, investigates, is, leads_to, prevents, produces, provides, receives, reduces, requires, retrieves, studies, supports, tested_on, trained_on, transforms, used_for, uses, worse_than\n\nMost consistent with this chunk (candidates, not a decision):\n- `extracts` label: 提取;",
+      "entity_type_context": "[ENTITY TYPE CONTEXT]\nEntity types (closed vocabulary, 14) — a Mention is not an Entity:\n- Technology: A technically meaningful technology, architecture, technical system, capability or technology family that can be independently discussed.\n- Theory: A relatively coherent explanatory theory or theoretical framework.\n- Organization: A stable organization, institution, company, team or other organizational entity that is independently identifiable in context.\n- Model: An independently identifiable model used for training, inference, evaluation or deployment.\n- Software: An executable or deployable software system, program, library, framework or software tool.\n- Standard: A formally standardized or normative specification maintained by a recognized body, community or process.\n- Protocol: A defined protocol for communication, interaction, coordination or interoperability.\n- Method: A method, algorithm, procedure, workflow or way of achieving a goal.\n- Resource: A separately identifiable knowledge or technical resource that cannot reasonably be classified as one of the other 13 types.\n- Product: A product offered, distributed or provided as an identifiable product.\n- Person: A naturally identifiable person with independent identity.\n- Dataset: An independently identifiable organized collection of data.\n- Location: A separately identifiable geographic, spatial or site/location entity.\n- Concept: An abstract object that can be independently defined, discussed, compared or used as a durable knowledge topic.\n\nWhen type confidence is insufficient, omit the Entity — never default to Resource.",
+      "object_kind_context": {
+        "source": "skills/knowledge-extraction/SKILL.md",
+        "injected_here": false,
+        "reason": "the SKILL contract is already in the system prompt; one source only"
+      },
+      "general_extraction_context": "[EXTRACTION CONTEXT — ALREADY LOADED]\nThe registries this chunk needs are included below (claim predicates, entity types). No reference tool is registered for this call and none is needed: choose from what is here.",
+      "flags": []
+    },
+    "concept_progressive_loading": {
+      "predicate_candidates": [
+        "is",
+        "extracts"
+      ],
+      "predicate_context": "[CLAIM PREDICATE CONTEXT]\nRegistered predicates (closed vocabulary — select the most specific one; never invent a name):\naccesses, addresses, allows, analyzes, applied_to, based_on, better_than, causes, classified_as, compares_with, consists_of, contains, creates, decreases, defined_as, depends_on, derived_from, designed_for, enables, evaluated_on, evaluates, extends, extracts, generates, has_ceo, implements, improves, includes, increases, investigates, is, leads_to, prevents, produces, provides, receives, reduces, requires, retrieves, studies, supports, tested_on, trained_on, transforms, used_for, uses, worse_than\n\nMost consistent with this chunk (candidates, not a decision):\n- `is` label: 是; temporal (put \"现任\"/\"曾经\" in `temporal_signal`, not in the predicate name);\n- `extracts` label: 提取;",
+      "entity_type_context": "[ENTITY TYPE CONTEXT]\nEntity types (closed vocabulary, 14) — a Mention is not an Entity:\n- Technology: A technically meaningful technology, architecture, technical system, capability or technology family that can be independently discussed.\n- Theory: A relatively coherent explanatory theory or theoretical framework.\n- Organization: A stable organization, institution, company, team or other organizational entity that is independently identifiable in context.\n- Model: An independently identifiable model used for training, inference, evaluation or deployment.\n- Software: An executable or deployable software system, program, library, framework or software tool.\n- Standard: A formally standardized or normative specification maintained by a recognized body, community or process.\n- Protocol: A defined protocol for communication, interaction, coordination or interoperability.\n- Method: A method, algorithm, procedure, workflow or way of achieving a goal.\n- Resource: A separately identifiable knowledge or technical resource that cannot reasonably be classified as one of the other 13 types.\n- Product: A product offered, distributed or provided as an identifiable product.\n- Person: A naturally identifiable person with independent identity.\n- Dataset: An independently identifiable organized collection of data.\n- Location: A separately identifiable geographic, spatial or site/location entity.\n- Concept: An abstract object that can be independently defined, discussed, compared or used as a durable knowledge topic.\n\nWhen type confidence is insufficient, omit the Entity — never default to Resource.",
+      "object_kind_context": {
+        "source": "skills/knowledge-extraction/SKILL.md",
+        "injected_here": false,
+        "reason": "the SKILL contract is already in the system prompt; one source only"
+      },
+      "general_extraction_context": "[EXTRACTION CONTEXT — ALREADY LOADED]\nThe registries this chunk needs are included below (claim predicates, entity types). No reference tool is registered for this call and none is needed: choose from what is here.",
+      "flags": []
+    },
+    "literal_weekly_frequency": {
+      "predicate_candidates": [
+        "extracts"
+      ],
+      "predicate_context": "[CLAIM PREDICATE CONTEXT]\nRegistered predicates (closed vocabulary — select the most specific one; never invent a name):\naccesses, addresses, allows, analyzes, applied_to, based_on, better_than, causes, classified_as, compares_with, consists_of, contains, creates, decreases, defined_as, depends_on, derived_from, designed_for, enables, evaluated_on, evaluates, extends, extracts, generates, has_ceo, implements, improves, includes, increases, investigates, is, leads_to, prevents, produces, provides, receives, reduces, requires, retrieves, studies, supports, tested_on, trained_on, transforms, used_for, uses, worse_than\n\nMost consistent with this chunk (candidates, not a decision):\n- `extracts` label: 提取;",
+      "entity_type_context": "[ENTITY TYPE CONTEXT]\nEntity types (closed vocabulary, 14) — a Mention is not an Entity:\n- Technology: A technically meaningful technology, architecture, technical system, capability or technology family that can be independently discussed.\n- Theory: A relatively coherent explanatory theory or theoretical framework.\n- Organization: A stable organization, institution, company, team or other organizational entity that is independently identifiable in context.\n- Model: An independently identifiable model used for training, inference, evaluation or deployment.\n- Software: An executable or deployable software system, program, library, framework or software tool.\n- Standard: A formally standardized or normative specification maintained by a recognized body, community or process.\n- Protocol: A defined protocol for communication, interaction, coordination or interoperability.\n- Method: A method, algorithm, procedure, workflow or way of achieving a goal.\n- Resource: A separately identifiable knowledge or technical resource that cannot reasonably be classified as one of the other 13 types.\n- Product: A product offered, distributed or provided as an identifiable product.\n- Person: A naturally identifiable person with independent identity.\n- Dataset: An independently identifiable organized collection of data.\n- Location: A separately identifiable geographic, spatial or site/location entity.\n- Concept: An abstract object that can be independently defined, discussed, compared or used as a durable knowledge topic.\n\nWhen type confidence is insufficient, omit the Entity — never default to Resource.",
+      "object_kind_context": {
+        "source": "skills/knowledge-extraction/SKILL.md",
+        "injected_here": false,
+        "reason": "the SKILL contract is already in the system prompt; one source only"
+      },
+      "general_extraction_context": "[EXTRACTION CONTEXT — ALREADY LOADED]\nThe registries this chunk needs are included below (claim predicates, entity types). No reference tool is registered for this call and none is needed: choose from what is here.",
+      "flags": []
+    },
+    "literal_chunk_size": {
+      "predicate_candidates": [
+        "extracts"
+      ],
+      "predicate_context": "[CLAIM PREDICATE CONTEXT]\nRegistered predicates (closed vocabulary — select the most specific one; never invent a name):\naccesses, addresses, allows, analyzes, applied_to, based_on, better_than, causes, classified_as, compares_with, consists_of, contains, creates, decreases, defined_as, depends_on, derived_from, designed_for, enables, evaluated_on, evaluates, extends, extracts, generates, has_ceo, implements, improves, includes, increases, investigates, is, leads_to, prevents, produces, provides, receives, reduces, requires, retrieves, studies, supports, tested_on, trained_on, transforms, used_for, uses, worse_than\n\nMost consistent with this chunk (candidates, not a decision):\n- `extracts` label: 提取;",
+      "entity_type_context": "[ENTITY TYPE CONTEXT]\nEntity types (closed vocabulary, 14) — a Mention is not an Entity:\n- Technology: A technically meaningful technology, architecture, technical system, capability or technology family that can be independently discussed.\n- Theory: A relatively coherent explanatory theory or theoretical framework.\n- Organization: A stable organization, institution, company, team or other organizational entity that is independently identifiable in context.\n- Model: An independently identifiable model used for training, inference, evaluation or deployment.\n- Software: An executable or deployable software system, program, library, framework or software tool.\n- Standard: A formally standardized or normative specification maintained by a recognized body, community or process.\n- Protocol: A defined protocol for communication, interaction, coordination or interoperability.\n- Method: A method, algorithm, procedure, workflow or way of achieving a goal.\n- Resource: A separately identifiable knowledge or technical resource that cannot reasonably be classified as one of the other 13 types.\n- Product: A product offered, distributed or provided as an identifiable product.\n- Person: A naturally identifiable person with independent identity.\n- Dataset: An independently identifiable organized collection of data.\n- Location: A separately identifiable geographic, spatial or site/location entity.\n- Concept: An abstract object that can be independently defined, discussed, compared or used as a durable knowledge topic.\n\nWhen type confidence is insufficient, omit the Entity — never default to Resource.",
+      "object_kind_context": {
+        "source": "skills/knowledge-extraction/SKILL.md",
+        "injected_here": false,
+        "reason": "the SKILL contract is already in the system prompt; one source only"
+      },
+      "general_extraction_context": "[EXTRACTION CONTEXT — ALREADY LOADED]\nThe registries this chunk needs are included below (claim predicates, entity types). No reference tool is registered for this call and none is needed: choose from what is here.",
+      "flags": []
+    },
+    "path_source_artifact": {
+      "predicate_candidates": [
+        "extracts"
+      ],
+      "predicate_context": "[CLAIM PREDICATE CONTEXT]\nRegistered predicates (closed vocabulary — select the most specific one; never invent a name):\naccesses, addresses, allows, analyzes, applied_to, based_on, better_than, causes, classified_as, compares_with, consists_of, contains, creates, decreases, defined_as, depends_on, derived_from, designed_for, enables, evaluated_on, evaluates, extends, extracts, generates, has_ceo, implements, improves, includes, increases, investigates, is, leads_to, prevents, produces, provides, receives, reduces, requires, retrieves, studies, supports, tested_on, trained_on, transforms, used_for, uses, worse_than\n\nMost consistent with this chunk (candidates, not a decision):\n- `extracts` label: 提取;",
+      "entity_type_context": "[ENTITY TYPE CONTEXT]\nEntity types (closed vocabulary, 14) — a Mention is not an Entity:\n- Technology: A technically meaningful technology, architecture, technical system, capability or technology family that can be independently discussed.\n- Theory: A relatively coherent explanatory theory or theoretical framework.\n- Organization: A stable organization, institution, company, team or other organizational entity that is independently identifiable in context.\n- Model: An independently identifiable model used for training, inference, evaluation or deployment.\n- Software: An executable or deployable software system, program, library, framework or software tool.\n- Standard: A formally standardized or normative specification maintained by a recognized body, community or process.\n- Protocol: A defined protocol for communication, interaction, coordination or interoperability.\n- Method: A method, algorithm, procedure, workflow or way of achieving a goal.\n- Resource: A separately identifiable knowledge or technical resource that cannot reasonably be classified as one of the other 13 types.\n- Product: A product offered, distributed or provided as an identifiable product.\n- Person: A naturally identifiable person with independent identity.\n- Dataset: An independently identifiable organized collection of data.\n- Location: A separately identifiable geographic, spatial or site/location entity.\n- Concept: An abstract object that can be independently defined, discussed, compared or used as a durable knowledge topic.\n\nWhen type confidence is insufficient, omit the Entity — never default to Resource.",
+      "object_kind_context": {
+        "source": "skills/knowledge-extraction/SKILL.md",
+        "injected_here": false,
+        "reason": "the SKILL contract is already in the system prompt; one source only"
+      },
+      "general_extraction_context": "[EXTRACTION CONTEXT — ALREADY LOADED]\nThe registries this chunk needs are included below (claim predicates, entity types). No reference tool is registered for this call and none is needed: choose from what is here.",
+      "flags": []
+    },
+    "prose_slash_architecture": {
+      "predicate_candidates": [
+        "extracts",
+        "requires"
+      ],
+      "predicate_context": "[CLAIM PREDICATE CONTEXT]\nRegistered predicates (closed vocabulary — select the most specific one; never invent a name):\naccesses, addresses, allows, analyzes, applied_to, based_on, better_than, causes, classified_as, compares_with, consists_of, contains, creates, decreases, defined_as, depends_on, derived_from, designed_for, enables, evaluated_on, evaluates, extends, extracts, generates, has_ceo, implements, improves, includes, increases, investigates, is, leads_to, prevents, produces, provides, receives, reduces, requires, retrieves, studies, supports, tested_on, trained_on, transforms, used_for, uses, worse_than\n\nMost consistent with this chunk (candidates, not a decision):\n- `extracts` label: 提取;\n- `requires` label: 需要;",
+      "entity_type_context": "[ENTITY TYPE CONTEXT]\nEntity types (closed vocabulary, 14) — a Mention is not an Entity:\n- Technology: A technically meaningful technology, architecture, technical system, capability or technology family that can be independently discussed.\n- Theory: A relatively coherent explanatory theory or theoretical framework.\n- Organization: A stable organization, institution, company, team or other organizational entity that is independently identifiable in context.\n- Model: An independently identifiable model used for training, inference, evaluation or deployment.\n- Software: An executable or deployable software system, program, library, framework or software tool.\n- Standard: A formally standardized or normative specification maintained by a recognized body, community or process.\n- Protocol: A defined protocol for communication, interaction, coordination or interoperability.\n- Method: A method, algorithm, procedure, workflow or way of achieving a goal.\n- Resource: A separately identifiable knowledge or technical resource that cannot reasonably be classified as one of the other 13 types.\n- Product: A product offered, distributed or provided as an identifiable product.\n- Person: A naturally identifiable person with independent identity.\n- Dataset: An independently identifiable organized collection of data.\n- Location: A separately identifiable geographic, spatial or site/location entity.\n- Concept: An abstract object that can be independently defined, discussed, compared or used as a durable knowledge topic.\n\nWhen type confidence is insufficient, omit the Entity — never default to Resource.",
+      "object_kind_context": {
+        "source": "skills/knowledge-extraction/SKILL.md",
+        "injected_here": false,
+        "reason": "the SKILL contract is already in the system prompt; one source only"
+      },
+      "general_extraction_context": "[EXTRACTION CONTEXT — ALREADY LOADED]\nThe registries this chunk needs are included below (claim predicates, entity types). No reference tool is registered for this call and none is needed: choose from what is here.",
+      "flags": []
+    },
+    "prose_slash_concept_pair": {
+      "predicate_candidates": [
+        "extracts"
+      ],
+      "predicate_context": "[CLAIM PREDICATE CONTEXT]\nRegistered predicates (closed vocabulary — select the most specific one; never invent a name):\naccesses, addresses, allows, analyzes, applied_to, based_on, better_than, causes, classified_as, compares_with, consists_of, contains, creates, decreases, defined_as, depends_on, derived_from, designed_for, enables, evaluated_on, evaluates, extends, extracts, generates, has_ceo, implements, improves, includes, increases, investigates, is, leads_to, prevents, produces, provides, receives, reduces, requires, retrieves, studies, supports, tested_on, trained_on, transforms, used_for, uses, worse_than\n\nMost consistent with this chunk (candidates, not a decision):\n- `extracts` label: 提取;",
+      "entity_type_context": "[ENTITY TYPE CONTEXT]\nEntity types (closed vocabulary, 14) — a Mention is not an Entity:\n- Technology: A technically meaningful technology, architecture, technical system, capability or technology family that can be independently discussed.\n- Theory: A relatively coherent explanatory theory or theoretical framework.\n- Organization: A stable organization, institution, company, team or other organizational entity that is independently identifiable in context.\n- Model: An independently identifiable model used for training, inference, evaluation or deployment.\n- Software: An executable or deployable software system, program, library, framework or software tool.\n- Standard: A formally standardized or normative specification maintained by a recognized body, community or process.\n- Protocol: A defined protocol for communication, interaction, coordination or interoperability.\n- Method: A method, algorithm, procedure, workflow or way of achieving a goal.\n- Resource: A separately identifiable knowledge or technical resource that cannot reasonably be classified as one of the other 13 types.\n- Product: A product offered, distributed or provided as an identifiable product.\n- Person: A naturally identifiable person with independent identity.\n- Dataset: An independently identifiable organized collection of data.\n- Location: A separately identifiable geographic, spatial or site/location entity.\n- Concept: An abstract object that can be independently defined, discussed, compared or used as a durable knowledge topic.\n\nWhen type confidence is insufficient, omit the Entity — never default to Resource.",
+      "object_kind_context": {
+        "source": "skills/knowledge-extraction/SKILL.md",
+        "injected_here": false,
+        "reason": "the SKILL contract is already in the system prompt; one source only"
+      },
+      "general_extraction_context": "[EXTRACTION CONTEXT — ALREADY LOADED]\nThe registries this chunk needs are included below (claim predicates, entity types). No reference tool is registered for this call and none is needed: choose from what is here.",
+      "flags": []
+    },
+    "predicate_registry_ceo": {
+      "predicate_candidates": [
+        "extracts",
+        "has_ceo"
+      ],
+      "predicate_context": "[CLAIM PREDICATE CONTEXT]\nRegistered predicates (closed vocabulary — select the most specific one; never invent a name):\naccesses, addresses, allows, analyzes, applied_to, based_on, better_than, causes, classified_as, compares_with, consists_of, contains, creates, decreases, defined_as, depends_on, derived_from, designed_for, enables, evaluated_on, evaluates, extends, extracts, generates, has_ceo, implements, improves, includes, increases, investigates, is, leads_to, prevents, produces, provides, receives, reduces, requires, retrieves, studies, supports, tested_on, trained_on, transforms, used_for, uses, worse_than\n\nMost consistent with this chunk (candidates, not a decision):\n- `extracts` label: 提取;\n- `has_ceo` label: 首席执行官; domain=Organization -> range=Person; temporal (put \"现任\"/\"曾经\" in `temporal_signal`, not in the predicate name); aliases: CEO, chief executive officer, 首席执行官, 首席执行长, 行政总裁",
+      "entity_type_context": "[ENTITY TYPE CONTEXT]\nEntity types (closed vocabulary, 14) — a Mention is not an Entity:\n- Technology: A technically meaningful technology, architecture, technical system, capability or technology family that can be independently discussed.\n- Theory: A relatively coherent explanatory theory or theoretical framework.\n- Organization: A stable organization, institution, company, team or other organizational entity that is independently identifiable in context.\n- Model: An independently identifiable model used for training, inference, evaluation or deployment.\n- Software: An executable or deployable software system, program, library, framework or software tool.\n- Standard: A formally standardized or normative specification maintained by a recognized body, community or process.\n- Protocol: A defined protocol for communication, interaction, coordination or interoperability.\n- Method: A method, algorithm, procedure, workflow or way of achieving a goal.\n- Resource: A separately identifiable knowledge or technical resource that cannot reasonably be classified as one of the other 13 types.\n- Product: A product offered, distributed or provided as an identifiable product.\n- Person: A naturally identifiable person with independent identity.\n- Dataset: An independently identifiable organized collection of data.\n- Location: A separately identifiable geographic, spatial or site/location entity.\n- Concept: An abstract object that can be independently defined, discussed, compared or used as a durable knowledge topic.\n\nWhen type confidence is insufficient, omit the Entity — never default to Resource.",
+      "object_kind_context": {
+        "source": "skills/knowledge-extraction/SKILL.md",
+        "injected_here": false,
+        "reason": "the SKILL contract is already in the system prompt; one source only"
+      },
+      "general_extraction_context": "[EXTRACTION CONTEXT — ALREADY LOADED]\nThe registries this chunk needs are included below (claim predicates, entity types). No reference tool is registered for this call and none is needed: choose from what is here.",
+      "flags": []
+    },
+    "temporal_former_ceo": {
+      "predicate_candidates": [
+        "extracts",
+        "has_ceo"
+      ],
+      "predicate_context": "[CLAIM PREDICATE CONTEXT]\nRegistered predicates (closed vocabulary — select the most specific one; never invent a name):\naccesses, addresses, allows, analyzes, applied_to, based_on, better_than, causes, classified_as, compares_with, consists_of, contains, creates, decreases, defined_as, depends_on, derived_from, designed_for, enables, evaluated_on, evaluates, extends, extracts, generates, has_ceo, implements, improves, includes, increases, investigates, is, leads_to, prevents, produces, provides, receives, reduces, requires, retrieves, studies, supports, tested_on, trained_on, transforms, used_for, uses, worse_than\n\nMost consistent with this chunk (candidates, not a decision):\n- `extracts` label: 提取;\n- `has_ceo` label: 首席执行官; domain=Organization -> range=Person; temporal (put \"现任\"/\"曾经\" in `temporal_signal`, not in the predicate name); aliases: CEO, chief executive officer, 首席执行官, 首席执行长, 行政总裁",
+      "entity_type_context": "[ENTITY TYPE CONTEXT]\nEntity types (closed vocabulary, 14) — a Mention is not an Entity:\n- Technology: A technically meaningful technology, architecture, technical system, capability or technology family that can be independently discussed.\n- Theory: A relatively coherent explanatory theory or theoretical framework.\n- Organization: A stable organization, institution, company, team or other organizational entity that is independently identifiable in context.\n- Model: An independently identifiable model used for training, inference, evaluation or deployment.\n- Software: An executable or deployable software system, program, library, framework or software tool.\n- Standard: A formally standardized or normative specification maintained by a recognized body, community or process.\n- Protocol: A defined protocol for communication, interaction, coordination or interoperability.\n- Method: A method, algorithm, procedure, workflow or way of achieving a goal.\n- Resource: A separately identifiable knowledge or technical resource that cannot reasonably be classified as one of the other 13 types.\n- Product: A product offered, distributed or provided as an identifiable product.\n- Person: A naturally identifiable person with independent identity.\n- Dataset: An independently identifiable organized collection of data.\n- Location: A separately identifiable geographic, spatial or site/location entity.\n- Concept: An abstract object that can be independently defined, discussed, compared or used as a durable knowledge topic.\n\nWhen type confidence is insufficient, omit the Entity — never default to Resource.",
+      "object_kind_context": {
+        "source": "skills/knowledge-extraction/SKILL.md",
+        "injected_here": false,
+        "reason": "the SKILL contract is already in the system prompt; one source only"
+      },
+      "general_extraction_context": "[EXTRACTION CONTEXT — ALREADY LOADED]\nThe registries this chunk needs are included below (claim predicates, entity types). No reference tool is registered for this call and none is needed: choose from what is here.",
+      "flags": []
+    },
+    "negative_polarity": {
+      "predicate_candidates": [
+        "extracts"
+      ],
+      "predicate_context": "[CLAIM PREDICATE CONTEXT]\nRegistered predicates (closed vocabulary — select the most specific one; never invent a name):\naccesses, addresses, allows, analyzes, applied_to, based_on, better_than, causes, classified_as, compares_with, consists_of, contains, creates, decreases, defined_as, depends_on, derived_from, designed_for, enables, evaluated_on, evaluates, extends, extracts, generates, has_ceo, implements, improves, includes, increases, investigates, is, leads_to, prevents, produces, provides, receives, reduces, requires, retrieves, studies, supports, tested_on, trained_on, transforms, used_for, uses, worse_than\n\nMost consistent with this chunk (candidates, not a decision):\n- `extracts` label: 提取;",
+      "entity_type_context": "[ENTITY TYPE CONTEXT]\nEntity types (closed vocabulary, 14) — a Mention is not an Entity:\n- Technology: A technically meaningful technology, architecture, technical system, capability or technology family that can be independently discussed.\n- Theory: A relatively coherent explanatory theory or theoretical framework.\n- Organization: A stable organization, institution, company, team or other organizational entity that is independently identifiable in context.\n- Model: An independently identifiable model used for training, inference, evaluation or deployment.\n- Software: An executable or deployable software system, program, library, framework or software tool.\n- Standard: A formally standardized or normative specification maintained by a recognized body, community or process.\n- Protocol: A defined protocol for communication, interaction, coordination or interoperability.\n- Method: A method, algorithm, procedure, workflow or way of achieving a goal.\n- Resource: A separately identifiable knowledge or technical resource that cannot reasonably be classified as one of the other 13 types.\n- Product: A product offered, distributed or provided as an identifiable product.\n- Person: A naturally identifiable person with independent identity.\n- Dataset: An independently identifiable organized collection of data.\n- Location: A separately identifiable geographic, spatial or site/location entity.\n- Concept: An abstract object that can be independently defined, discussed, compared or used as a durable knowledge topic.\n\nWhen type confidence is insufficient, omit the Entity — never default to Resource.",
+      "object_kind_context": {
+        "source": "skills/knowledge-extraction/SKILL.md",
+        "injected_here": false,
+        "reason": "the SKILL contract is already in the system prompt; one source only"
+      },
+      "general_extraction_context": "[EXTRACTION CONTEXT — ALREADY LOADED]\nThe registries this chunk needs are included below (claim predicates, entity types). No reference tool is registered for this call and none is needed: choose from what is here.",
+      "flags": []
+    },
+    "evidence_attachment": {
+      "predicate_candidates": [
+        "extracts",
+        "supports",
+        "enables"
+      ],
+      "predicate_context": "[CLAIM PREDICATE CONTEXT]\nRegistered predicates (closed vocabulary — select the most specific one; never invent a name):\naccesses, addresses, allows, analyzes, applied_to, based_on, better_than, causes, classified_as, compares_with, consists_of, contains, creates, decreases, defined_as, depends_on, derived_from, designed_for, enables, evaluated_on, evaluates, extends, extracts, generates, has_ceo, implements, improves, includes, increases, investigates, is, leads_to, prevents, produces, provides, receives, reduces, requires, retrieves, studies, supports, tested_on, trained_on, transforms, used_for, uses, worse_than\n\nMost consistent with this chunk (candidates, not a decision):\n- `extracts` label: 提取;\n- `supports` label: 支持;\n- `enables` label: 使得;",
+      "entity_type_context": "[ENTITY TYPE CONTEXT]\nEntity types (closed vocabulary, 14) — a Mention is not an Entity:\n- Technology: A technically meaningful technology, architecture, technical system, capability or technology family that can be independently discussed.\n- Theory: A relatively coherent explanatory theory or theoretical framework.\n- Organization: A stable organization, institution, company, team or other organizational entity that is independently identifiable in context.\n- Model: An independently identifiable model used for training, inference, evaluation or deployment.\n- Software: An executable or deployable software system, program, library, framework or software tool.\n- Standard: A formally standardized or normative specification maintained by a recognized body, community or process.\n- Protocol: A defined protocol for communication, interaction, coordination or interoperability.\n- Method: A method, algorithm, procedure, workflow or way of achieving a goal.\n- Resource: A separately identifiable knowledge or technical resource that cannot reasonably be classified as one of the other 13 types.\n- Product: A product offered, distributed or provided as an identifiable product.\n- Person: A naturally identifiable person with independent identity.\n- Dataset: An independently identifiable organized collection of data.\n- Location: A separately identifiable geographic, spatial or site/location entity.\n- Concept: An abstract object that can be independently defined, discussed, compared or used as a durable knowledge topic.\n\nWhen type confidence is insufficient, omit the Entity — never default to Resource.",
+      "object_kind_context": {
+        "source": "skills/knowledge-extraction/SKILL.md",
+        "injected_here": false,
+        "reason": "the SKILL contract is already in the system prompt; one source only"
+      },
+      "general_extraction_context": "[EXTRACTION CONTEXT — ALREADY LOADED]\nThe registries this chunk needs are included below (claim predicates, entity types). No reference tool is registered for this call and none is needed: choose from what is here.",
+      "flags": []
+    }
+  },
   "metrics": {
-    "cases": 2,
-    "semantic_cases": 2,
-    "abstention_cases": 0,
-    "structural_compliance": "2/2",
-    "registry_compliance": "2/2",
-    "semantic_accuracy": "2/2",
-    "abstention_behavior": "n/a",
-    "semantic_checks_passed": "8/8",
+    "cases": 11,
+    "semantic_cases": 10,
+    "abstention_cases": 1,
+    "structural_compliance": "11/11",
+    "registry_compliance": "11/11",
+    "semantic_accuracy": "10/10",
+    "abstention_behavior": "1/1",
+    "semantic_checks_passed": "29/29",
     "failed_cases": [],
     "failed_abstention": []
   },
   "cost": {
-    "steps": 4,
-    "prompt_tokens": 16102,
-    "completion_tokens": 1867,
-    "model_calls": 4,
-    "cases": 2,
-    "estimated_cost_usd": 0.010852,
+    "steps": 22,
+    "prompt_tokens": 43061,
+    "completion_tokens": 10103,
+    "model_calls": 22,
+    "cases": 11,
+    "estimated_cost_usd": 0.036685,
     "price_per_1k_in": 0.0005,
     "price_per_1k_out": 0.0015,
-    "prompt_tokens_per_step": 4026,
+    "prompt_tokens_per_step": 1957,
     "by_step": {
       "detect_batch": {
-        "calls": 2,
-        "prompt_tokens": 1636,
-        "completion_tokens": 289
+        "calls": 11,
+        "prompt_tokens": 8970,
+        "completion_tokens": 1804
       },
       "extract_batch": {
-        "calls": 2,
-        "prompt_tokens": 14466,
-        "completion_tokens": 1578
+        "calls": 11,
+        "prompt_tokens": 34091,
+        "completion_tokens": 8299
       }
     }
   },
   "cases": [
+    {
+      "id": "entity_context_runtime",
+      "kind": "semantic",
+      "covers": "entity",
+      "text": "Context Runtime 负责管理 Agent 的上下文。",
+      "checks": [
+        {
+          "layer": "structural",
+          "check": "min_claims",
+          "ok": true,
+          "detail": "claims=1"
+        },
+        {
+          "layer": "structural",
+          "check": "evidence_present",
+          "ok": true,
+          "detail": "missing=[]"
+        },
+        {
+          "layer": "structural",
+          "check": "evidence_located",
+          "ok": true,
+          "detail": "imprecise_quotes=0"
+        },
+        {
+          "layer": "structural",
+          "check": "no_rejected_items",
+          "ok": true,
+          "detail": "rejected=[]"
+        },
+        {
+          "layer": "structural",
+          "check": "referenced_any",
+          "ok": true,
+          "detail": "want_any=['Context Runtime']"
+        },
+        {
+          "layer": "registry",
+          "check": "predicate_in_registry",
+          "ok": true,
+          "detail": "unregistered=[]"
+        },
+        {
+          "layer": "registry",
+          "check": "entity_candidates",
+          "ok": true,
+          "detail": "hit=['Context Runtime']"
+        },
+        {
+          "layer": "semantic",
+          "check": "claim_exists",
+          "ok": true,
+          "detail": "about=Context Runtime subjects=['Context Runtime']"
+        },
+        {
+          "layer": "semantic",
+          "check": "subject_is",
+          "ok": true,
+          "detail": "subjects=['Context Runtime'] want=Context Runtime"
+        }
+      ],
+      "by_layer": {
+        "structural": [
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "registry": [
+          true,
+          true
+        ],
+        "semantic": [
+          true,
+          true
+        ]
+      },
+      "passed": {
+        "structural": true,
+        "registry": true,
+        "semantic": true
+      },
+      "steps": 2,
+      "model_calls": 2,
+      "provider_calls": {
+        "extraction": 1,
+        "detection": 1,
+        "extraction_prompt_tokens": 3085,
+        "extraction_completion_tokens": 1134
+      },
+      "context_plan": {
+        "predicate_candidates": [
+          "extracts"
+        ],
+        "predicate_context": "[CLAIM PREDICATE CONTEXT]\nRegistered predicates (closed vocabulary — select the most specific one; never invent a name):\naccesses, addresses, allows, analyzes, applied_to, based_on, better_than, causes, classified_as, compares_with, consists_of, contains, creates, decreases, defined_as, depends_on, derived_from, designed_for, enables, evaluated_on, evaluates, extends, extracts, generates, has_ceo, implements, improves, includes, increases, investigates, is, leads_to, prevents, produces, provides, receives, reduces, requires, retrieves, studies, supports, tested_on, trained_on, transforms, used_for, uses, worse_than\n\nMost consistent with this chunk (candidates, not a decision):\n- `extracts` label: 提取;",
+        "entity_type_context": "[ENTITY TYPE CONTEXT]\nEntity types (closed vocabulary, 14) — a Mention is not an Entity:\n- Technology: A technically meaningful technology, architecture, technical system, capability or technology family that can be independently discussed.\n- Theory: A relatively coherent explanatory theory or theoretical framework.\n- Organization: A stable organization, institution, company, team or other organizational entity that is independently identifiable in context.\n- Model: An independently identifiable model used for training, inference, evaluation or deployment.\n- Software: An executable or deployable software system, program, library, framework or software tool.\n- Standard: A formally standardized or normative specification maintained by a recognized body, community or process.\n- Protocol: A defined protocol for communication, interaction, coordination or interoperability.\n- Method: A method, algorithm, procedure, workflow or way of achieving a goal.\n- Resource: A separately identifiable knowledge or technical resource that cannot reasonably be classified as one of the other 13 types.\n- Product: A product offered, distributed or provided as an identifiable product.\n- Person: A naturally identifiable person with independent identity.\n- Dataset: An independently identifiable organized collection of data.\n- Location: A separately identifiable geographic, spatial or site/location entity.\n- Concept: An abstract object that can be independently defined, discussed, compared or used as a durable knowledge topic.\n\nWhen type confidence is insufficient, omit the Entity — never default to Resource.",
+        "object_kind_context": {
+          "source": "skills/knowledge-extraction/SKILL.md",
+          "injected_here": false,
+          "reason": "the SKILL contract is already in the system prompt; one source only"
+        },
+        "general_extraction_context": "[EXTRACTION CONTEXT — ALREADY LOADED]\nThe registries this chunk needs are included below (claim predicates, entity types). No reference tool is registered for this call and none is needed: choose from what is here.",
+        "flags": []
+      },
+      "by_step": [
+        {
+          "step": "detect_batch",
+          "calls": 1,
+          "prompt_tokens": 818,
+          "completion_tokens": 168
+        },
+        {
+          "step": "extract_batch",
+          "calls": 1,
+          "prompt_tokens": 3085,
+          "completion_tokens": 1134
+        }
+      ],
+      "prompt_tokens": 3903,
+      "completion_tokens": 1302,
+      "raw_envelope": {
+        "entities": [
+          {
+            "name": "Context Runtime",
+            "types": [
+              "Technology"
+            ],
+            "aliases": [],
+            "description": "负责管理 Agent 上下文的运行时组件",
+            "properties": {}
+          },
+          {
+            "name": "Agent",
+            "types": [
+              "Technology",
+              "Concept"
+            ],
+            "aliases": [],
+            "description": "上下文被管理的智能体",
+            "properties": {}
+          }
+        ],
+        "claims": [
+          {
+            "subject": "Context Runtime",
+            "predicate": "designed_for",
+            "object": "管理 Agent 的上下文",
+            "object_kind": "concept",
+            "temporal_signal": null,
+            "claim_type": "definitional",
+            "polarity": "positive",
+            "modality": "asserted",
+            "content": null,
+            "context": {},
+            "confidence": 0.75,
+            "source_chunk": "b0224996-dca3-4a5b-a99d-218f6d76d6d8",
+            "evidence_quote": "Context Runtime 负责管理 Agent 的上下文。"
+          }
+        ],
+        "events": [],
+        "ideas": [],
+        "questions": []
+      },
+      "observed": {
+        "status": "COMPLETED",
+        "entities": [
+          {
+            "name": "Context Runtime",
+            "types": [
+              "Technology"
+            ],
+            "aliases": [],
+            "description": "负责管理 Agent 上下文的运行时组件",
+            "properties": {}
+          },
+          {
+            "name": "Agent",
+            "types": [
+              "Technology",
+              "Concept"
+            ],
+            "aliases": [],
+            "description": "上下文被管理的智能体",
+            "properties": {}
+          }
+        ],
+        "claims": [
+          {
+            "subject": "Context Runtime",
+            "predicate": "designed_for",
+            "object": "管理 Agent 的上下文",
+            "object_kind": "concept",
+            "temporal_signal": null,
+            "claim_type": "definitional",
+            "polarity": "positive",
+            "modality": "asserted",
+            "content": null,
+            "context": {},
+            "confidence": 0.75,
+            "source_chunk": "b0224996-dca3-4a5b-a99d-218f6d76d6d8",
+            "evidence_quote": "Context Runtime 负责管理 Agent 的上下文。"
+          }
+        ],
+        "rejected": [],
+        "imprecise_quotes": 0
+      }
+    },
     {
       "id": "concept_progressive_loading",
       "kind": "semantic",
@@ -122,29 +499,49 @@
       },
       "steps": 2,
       "model_calls": 2,
+      "provider_calls": {
+        "extraction": 1,
+        "detection": 1,
+        "extraction_prompt_tokens": 3112,
+        "extraction_completion_tokens": 738
+      },
+      "context_plan": {
+        "predicate_candidates": [
+          "is",
+          "extracts"
+        ],
+        "predicate_context": "[CLAIM PREDICATE CONTEXT]\nRegistered predicates (closed vocabulary — select the most specific one; never invent a name):\naccesses, addresses, allows, analyzes, applied_to, based_on, better_than, causes, classified_as, compares_with, consists_of, contains, creates, decreases, defined_as, depends_on, derived_from, designed_for, enables, evaluated_on, evaluates, extends, extracts, generates, has_ceo, implements, improves, includes, increases, investigates, is, leads_to, prevents, produces, provides, receives, reduces, requires, retrieves, studies, supports, tested_on, trained_on, transforms, used_for, uses, worse_than\n\nMost consistent with this chunk (candidates, not a decision):\n- `is` label: 是; temporal (put \"现任\"/\"曾经\" in `temporal_signal`, not in the predicate name);\n- `extracts` label: 提取;",
+        "entity_type_context": "[ENTITY TYPE CONTEXT]\nEntity types (closed vocabulary, 14) — a Mention is not an Entity:\n- Technology: A technically meaningful technology, architecture, technical system, capability or technology family that can be independently discussed.\n- Theory: A relatively coherent explanatory theory or theoretical framework.\n- Organization: A stable organization, institution, company, team or other organizational entity that is independently identifiable in context.\n- Model: An independently identifiable model used for training, inference, evaluation or deployment.\n- Software: An executable or deployable software system, program, library, framework or software tool.\n- Standard: A formally standardized or normative specification maintained by a recognized body, community or process.\n- Protocol: A defined protocol for communication, interaction, coordination or interoperability.\n- Method: A method, algorithm, procedure, workflow or way of achieving a goal.\n- Resource: A separately identifiable knowledge or technical resource that cannot reasonably be classified as one of the other 13 types.\n- Product: A product offered, distributed or provided as an identifiable product.\n- Person: A naturally identifiable person with independent identity.\n- Dataset: An independently identifiable organized collection of data.\n- Location: A separately identifiable geographic, spatial or site/location entity.\n- Concept: An abstract object that can be independently defined, discussed, compared or used as a durable knowledge topic.\n\nWhen type confidence is insufficient, omit the Entity — never default to Resource.",
+        "object_kind_context": {
+          "source": "skills/knowledge-extraction/SKILL.md",
+          "injected_here": false,
+          "reason": "the SKILL contract is already in the system prompt; one source only"
+        },
+        "general_extraction_context": "[EXTRACTION CONTEXT — ALREADY LOADED]\nThe registries this chunk needs are included below (claim predicates, entity types). No reference tool is registered for this call and none is needed: choose from what is here.",
+        "flags": []
+      },
       "by_step": [
         {
           "step": "detect_batch",
           "calls": 1,
-          "prompt_tokens": 817,
-          "completion_tokens": 148
+          "prompt_tokens": 814,
+          "completion_tokens": 145
         },
         {
           "step": "extract_batch",
           "calls": 1,
-          "prompt_tokens": 7231,
-          "completion_tokens": 906
+          "prompt_tokens": 3112,
+          "completion_tokens": 738
         }
       ],
-      "prompt_tokens": 8048,
-      "completion_tokens": 1054,
+      "prompt_tokens": 3926,
+      "completion_tokens": 883,
       "raw_envelope": {
         "entities": [
           {
             "name": "渐进式上下文加载",
             "types": [
-              "Concept",
-              "Method"
+              "Concept"
             ],
             "aliases": [],
             "description": "一种上下文管理机制",
@@ -154,7 +551,7 @@
         "claims": [
           {
             "subject": "渐进式上下文加载",
-            "predicate": "defined_as",
+            "predicate": "is",
             "object": "上下文管理机制",
             "object_kind": "concept",
             "temporal_signal": null,
@@ -163,8 +560,8 @@
             "modality": "asserted",
             "content": null,
             "context": {},
-            "confidence": 0.9,
-            "source_chunk": "5287167b-7b32-4e2e-be45-19e0f31b42a0",
+            "confidence": 0.95,
+            "source_chunk": "b1cb7c75-0657-4b27-bfd6-d36dbeb31bf8",
             "evidence_quote": "渐进式上下文加载是一种上下文管理机制。"
           }
         ],
@@ -178,8 +575,7 @@
           {
             "name": "渐进式上下文加载",
             "types": [
-              "Concept",
-              "Method"
+              "Concept"
             ],
             "aliases": [],
             "description": "一种上下文管理机制",
@@ -189,7 +585,7 @@
         "claims": [
           {
             "subject": "渐进式上下文加载",
-            "predicate": "defined_as",
+            "predicate": "is",
             "object": "上下文管理机制",
             "object_kind": "concept",
             "temporal_signal": null,
@@ -198,9 +594,889 @@
             "modality": "asserted",
             "content": null,
             "context": {},
-            "confidence": 0.9,
-            "source_chunk": "5287167b-7b32-4e2e-be45-19e0f31b42a0",
+            "confidence": 0.95,
+            "source_chunk": "b1cb7c75-0657-4b27-bfd6-d36dbeb31bf8",
             "evidence_quote": "渐进式上下文加载是一种上下文管理机制。"
+          }
+        ],
+        "rejected": [],
+        "imprecise_quotes": 0
+      }
+    },
+    {
+      "id": "literal_weekly_frequency",
+      "kind": "abstention",
+      "covers": "abstention",
+      "text": "任务每周执行一次。",
+      "checks": [
+        {
+          "layer": "structural",
+          "check": "no_rejected_items",
+          "ok": true,
+          "detail": "rejected=[]"
+        },
+        {
+          "layer": "structural",
+          "check": "no_entity_object",
+          "ok": true,
+          "detail": "entity_objects=[]"
+        },
+        {
+          "layer": "structural",
+          "check": "no_declared_entity",
+          "ok": true,
+          "detail": "bad=[]"
+        },
+        {
+          "layer": "semantic",
+          "check": "abstention_respected",
+          "ok": true,
+          "detail": "claims=1 rejected=[]"
+        }
+      ],
+      "by_layer": {
+        "structural": [
+          true,
+          true,
+          true
+        ],
+        "registry": [],
+        "semantic": [
+          true
+        ]
+      },
+      "passed": {
+        "structural": true,
+        "registry": true,
+        "semantic": true
+      },
+      "steps": 2,
+      "model_calls": 2,
+      "provider_calls": {
+        "extraction": 1,
+        "detection": 1,
+        "extraction_prompt_tokens": 3075,
+        "extraction_completion_tokens": 1378
+      },
+      "context_plan": {
+        "predicate_candidates": [
+          "extracts"
+        ],
+        "predicate_context": "[CLAIM PREDICATE CONTEXT]\nRegistered predicates (closed vocabulary — select the most specific one; never invent a name):\naccesses, addresses, allows, analyzes, applied_to, based_on, better_than, causes, classified_as, compares_with, consists_of, contains, creates, decreases, defined_as, depends_on, derived_from, designed_for, enables, evaluated_on, evaluates, extends, extracts, generates, has_ceo, implements, improves, includes, increases, investigates, is, leads_to, prevents, produces, provides, receives, reduces, requires, retrieves, studies, supports, tested_on, trained_on, transforms, used_for, uses, worse_than\n\nMost consistent with this chunk (candidates, not a decision):\n- `extracts` label: 提取;",
+        "entity_type_context": "[ENTITY TYPE CONTEXT]\nEntity types (closed vocabulary, 14) — a Mention is not an Entity:\n- Technology: A technically meaningful technology, architecture, technical system, capability or technology family that can be independently discussed.\n- Theory: A relatively coherent explanatory theory or theoretical framework.\n- Organization: A stable organization, institution, company, team or other organizational entity that is independently identifiable in context.\n- Model: An independently identifiable model used for training, inference, evaluation or deployment.\n- Software: An executable or deployable software system, program, library, framework or software tool.\n- Standard: A formally standardized or normative specification maintained by a recognized body, community or process.\n- Protocol: A defined protocol for communication, interaction, coordination or interoperability.\n- Method: A method, algorithm, procedure, workflow or way of achieving a goal.\n- Resource: A separately identifiable knowledge or technical resource that cannot reasonably be classified as one of the other 13 types.\n- Product: A product offered, distributed or provided as an identifiable product.\n- Person: A naturally identifiable person with independent identity.\n- Dataset: An independently identifiable organized collection of data.\n- Location: A separately identifiable geographic, spatial or site/location entity.\n- Concept: An abstract object that can be independently defined, discussed, compared or used as a durable knowledge topic.\n\nWhen type confidence is insufficient, omit the Entity — never default to Resource.",
+        "object_kind_context": {
+          "source": "skills/knowledge-extraction/SKILL.md",
+          "injected_here": false,
+          "reason": "the SKILL contract is already in the system prompt; one source only"
+        },
+        "general_extraction_context": "[EXTRACTION CONTEXT — ALREADY LOADED]\nThe registries this chunk needs are included below (claim predicates, entity types). No reference tool is registered for this call and none is needed: choose from what is here.",
+        "flags": []
+      },
+      "by_step": [
+        {
+          "step": "detect_batch",
+          "calls": 1,
+          "prompt_tokens": 810,
+          "completion_tokens": 87
+        },
+        {
+          "step": "extract_batch",
+          "calls": 1,
+          "prompt_tokens": 3075,
+          "completion_tokens": 1378
+        }
+      ],
+      "prompt_tokens": 3885,
+      "completion_tokens": 1465,
+      "raw_envelope": {
+        "entities": [],
+        "claims": [
+          {
+            "subject": "任务",
+            "predicate": "is",
+            "object": "每周执行一次",
+            "object_kind": "concept",
+            "temporal_signal": null,
+            "claim_type": "factual",
+            "polarity": "positive",
+            "modality": "asserted",
+            "content": null,
+            "context": {
+              "note": "subject is an unnamed task reference; no stable-identity entity is recoverable from this chunk"
+            },
+            "confidence": 0.5,
+            "source_chunk": "0eec1689-ccc1-412c-a41a-e25e8786784b",
+            "evidence_quote": "任务每周执行一次。"
+          }
+        ],
+        "events": [],
+        "ideas": [],
+        "questions": []
+      },
+      "observed": {
+        "status": "COMPLETED",
+        "entities": [],
+        "claims": [
+          {
+            "subject": "任务",
+            "predicate": "is",
+            "object": "每周执行一次",
+            "object_kind": "concept",
+            "temporal_signal": null,
+            "claim_type": "factual",
+            "polarity": "positive",
+            "modality": "asserted",
+            "content": null,
+            "context": {
+              "note": "subject is an unnamed task reference; no stable-identity entity is recoverable from this chunk"
+            },
+            "confidence": 0.5,
+            "source_chunk": "0eec1689-ccc1-412c-a41a-e25e8786784b",
+            "evidence_quote": "任务每周执行一次。"
+          }
+        ],
+        "rejected": [],
+        "imprecise_quotes": 0
+      }
+    },
+    {
+      "id": "literal_chunk_size",
+      "kind": "semantic",
+      "covers": "literal",
+      "text": "最大 chunk 为 8192 tokens。",
+      "checks": [
+        {
+          "layer": "structural",
+          "check": "min_claims",
+          "ok": true,
+          "detail": "claims=1"
+        },
+        {
+          "layer": "structural",
+          "check": "evidence_present",
+          "ok": true,
+          "detail": "missing=[]"
+        },
+        {
+          "layer": "structural",
+          "check": "evidence_located",
+          "ok": true,
+          "detail": "imprecise_quotes=0"
+        },
+        {
+          "layer": "structural",
+          "check": "no_rejected_items",
+          "ok": true,
+          "detail": "rejected=[]"
+        },
+        {
+          "layer": "structural",
+          "check": "no_entity_object",
+          "ok": true,
+          "detail": "entity_objects=[]"
+        },
+        {
+          "layer": "structural",
+          "check": "no_declared_entity",
+          "ok": true,
+          "detail": "bad=[]"
+        },
+        {
+          "layer": "registry",
+          "check": "predicate_in_registry",
+          "ok": true,
+          "detail": "unregistered=[]"
+        },
+        {
+          "layer": "semantic",
+          "check": "claim_exists",
+          "ok": true,
+          "detail": "about=chunk subjects=['最大 chunk']"
+        },
+        {
+          "layer": "semantic",
+          "check": "subject_is",
+          "ok": true,
+          "detail": "subjects=['最大 chunk'] want=chunk"
+        },
+        {
+          "layer": "semantic",
+          "check": "object_kind_is",
+          "ok": true,
+          "detail": "kinds=['literal'] want=literal"
+        }
+      ],
+      "by_layer": {
+        "structural": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "registry": [
+          true
+        ],
+        "semantic": [
+          true,
+          true,
+          true
+        ]
+      },
+      "passed": {
+        "structural": true,
+        "registry": true,
+        "semantic": true
+      },
+      "steps": 2,
+      "model_calls": 2,
+      "provider_calls": {
+        "extraction": 1,
+        "detection": 1,
+        "extraction_prompt_tokens": 3077,
+        "extraction_completion_tokens": 662
+      },
+      "context_plan": {
+        "predicate_candidates": [
+          "extracts"
+        ],
+        "predicate_context": "[CLAIM PREDICATE CONTEXT]\nRegistered predicates (closed vocabulary — select the most specific one; never invent a name):\naccesses, addresses, allows, analyzes, applied_to, based_on, better_than, causes, classified_as, compares_with, consists_of, contains, creates, decreases, defined_as, depends_on, derived_from, designed_for, enables, evaluated_on, evaluates, extends, extracts, generates, has_ceo, implements, improves, includes, increases, investigates, is, leads_to, prevents, produces, provides, receives, reduces, requires, retrieves, studies, supports, tested_on, trained_on, transforms, used_for, uses, worse_than\n\nMost consistent with this chunk (candidates, not a decision):\n- `extracts` label: 提取;",
+        "entity_type_context": "[ENTITY TYPE CONTEXT]\nEntity types (closed vocabulary, 14) — a Mention is not an Entity:\n- Technology: A technically meaningful technology, architecture, technical system, capability or technology family that can be independently discussed.\n- Theory: A relatively coherent explanatory theory or theoretical framework.\n- Organization: A stable organization, institution, company, team or other organizational entity that is independently identifiable in context.\n- Model: An independently identifiable model used for training, inference, evaluation or deployment.\n- Software: An executable or deployable software system, program, library, framework or software tool.\n- Standard: A formally standardized or normative specification maintained by a recognized body, community or process.\n- Protocol: A defined protocol for communication, interaction, coordination or interoperability.\n- Method: A method, algorithm, procedure, workflow or way of achieving a goal.\n- Resource: A separately identifiable knowledge or technical resource that cannot reasonably be classified as one of the other 13 types.\n- Product: A product offered, distributed or provided as an identifiable product.\n- Person: A naturally identifiable person with independent identity.\n- Dataset: An independently identifiable organized collection of data.\n- Location: A separately identifiable geographic, spatial or site/location entity.\n- Concept: An abstract object that can be independently defined, discussed, compared or used as a durable knowledge topic.\n\nWhen type confidence is insufficient, omit the Entity — never default to Resource.",
+        "object_kind_context": {
+          "source": "skills/knowledge-extraction/SKILL.md",
+          "injected_here": false,
+          "reason": "the SKILL contract is already in the system prompt; one source only"
+        },
+        "general_extraction_context": "[EXTRACTION CONTEXT — ALREADY LOADED]\nThe registries this chunk needs are included below (claim predicates, entity types). No reference tool is registered for this call and none is needed: choose from what is here.",
+        "flags": []
+      },
+      "by_step": [
+        {
+          "step": "detect_batch",
+          "calls": 1,
+          "prompt_tokens": 812,
+          "completion_tokens": 228
+        },
+        {
+          "step": "extract_batch",
+          "calls": 1,
+          "prompt_tokens": 3077,
+          "completion_tokens": 662
+        }
+      ],
+      "prompt_tokens": 3889,
+      "completion_tokens": 890,
+      "raw_envelope": {
+        "entities": [],
+        "claims": [
+          {
+            "subject": "最大 chunk",
+            "predicate": "is",
+            "object": "8192 tokens",
+            "object_kind": "literal",
+            "temporal_signal": null,
+            "claim_type": "definitional",
+            "polarity": "positive",
+            "modality": "asserted",
+            "content": null,
+            "context": {},
+            "confidence": 0.9,
+            "source_chunk": "2ebfdf45-c11c-4233-8677-982da40530ba",
+            "evidence_quote": "最大 chunk 为 8192 tokens。"
+          }
+        ],
+        "events": [],
+        "ideas": [],
+        "questions": []
+      },
+      "observed": {
+        "status": "COMPLETED",
+        "entities": [],
+        "claims": [
+          {
+            "subject": "最大 chunk",
+            "predicate": "is",
+            "object": "8192 tokens",
+            "object_kind": "literal",
+            "temporal_signal": null,
+            "claim_type": "definitional",
+            "polarity": "positive",
+            "modality": "asserted",
+            "content": null,
+            "context": {},
+            "confidence": 0.9,
+            "source_chunk": "2ebfdf45-c11c-4233-8677-982da40530ba",
+            "evidence_quote": "最大 chunk 为 8192 tokens。"
+          }
+        ],
+        "rejected": [],
+        "imprecise_quotes": 0
+      }
+    },
+    {
+      "id": "path_source_artifact",
+      "kind": "semantic",
+      "covers": "path",
+      "text": "配置文件位于 docs/context/runtime.md。",
+      "checks": [
+        {
+          "layer": "structural",
+          "check": "evidence_present",
+          "ok": true,
+          "detail": "missing=[]"
+        },
+        {
+          "layer": "structural",
+          "check": "evidence_located",
+          "ok": true,
+          "detail": "imprecise_quotes=0"
+        },
+        {
+          "layer": "structural",
+          "check": "no_rejected_items",
+          "ok": true,
+          "detail": "rejected=[]"
+        },
+        {
+          "layer": "structural",
+          "check": "no_entity_object",
+          "ok": true,
+          "detail": "entity_objects=[]"
+        },
+        {
+          "layer": "structural",
+          "check": "no_declared_entity",
+          "ok": true,
+          "detail": "bad=[]"
+        },
+        {
+          "layer": "registry",
+          "check": "predicate_in_registry",
+          "ok": true,
+          "detail": "unregistered=[]"
+        },
+        {
+          "layer": "semantic",
+          "check": "not_an_entity",
+          "ok": true,
+          "detail": "path=docs/context/runtime.md"
+        }
+      ],
+      "by_layer": {
+        "structural": [
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "registry": [
+          true
+        ],
+        "semantic": [
+          true
+        ]
+      },
+      "passed": {
+        "structural": true,
+        "registry": true,
+        "semantic": true
+      },
+      "steps": 2,
+      "model_calls": 2,
+      "provider_calls": {
+        "extraction": 1,
+        "detection": 1,
+        "extraction_prompt_tokens": 3081,
+        "extraction_completion_tokens": 449
+      },
+      "context_plan": {
+        "predicate_candidates": [
+          "extracts"
+        ],
+        "predicate_context": "[CLAIM PREDICATE CONTEXT]\nRegistered predicates (closed vocabulary — select the most specific one; never invent a name):\naccesses, addresses, allows, analyzes, applied_to, based_on, better_than, causes, classified_as, compares_with, consists_of, contains, creates, decreases, defined_as, depends_on, derived_from, designed_for, enables, evaluated_on, evaluates, extends, extracts, generates, has_ceo, implements, improves, includes, increases, investigates, is, leads_to, prevents, produces, provides, receives, reduces, requires, retrieves, studies, supports, tested_on, trained_on, transforms, used_for, uses, worse_than\n\nMost consistent with this chunk (candidates, not a decision):\n- `extracts` label: 提取;",
+        "entity_type_context": "[ENTITY TYPE CONTEXT]\nEntity types (closed vocabulary, 14) — a Mention is not an Entity:\n- Technology: A technically meaningful technology, architecture, technical system, capability or technology family that can be independently discussed.\n- Theory: A relatively coherent explanatory theory or theoretical framework.\n- Organization: A stable organization, institution, company, team or other organizational entity that is independently identifiable in context.\n- Model: An independently identifiable model used for training, inference, evaluation or deployment.\n- Software: An executable or deployable software system, program, library, framework or software tool.\n- Standard: A formally standardized or normative specification maintained by a recognized body, community or process.\n- Protocol: A defined protocol for communication, interaction, coordination or interoperability.\n- Method: A method, algorithm, procedure, workflow or way of achieving a goal.\n- Resource: A separately identifiable knowledge or technical resource that cannot reasonably be classified as one of the other 13 types.\n- Product: A product offered, distributed or provided as an identifiable product.\n- Person: A naturally identifiable person with independent identity.\n- Dataset: An independently identifiable organized collection of data.\n- Location: A separately identifiable geographic, spatial or site/location entity.\n- Concept: An abstract object that can be independently defined, discussed, compared or used as a durable knowledge topic.\n\nWhen type confidence is insufficient, omit the Entity — never default to Resource.",
+        "object_kind_context": {
+          "source": "skills/knowledge-extraction/SKILL.md",
+          "injected_here": false,
+          "reason": "the SKILL contract is already in the system prompt; one source only"
+        },
+        "general_extraction_context": "[EXTRACTION CONTEXT — ALREADY LOADED]\nThe registries this chunk needs are included below (claim predicates, entity types). No reference tool is registered for this call and none is needed: choose from what is here.",
+        "flags": []
+      },
+      "by_step": [
+        {
+          "step": "detect_batch",
+          "calls": 1,
+          "prompt_tokens": 814,
+          "completion_tokens": 185
+        },
+        {
+          "step": "extract_batch",
+          "calls": 1,
+          "prompt_tokens": 3081,
+          "completion_tokens": 449
+        }
+      ],
+      "prompt_tokens": 3895,
+      "completion_tokens": 634,
+      "raw_envelope": {
+        "entities": [],
+        "claims": [],
+        "events": [],
+        "ideas": [],
+        "questions": []
+      },
+      "observed": {
+        "status": "COMPLETED",
+        "entities": [],
+        "claims": [],
+        "rejected": [],
+        "imprecise_quotes": 0
+      }
+    },
+    {
+      "id": "prose_slash_architecture",
+      "kind": "semantic",
+      "covers": "slash-prose",
+      "text": "客户端/服务端架构需要统一认证。",
+      "checks": [
+        {
+          "layer": "structural",
+          "check": "min_claims",
+          "ok": true,
+          "detail": "claims=1"
+        },
+        {
+          "layer": "structural",
+          "check": "evidence_present",
+          "ok": true,
+          "detail": "missing=[]"
+        },
+        {
+          "layer": "structural",
+          "check": "evidence_located",
+          "ok": true,
+          "detail": "imprecise_quotes=0"
+        },
+        {
+          "layer": "structural",
+          "check": "no_rejected_items",
+          "ok": true,
+          "detail": "rejected=[]"
+        },
+        {
+          "layer": "structural",
+          "check": "no_literal_object",
+          "ok": true,
+          "detail": "literal_objects=[]"
+        },
+        {
+          "layer": "structural",
+          "check": "referenced_any",
+          "ok": true,
+          "detail": "want_any=['客户端/服务端架构', '客户端', '服务端']"
+        },
+        {
+          "layer": "registry",
+          "check": "predicate_in_registry",
+          "ok": true,
+          "detail": "unregistered=[]"
+        },
+        {
+          "layer": "registry",
+          "check": "entity_candidates",
+          "ok": true,
+          "detail": "hit=['客户端/服务端架构']"
+        },
+        {
+          "layer": "semantic",
+          "check": "claim_exists",
+          "ok": true,
+          "detail": "about=客户端 subjects=['客户端/服务端架构']"
+        },
+        {
+          "layer": "semantic",
+          "check": "subject_is",
+          "ok": true,
+          "detail": "subjects=['客户端/服务端架构'] want=客户端/服务端架构"
+        }
+      ],
+      "by_layer": {
+        "structural": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "registry": [
+          true,
+          true
+        ],
+        "semantic": [
+          true,
+          true
+        ]
+      },
+      "passed": {
+        "structural": true,
+        "registry": true,
+        "semantic": true
+      },
+      "steps": 2,
+      "model_calls": 2,
+      "provider_calls": {
+        "extraction": 1,
+        "detection": 1,
+        "extraction_prompt_tokens": 3091,
+        "extraction_completion_tokens": 924
+      },
+      "context_plan": {
+        "predicate_candidates": [
+          "extracts",
+          "requires"
+        ],
+        "predicate_context": "[CLAIM PREDICATE CONTEXT]\nRegistered predicates (closed vocabulary — select the most specific one; never invent a name):\naccesses, addresses, allows, analyzes, applied_to, based_on, better_than, causes, classified_as, compares_with, consists_of, contains, creates, decreases, defined_as, depends_on, derived_from, designed_for, enables, evaluated_on, evaluates, extends, extracts, generates, has_ceo, implements, improves, includes, increases, investigates, is, leads_to, prevents, produces, provides, receives, reduces, requires, retrieves, studies, supports, tested_on, trained_on, transforms, used_for, uses, worse_than\n\nMost consistent with this chunk (candidates, not a decision):\n- `extracts` label: 提取;\n- `requires` label: 需要;",
+        "entity_type_context": "[ENTITY TYPE CONTEXT]\nEntity types (closed vocabulary, 14) — a Mention is not an Entity:\n- Technology: A technically meaningful technology, architecture, technical system, capability or technology family that can be independently discussed.\n- Theory: A relatively coherent explanatory theory or theoretical framework.\n- Organization: A stable organization, institution, company, team or other organizational entity that is independently identifiable in context.\n- Model: An independently identifiable model used for training, inference, evaluation or deployment.\n- Software: An executable or deployable software system, program, library, framework or software tool.\n- Standard: A formally standardized or normative specification maintained by a recognized body, community or process.\n- Protocol: A defined protocol for communication, interaction, coordination or interoperability.\n- Method: A method, algorithm, procedure, workflow or way of achieving a goal.\n- Resource: A separately identifiable knowledge or technical resource that cannot reasonably be classified as one of the other 13 types.\n- Product: A product offered, distributed or provided as an identifiable product.\n- Person: A naturally identifiable person with independent identity.\n- Dataset: An independently identifiable organized collection of data.\n- Location: A separately identifiable geographic, spatial or site/location entity.\n- Concept: An abstract object that can be independently defined, discussed, compared or used as a durable knowledge topic.\n\nWhen type confidence is insufficient, omit the Entity — never default to Resource.",
+        "object_kind_context": {
+          "source": "skills/knowledge-extraction/SKILL.md",
+          "injected_here": false,
+          "reason": "the SKILL contract is already in the system prompt; one source only"
+        },
+        "general_extraction_context": "[EXTRACTION CONTEXT — ALREADY LOADED]\nThe registries this chunk needs are included below (claim predicates, entity types). No reference tool is registered for this call and none is needed: choose from what is here.",
+        "flags": []
+      },
+      "by_step": [
+        {
+          "step": "detect_batch",
+          "calls": 1,
+          "prompt_tokens": 813,
+          "completion_tokens": 240
+        },
+        {
+          "step": "extract_batch",
+          "calls": 1,
+          "prompt_tokens": 3091,
+          "completion_tokens": 924
+        }
+      ],
+      "prompt_tokens": 3904,
+      "completion_tokens": 1164,
+      "raw_envelope": {
+        "entities": [
+          {
+            "name": "客户端/服务端架构",
+            "types": [
+              "Technology"
+            ],
+            "aliases": [],
+            "description": "一种将系统划分为客户端与服务端两部分的软件系统架构",
+            "properties": {}
+          }
+        ],
+        "claims": [
+          {
+            "subject": "客户端/服务端架构",
+            "predicate": "requires",
+            "object": "统一认证",
+            "object_kind": "concept",
+            "temporal_signal": null,
+            "claim_type": "normative",
+            "polarity": "positive",
+            "modality": "necessary",
+            "content": null,
+            "context": {},
+            "confidence": 0.78,
+            "source_chunk": "57925aad-1521-4ab7-b73d-e1803500a1cd",
+            "evidence_quote": "客户端/服务端架构需要统一认证。"
+          }
+        ],
+        "events": [],
+        "ideas": [
+          {
+            "content": "为客户端/服务端架构引入统一的认证机制，以解决两端认证不统一的问题",
+            "status": "candidate",
+            "confidence": 0.6,
+            "source_chunk": "57925aad-1521-4ab7-b73d-e1803500a1cd",
+            "evidence_quote": "客户端/服务端架构需要统一认证。"
+          }
+        ],
+        "questions": []
+      },
+      "observed": {
+        "status": "COMPLETED",
+        "entities": [
+          {
+            "name": "客户端/服务端架构",
+            "types": [
+              "Technology"
+            ],
+            "aliases": [],
+            "description": "一种将系统划分为客户端与服务端两部分的软件系统架构",
+            "properties": {}
+          }
+        ],
+        "claims": [
+          {
+            "subject": "客户端/服务端架构",
+            "predicate": "requires",
+            "object": "统一认证",
+            "object_kind": "concept",
+            "temporal_signal": null,
+            "claim_type": "normative",
+            "polarity": "positive",
+            "modality": "necessary",
+            "content": null,
+            "context": {},
+            "confidence": 0.78,
+            "source_chunk": "57925aad-1521-4ab7-b73d-e1803500a1cd",
+            "evidence_quote": "客户端/服务端架构需要统一认证。"
+          }
+        ],
+        "rejected": [],
+        "imprecise_quotes": 0
+      }
+    },
+    {
+      "id": "prose_slash_concept_pair",
+      "kind": "semantic",
+      "covers": "slash-concept",
+      "text": "Static Context / Dynamic Context 是两种上下文模式。",
+      "checks": [
+        {
+          "layer": "structural",
+          "check": "min_claims",
+          "ok": true,
+          "detail": "claims=2"
+        },
+        {
+          "layer": "structural",
+          "check": "evidence_present",
+          "ok": true,
+          "detail": "missing=[]"
+        },
+        {
+          "layer": "structural",
+          "check": "evidence_located",
+          "ok": true,
+          "detail": "imprecise_quotes=0"
+        },
+        {
+          "layer": "structural",
+          "check": "no_rejected_items",
+          "ok": true,
+          "detail": "rejected=[]"
+        },
+        {
+          "layer": "structural",
+          "check": "no_literal_object",
+          "ok": true,
+          "detail": "literal_objects=[]"
+        },
+        {
+          "layer": "structural",
+          "check": "referenced_any",
+          "ok": true,
+          "detail": "want_any=['Static Context / Dynamic Context', 'Static Context', 'Dynamic Context']"
+        },
+        {
+          "layer": "registry",
+          "check": "predicate_in_registry",
+          "ok": true,
+          "detail": "unregistered=[]"
+        },
+        {
+          "layer": "semantic",
+          "check": "claim_exists",
+          "ok": true,
+          "detail": "about=Static Context subjects=['Static Context', 'Dynamic Context']"
+        },
+        {
+          "layer": "semantic",
+          "check": "object_kind_is",
+          "ok": true,
+          "detail": "kinds=['concept'] want=concept"
+        },
+        {
+          "layer": "semantic",
+          "check": "declared_kind_consistency",
+          "ok": true,
+          "detail": "object_declared_as_entity_but_kinded=[]"
+        }
+      ],
+      "by_layer": {
+        "structural": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "registry": [
+          true
+        ],
+        "semantic": [
+          true,
+          true,
+          true
+        ]
+      },
+      "passed": {
+        "structural": true,
+        "registry": true,
+        "semantic": true
+      },
+      "steps": 2,
+      "model_calls": 2,
+      "provider_calls": {
+        "extraction": 1,
+        "detection": 1,
+        "extraction_prompt_tokens": 3089,
+        "extraction_completion_tokens": 967
+      },
+      "context_plan": {
+        "predicate_candidates": [
+          "extracts"
+        ],
+        "predicate_context": "[CLAIM PREDICATE CONTEXT]\nRegistered predicates (closed vocabulary — select the most specific one; never invent a name):\naccesses, addresses, allows, analyzes, applied_to, based_on, better_than, causes, classified_as, compares_with, consists_of, contains, creates, decreases, defined_as, depends_on, derived_from, designed_for, enables, evaluated_on, evaluates, extends, extracts, generates, has_ceo, implements, improves, includes, increases, investigates, is, leads_to, prevents, produces, provides, receives, reduces, requires, retrieves, studies, supports, tested_on, trained_on, transforms, used_for, uses, worse_than\n\nMost consistent with this chunk (candidates, not a decision):\n- `extracts` label: 提取;",
+        "entity_type_context": "[ENTITY TYPE CONTEXT]\nEntity types (closed vocabulary, 14) — a Mention is not an Entity:\n- Technology: A technically meaningful technology, architecture, technical system, capability or technology family that can be independently discussed.\n- Theory: A relatively coherent explanatory theory or theoretical framework.\n- Organization: A stable organization, institution, company, team or other organizational entity that is independently identifiable in context.\n- Model: An independently identifiable model used for training, inference, evaluation or deployment.\n- Software: An executable or deployable software system, program, library, framework or software tool.\n- Standard: A formally standardized or normative specification maintained by a recognized body, community or process.\n- Protocol: A defined protocol for communication, interaction, coordination or interoperability.\n- Method: A method, algorithm, procedure, workflow or way of achieving a goal.\n- Resource: A separately identifiable knowledge or technical resource that cannot reasonably be classified as one of the other 13 types.\n- Product: A product offered, distributed or provided as an identifiable product.\n- Person: A naturally identifiable person with independent identity.\n- Dataset: An independently identifiable organized collection of data.\n- Location: A separately identifiable geographic, spatial or site/location entity.\n- Concept: An abstract object that can be independently defined, discussed, compared or used as a durable knowledge topic.\n\nWhen type confidence is insufficient, omit the Entity — never default to Resource.",
+        "object_kind_context": {
+          "source": "skills/knowledge-extraction/SKILL.md",
+          "injected_here": false,
+          "reason": "the SKILL contract is already in the system prompt; one source only"
+        },
+        "general_extraction_context": "[EXTRACTION CONTEXT — ALREADY LOADED]\nThe registries this chunk needs are included below (claim predicates, entity types). No reference tool is registered for this call and none is needed: choose from what is here.",
+        "flags": []
+      },
+      "by_step": [
+        {
+          "step": "detect_batch",
+          "calls": 1,
+          "prompt_tokens": 822,
+          "completion_tokens": 129
+        },
+        {
+          "step": "extract_batch",
+          "calls": 1,
+          "prompt_tokens": 3089,
+          "completion_tokens": 967
+        }
+      ],
+      "prompt_tokens": 3911,
+      "completion_tokens": 1096,
+      "raw_envelope": {
+        "entities": [
+          {
+            "name": "Static Context",
+            "types": [
+              "Concept"
+            ],
+            "aliases": [],
+            "description": "一种上下文模式（context mode），与 Dynamic Context 并列为两种上下文模式之一。",
+            "properties": {}
+          },
+          {
+            "name": "Dynamic Context",
+            "types": [
+              "Concept"
+            ],
+            "aliases": [],
+            "description": "一种上下文模式（context mode），与 Static Context 并列为两种上下文模式之一。",
+            "properties": {}
+          }
+        ],
+        "claims": [
+          {
+            "subject": "Static Context",
+            "predicate": "classified_as",
+            "object": "上下文模式",
+            "object_kind": "concept",
+            "temporal_signal": null,
+            "claim_type": "definitional",
+            "polarity": "positive",
+            "modality": "asserted",
+            "content": null,
+            "context": {},
+            "confidence": 0.9,
+            "source_chunk": "9a8753eb-8073-4023-9d0a-9abe88a88f6c",
+            "evidence_quote": "Static Context / Dynamic Context 是两种上下文模式。"
+          },
+          {
+            "subject": "Dynamic Context",
+            "predicate": "classified_as",
+            "object": "上下文模式",
+            "object_kind": "concept",
+            "temporal_signal": null,
+            "claim_type": "definitional",
+            "polarity": "positive",
+            "modality": "asserted",
+            "content": null,
+            "context": {},
+            "confidence": 0.9,
+            "source_chunk": "9a8753eb-8073-4023-9d0a-9abe88a88f6c",
+            "evidence_quote": "Static Context / Dynamic Context 是两种上下文模式。"
+          }
+        ],
+        "events": [],
+        "ideas": [],
+        "questions": []
+      },
+      "observed": {
+        "status": "COMPLETED",
+        "entities": [
+          {
+            "name": "Static Context",
+            "types": [
+              "Concept"
+            ],
+            "aliases": [],
+            "description": "一种上下文模式（context mode），与 Dynamic Context 并列为两种上下文模式之一。",
+            "properties": {}
+          },
+          {
+            "name": "Dynamic Context",
+            "types": [
+              "Concept"
+            ],
+            "aliases": [],
+            "description": "一种上下文模式（context mode），与 Static Context 并列为两种上下文模式之一。",
+            "properties": {}
+          }
+        ],
+        "claims": [
+          {
+            "subject": "Static Context",
+            "predicate": "classified_as",
+            "object": "上下文模式",
+            "object_kind": "concept",
+            "temporal_signal": null,
+            "claim_type": "definitional",
+            "polarity": "positive",
+            "modality": "asserted",
+            "content": null,
+            "context": {},
+            "confidence": 0.9,
+            "source_chunk": "9a8753eb-8073-4023-9d0a-9abe88a88f6c",
+            "evidence_quote": "Static Context / Dynamic Context 是两种上下文模式。"
+          },
+          {
+            "subject": "Dynamic Context",
+            "predicate": "classified_as",
+            "object": "上下文模式",
+            "object_kind": "concept",
+            "temporal_signal": null,
+            "claim_type": "definitional",
+            "polarity": "positive",
+            "modality": "asserted",
+            "content": null,
+            "context": {},
+            "confidence": 0.9,
+            "source_chunk": "9a8753eb-8073-4023-9d0a-9abe88a88f6c",
+            "evidence_quote": "Static Context / Dynamic Context 是两种上下文模式。"
           }
         ],
         "rejected": [],
@@ -313,22 +1589,43 @@
       },
       "steps": 2,
       "model_calls": 2,
+      "provider_calls": {
+        "extraction": 1,
+        "detection": 1,
+        "extraction_prompt_tokens": 3149,
+        "extraction_completion_tokens": 521
+      },
+      "context_plan": {
+        "predicate_candidates": [
+          "extracts",
+          "has_ceo"
+        ],
+        "predicate_context": "[CLAIM PREDICATE CONTEXT]\nRegistered predicates (closed vocabulary — select the most specific one; never invent a name):\naccesses, addresses, allows, analyzes, applied_to, based_on, better_than, causes, classified_as, compares_with, consists_of, contains, creates, decreases, defined_as, depends_on, derived_from, designed_for, enables, evaluated_on, evaluates, extends, extracts, generates, has_ceo, implements, improves, includes, increases, investigates, is, leads_to, prevents, produces, provides, receives, reduces, requires, retrieves, studies, supports, tested_on, trained_on, transforms, used_for, uses, worse_than\n\nMost consistent with this chunk (candidates, not a decision):\n- `extracts` label: 提取;\n- `has_ceo` label: 首席执行官; domain=Organization -> range=Person; temporal (put \"现任\"/\"曾经\" in `temporal_signal`, not in the predicate name); aliases: CEO, chief executive officer, 首席执行官, 首席执行长, 行政总裁",
+        "entity_type_context": "[ENTITY TYPE CONTEXT]\nEntity types (closed vocabulary, 14) — a Mention is not an Entity:\n- Technology: A technically meaningful technology, architecture, technical system, capability or technology family that can be independently discussed.\n- Theory: A relatively coherent explanatory theory or theoretical framework.\n- Organization: A stable organization, institution, company, team or other organizational entity that is independently identifiable in context.\n- Model: An independently identifiable model used for training, inference, evaluation or deployment.\n- Software: An executable or deployable software system, program, library, framework or software tool.\n- Standard: A formally standardized or normative specification maintained by a recognized body, community or process.\n- Protocol: A defined protocol for communication, interaction, coordination or interoperability.\n- Method: A method, algorithm, procedure, workflow or way of achieving a goal.\n- Resource: A separately identifiable knowledge or technical resource that cannot reasonably be classified as one of the other 13 types.\n- Product: A product offered, distributed or provided as an identifiable product.\n- Person: A naturally identifiable person with independent identity.\n- Dataset: An independently identifiable organized collection of data.\n- Location: A separately identifiable geographic, spatial or site/location entity.\n- Concept: An abstract object that can be independently defined, discussed, compared or used as a durable knowledge topic.\n\nWhen type confidence is insufficient, omit the Entity — never default to Resource.",
+        "object_kind_context": {
+          "source": "skills/knowledge-extraction/SKILL.md",
+          "injected_here": false,
+          "reason": "the SKILL contract is already in the system prompt; one source only"
+        },
+        "general_extraction_context": "[EXTRACTION CONTEXT — ALREADY LOADED]\nThe registries this chunk needs are included below (claim predicates, entity types). No reference tool is registered for this call and none is needed: choose from what is here.",
+        "flags": []
+      },
       "by_step": [
         {
           "step": "detect_batch",
           "calls": 1,
           "prompt_tokens": 819,
-          "completion_tokens": 141
+          "completion_tokens": 143
         },
         {
           "step": "extract_batch",
           "calls": 1,
-          "prompt_tokens": 7235,
-          "completion_tokens": 672
+          "prompt_tokens": 3149,
+          "completion_tokens": 521
         }
       ],
-      "prompt_tokens": 8054,
-      "completion_tokens": 813,
+      "prompt_tokens": 3968,
+      "completion_tokens": 664,
       "raw_envelope": {
         "entities": [
           {
@@ -336,10 +1633,8 @@
             "types": [
               "Organization"
             ],
-            "aliases": [
-              "Apple"
-            ],
-            "description": "被描述为拥有现任 CEO John Ternus 的公司实体。",
+            "aliases": [],
+            "description": "被描述为拥有现任首席执行官的公司",
             "properties": {}
           },
           {
@@ -348,7 +1643,7 @@
               "Person"
             ],
             "aliases": [],
-            "description": "被描述为苹果现任 CEO 的人物。",
+            "description": "被描述为苹果现任首席执行官的人",
             "properties": {}
           }
         ],
@@ -365,7 +1660,7 @@
             "content": null,
             "context": {},
             "confidence": 0.9,
-            "source_chunk": "752c50a2-3093-4141-8ce5-40c8f7fb3f44",
+            "source_chunk": "c3a1a518-8bce-4db1-a791-f8c7edc7d6b3",
             "evidence_quote": "苹果现任 CEO 是 John Ternus。"
           }
         ],
@@ -381,10 +1676,8 @@
             "types": [
               "Organization"
             ],
-            "aliases": [
-              "Apple"
-            ],
-            "description": "被描述为拥有现任 CEO John Ternus 的公司实体。",
+            "aliases": [],
+            "description": "被描述为拥有现任首席执行官的公司",
             "properties": {}
           },
           {
@@ -393,7 +1686,7 @@
               "Person"
             ],
             "aliases": [],
-            "description": "被描述为苹果现任 CEO 的人物。",
+            "description": "被描述为苹果现任首席执行官的人",
             "properties": {}
           }
         ],
@@ -410,8 +1703,619 @@
             "content": null,
             "context": {},
             "confidence": 0.9,
-            "source_chunk": "752c50a2-3093-4141-8ce5-40c8f7fb3f44",
+            "source_chunk": "c3a1a518-8bce-4db1-a791-f8c7edc7d6b3",
             "evidence_quote": "苹果现任 CEO 是 John Ternus。"
+          }
+        ],
+        "rejected": [],
+        "imprecise_quotes": 0
+      }
+    },
+    {
+      "id": "temporal_former_ceo",
+      "kind": "semantic",
+      "covers": "temporal",
+      "text": "Tim Cook 曾经担任苹果 CEO。",
+      "checks": [
+        {
+          "layer": "structural",
+          "check": "min_claims",
+          "ok": true,
+          "detail": "claims=1"
+        },
+        {
+          "layer": "structural",
+          "check": "evidence_present",
+          "ok": true,
+          "detail": "missing=[]"
+        },
+        {
+          "layer": "structural",
+          "check": "evidence_located",
+          "ok": true,
+          "detail": "imprecise_quotes=0"
+        },
+        {
+          "layer": "structural",
+          "check": "no_rejected_items",
+          "ok": true,
+          "detail": "rejected=[]"
+        },
+        {
+          "layer": "registry",
+          "check": "predicate_in_registry",
+          "ok": true,
+          "detail": "unregistered=[]"
+        },
+        {
+          "layer": "registry",
+          "check": "predicate_not_containing",
+          "ok": true,
+          "detail": "bad=[]"
+        },
+        {
+          "layer": "semantic",
+          "check": "claim_exists",
+          "ok": true,
+          "detail": "about=Tim Cook subjects=['苹果']"
+        },
+        {
+          "layer": "semantic",
+          "check": "subject_is",
+          "ok": true,
+          "detail": "subjects=['苹果'] want=苹果"
+        },
+        {
+          "layer": "semantic",
+          "check": "object_is",
+          "ok": true,
+          "detail": "objects=['Tim Cook'] want=Tim Cook"
+        },
+        {
+          "layer": "semantic",
+          "check": "predicate_is",
+          "ok": true,
+          "detail": "predicates=['has_ceo'] want=has_ceo"
+        },
+        {
+          "layer": "semantic",
+          "check": "temporal_is",
+          "ok": true,
+          "detail": "temporal=['former'] want=former"
+        }
+      ],
+      "by_layer": {
+        "structural": [
+          true,
+          true,
+          true,
+          true
+        ],
+        "registry": [
+          true,
+          true
+        ],
+        "semantic": [
+          true,
+          true,
+          true,
+          true,
+          true
+        ]
+      },
+      "passed": {
+        "structural": true,
+        "registry": true,
+        "semantic": true
+      },
+      "steps": 2,
+      "model_calls": 2,
+      "provider_calls": {
+        "extraction": 1,
+        "detection": 1,
+        "extraction_prompt_tokens": 3146,
+        "extraction_completion_tokens": 450
+      },
+      "context_plan": {
+        "predicate_candidates": [
+          "extracts",
+          "has_ceo"
+        ],
+        "predicate_context": "[CLAIM PREDICATE CONTEXT]\nRegistered predicates (closed vocabulary — select the most specific one; never invent a name):\naccesses, addresses, allows, analyzes, applied_to, based_on, better_than, causes, classified_as, compares_with, consists_of, contains, creates, decreases, defined_as, depends_on, derived_from, designed_for, enables, evaluated_on, evaluates, extends, extracts, generates, has_ceo, implements, improves, includes, increases, investigates, is, leads_to, prevents, produces, provides, receives, reduces, requires, retrieves, studies, supports, tested_on, trained_on, transforms, used_for, uses, worse_than\n\nMost consistent with this chunk (candidates, not a decision):\n- `extracts` label: 提取;\n- `has_ceo` label: 首席执行官; domain=Organization -> range=Person; temporal (put \"现任\"/\"曾经\" in `temporal_signal`, not in the predicate name); aliases: CEO, chief executive officer, 首席执行官, 首席执行长, 行政总裁",
+        "entity_type_context": "[ENTITY TYPE CONTEXT]\nEntity types (closed vocabulary, 14) — a Mention is not an Entity:\n- Technology: A technically meaningful technology, architecture, technical system, capability or technology family that can be independently discussed.\n- Theory: A relatively coherent explanatory theory or theoretical framework.\n- Organization: A stable organization, institution, company, team or other organizational entity that is independently identifiable in context.\n- Model: An independently identifiable model used for training, inference, evaluation or deployment.\n- Software: An executable or deployable software system, program, library, framework or software tool.\n- Standard: A formally standardized or normative specification maintained by a recognized body, community or process.\n- Protocol: A defined protocol for communication, interaction, coordination or interoperability.\n- Method: A method, algorithm, procedure, workflow or way of achieving a goal.\n- Resource: A separately identifiable knowledge or technical resource that cannot reasonably be classified as one of the other 13 types.\n- Product: A product offered, distributed or provided as an identifiable product.\n- Person: A naturally identifiable person with independent identity.\n- Dataset: An independently identifiable organized collection of data.\n- Location: A separately identifiable geographic, spatial or site/location entity.\n- Concept: An abstract object that can be independently defined, discussed, compared or used as a durable knowledge topic.\n\nWhen type confidence is insufficient, omit the Entity — never default to Resource.",
+        "object_kind_context": {
+          "source": "skills/knowledge-extraction/SKILL.md",
+          "injected_here": false,
+          "reason": "the SKILL contract is already in the system prompt; one source only"
+        },
+        "general_extraction_context": "[EXTRACTION CONTEXT — ALREADY LOADED]\nThe registries this chunk needs are included below (claim predicates, entity types). No reference tool is registered for this call and none is needed: choose from what is here.",
+        "flags": []
+      },
+      "by_step": [
+        {
+          "step": "detect_batch",
+          "calls": 1,
+          "prompt_tokens": 816,
+          "completion_tokens": 175
+        },
+        {
+          "step": "extract_batch",
+          "calls": 1,
+          "prompt_tokens": 3146,
+          "completion_tokens": 450
+        }
+      ],
+      "prompt_tokens": 3962,
+      "completion_tokens": 625,
+      "raw_envelope": {
+        "entities": [
+          {
+            "name": "Tim Cook",
+            "types": [
+              "Person"
+            ],
+            "aliases": [
+              "蒂姆·库克"
+            ],
+            "description": "曾担任苹果 CEO 的人物",
+            "properties": {}
+          },
+          {
+            "name": "苹果",
+            "types": [
+              "Organization"
+            ],
+            "aliases": [],
+            "description": "Tim Cook 曾担任其 CEO 的组织",
+            "properties": {}
+          }
+        ],
+        "claims": [
+          {
+            "subject": "苹果",
+            "predicate": "has_ceo",
+            "object": "Tim Cook",
+            "object_kind": "entity",
+            "temporal_signal": "former",
+            "claim_type": "factual",
+            "polarity": "positive",
+            "modality": "asserted",
+            "content": null,
+            "context": {},
+            "confidence": 0.9,
+            "source_chunk": "c163e50c-160b-46da-bf01-3d1724ad6a13",
+            "evidence_quote": "Tim Cook 曾经担任苹果 CEO。"
+          }
+        ],
+        "events": [],
+        "ideas": [],
+        "questions": []
+      },
+      "observed": {
+        "status": "COMPLETED",
+        "entities": [
+          {
+            "name": "Tim Cook",
+            "types": [
+              "Person"
+            ],
+            "aliases": [
+              "蒂姆·库克"
+            ],
+            "description": "曾担任苹果 CEO 的人物",
+            "properties": {}
+          },
+          {
+            "name": "苹果",
+            "types": [
+              "Organization"
+            ],
+            "aliases": [],
+            "description": "Tim Cook 曾担任其 CEO 的组织",
+            "properties": {}
+          }
+        ],
+        "claims": [
+          {
+            "subject": "苹果",
+            "predicate": "has_ceo",
+            "object": "Tim Cook",
+            "object_kind": "entity",
+            "temporal_signal": "former",
+            "claim_type": "factual",
+            "polarity": "positive",
+            "modality": "asserted",
+            "content": null,
+            "context": {},
+            "confidence": 0.9,
+            "source_chunk": "c163e50c-160b-46da-bf01-3d1724ad6a13",
+            "evidence_quote": "Tim Cook 曾经担任苹果 CEO。"
+          }
+        ],
+        "rejected": [],
+        "imprecise_quotes": 0
+      }
+    },
+    {
+      "id": "negative_polarity",
+      "kind": "semantic",
+      "covers": "polarity",
+      "text": "苹果不是微软的一部分。",
+      "checks": [
+        {
+          "layer": "structural",
+          "check": "min_claims",
+          "ok": true,
+          "detail": "claims=1"
+        },
+        {
+          "layer": "structural",
+          "check": "evidence_present",
+          "ok": true,
+          "detail": "missing=[]"
+        },
+        {
+          "layer": "structural",
+          "check": "evidence_located",
+          "ok": true,
+          "detail": "imprecise_quotes=0"
+        },
+        {
+          "layer": "structural",
+          "check": "no_rejected_items",
+          "ok": true,
+          "detail": "rejected=[]"
+        },
+        {
+          "layer": "registry",
+          "check": "predicate_in_registry",
+          "ok": true,
+          "detail": "unregistered=[]"
+        },
+        {
+          "layer": "semantic",
+          "check": "claim_exists",
+          "ok": true,
+          "detail": "about=微软 subjects=['微软']"
+        },
+        {
+          "layer": "semantic",
+          "check": "polarity_is",
+          "ok": true,
+          "detail": "polarities=['negative'] want=negative"
+        }
+      ],
+      "by_layer": {
+        "structural": [
+          true,
+          true,
+          true,
+          true
+        ],
+        "registry": [
+          true
+        ],
+        "semantic": [
+          true,
+          true
+        ]
+      },
+      "passed": {
+        "structural": true,
+        "registry": true,
+        "semantic": true
+      },
+      "steps": 2,
+      "model_calls": 2,
+      "provider_calls": {
+        "extraction": 1,
+        "detection": 1,
+        "extraction_prompt_tokens": 3078,
+        "extraction_completion_tokens": 612
+      },
+      "context_plan": {
+        "predicate_candidates": [
+          "extracts"
+        ],
+        "predicate_context": "[CLAIM PREDICATE CONTEXT]\nRegistered predicates (closed vocabulary — select the most specific one; never invent a name):\naccesses, addresses, allows, analyzes, applied_to, based_on, better_than, causes, classified_as, compares_with, consists_of, contains, creates, decreases, defined_as, depends_on, derived_from, designed_for, enables, evaluated_on, evaluates, extends, extracts, generates, has_ceo, implements, improves, includes, increases, investigates, is, leads_to, prevents, produces, provides, receives, reduces, requires, retrieves, studies, supports, tested_on, trained_on, transforms, used_for, uses, worse_than\n\nMost consistent with this chunk (candidates, not a decision):\n- `extracts` label: 提取;",
+        "entity_type_context": "[ENTITY TYPE CONTEXT]\nEntity types (closed vocabulary, 14) — a Mention is not an Entity:\n- Technology: A technically meaningful technology, architecture, technical system, capability or technology family that can be independently discussed.\n- Theory: A relatively coherent explanatory theory or theoretical framework.\n- Organization: A stable organization, institution, company, team or other organizational entity that is independently identifiable in context.\n- Model: An independently identifiable model used for training, inference, evaluation or deployment.\n- Software: An executable or deployable software system, program, library, framework or software tool.\n- Standard: A formally standardized or normative specification maintained by a recognized body, community or process.\n- Protocol: A defined protocol for communication, interaction, coordination or interoperability.\n- Method: A method, algorithm, procedure, workflow or way of achieving a goal.\n- Resource: A separately identifiable knowledge or technical resource that cannot reasonably be classified as one of the other 13 types.\n- Product: A product offered, distributed or provided as an identifiable product.\n- Person: A naturally identifiable person with independent identity.\n- Dataset: An independently identifiable organized collection of data.\n- Location: A separately identifiable geographic, spatial or site/location entity.\n- Concept: An abstract object that can be independently defined, discussed, compared or used as a durable knowledge topic.\n\nWhen type confidence is insufficient, omit the Entity — never default to Resource.",
+        "object_kind_context": {
+          "source": "skills/knowledge-extraction/SKILL.md",
+          "injected_here": false,
+          "reason": "the SKILL contract is already in the system prompt; one source only"
+        },
+        "general_extraction_context": "[EXTRACTION CONTEXT — ALREADY LOADED]\nThe registries this chunk needs are included below (claim predicates, entity types). No reference tool is registered for this call and none is needed: choose from what is here.",
+        "flags": []
+      },
+      "by_step": [
+        {
+          "step": "detect_batch",
+          "calls": 1,
+          "prompt_tokens": 811,
+          "completion_tokens": 143
+        },
+        {
+          "step": "extract_batch",
+          "calls": 1,
+          "prompt_tokens": 3078,
+          "completion_tokens": 612
+        }
+      ],
+      "prompt_tokens": 3889,
+      "completion_tokens": 755,
+      "raw_envelope": {
+        "entities": [
+          {
+            "name": "苹果",
+            "types": [
+              "Organization"
+            ],
+            "aliases": [],
+            "description": null,
+            "properties": {}
+          },
+          {
+            "name": "微软",
+            "types": [
+              "Organization"
+            ],
+            "aliases": [],
+            "description": null,
+            "properties": {}
+          }
+        ],
+        "claims": [
+          {
+            "subject": "微软",
+            "predicate": "includes",
+            "object": "苹果",
+            "object_kind": "entity",
+            "temporal_signal": null,
+            "claim_type": "factual",
+            "polarity": "negative",
+            "modality": "asserted",
+            "content": null,
+            "context": {},
+            "confidence": 0.9,
+            "source_chunk": "358be618-a37f-4a95-a37e-641b1151e2b6",
+            "evidence_quote": "苹果不是微软的一部分。"
+          }
+        ],
+        "events": [],
+        "ideas": [],
+        "questions": []
+      },
+      "observed": {
+        "status": "COMPLETED",
+        "entities": [
+          {
+            "name": "苹果",
+            "types": [
+              "Organization"
+            ],
+            "aliases": [],
+            "description": null,
+            "properties": {}
+          },
+          {
+            "name": "微软",
+            "types": [
+              "Organization"
+            ],
+            "aliases": [],
+            "description": null,
+            "properties": {}
+          }
+        ],
+        "claims": [
+          {
+            "subject": "微软",
+            "predicate": "includes",
+            "object": "苹果",
+            "object_kind": "entity",
+            "temporal_signal": null,
+            "claim_type": "factual",
+            "polarity": "negative",
+            "modality": "asserted",
+            "content": null,
+            "context": {},
+            "confidence": 0.9,
+            "source_chunk": "358be618-a37f-4a95-a37e-641b1151e2b6",
+            "evidence_quote": "苹果不是微软的一部分。"
+          }
+        ],
+        "rejected": [],
+        "imprecise_quotes": 0
+      }
+    },
+    {
+      "id": "evidence_attachment",
+      "kind": "semantic",
+      "covers": "evidence",
+      "text": "文档明确指出，Context Runtime 支持按需加载上下文。",
+      "checks": [
+        {
+          "layer": "structural",
+          "check": "min_claims",
+          "ok": true,
+          "detail": "claims=1"
+        },
+        {
+          "layer": "structural",
+          "check": "evidence_present",
+          "ok": true,
+          "detail": "missing=[]"
+        },
+        {
+          "layer": "structural",
+          "check": "evidence_located",
+          "ok": true,
+          "detail": "imprecise_quotes=0"
+        },
+        {
+          "layer": "structural",
+          "check": "no_rejected_items",
+          "ok": true,
+          "detail": "rejected=[]"
+        },
+        {
+          "layer": "structural",
+          "check": "referenced_any",
+          "ok": true,
+          "detail": "want_any=['Context Runtime']"
+        },
+        {
+          "layer": "registry",
+          "check": "predicate_in_registry",
+          "ok": true,
+          "detail": "unregistered=[]"
+        },
+        {
+          "layer": "semantic",
+          "check": "claim_exists",
+          "ok": true,
+          "detail": "about=Context Runtime subjects=['Context Runtime']"
+        },
+        {
+          "layer": "semantic",
+          "check": "subject_is",
+          "ok": true,
+          "detail": "subjects=['Context Runtime'] want=Context Runtime"
+        },
+        {
+          "layer": "semantic",
+          "check": "object_kind_is",
+          "ok": true,
+          "detail": "kinds=['concept'] want=concept"
+        }
+      ],
+      "by_layer": {
+        "structural": [
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "registry": [
+          true
+        ],
+        "semantic": [
+          true,
+          true,
+          true
+        ]
+      },
+      "passed": {
+        "structural": true,
+        "registry": true,
+        "semantic": true
+      },
+      "steps": 2,
+      "model_calls": 2,
+      "provider_calls": {
+        "extraction": 1,
+        "detection": 1,
+        "extraction_prompt_tokens": 3108,
+        "extraction_completion_tokens": 464
+      },
+      "context_plan": {
+        "predicate_candidates": [
+          "extracts",
+          "supports",
+          "enables"
+        ],
+        "predicate_context": "[CLAIM PREDICATE CONTEXT]\nRegistered predicates (closed vocabulary — select the most specific one; never invent a name):\naccesses, addresses, allows, analyzes, applied_to, based_on, better_than, causes, classified_as, compares_with, consists_of, contains, creates, decreases, defined_as, depends_on, derived_from, designed_for, enables, evaluated_on, evaluates, extends, extracts, generates, has_ceo, implements, improves, includes, increases, investigates, is, leads_to, prevents, produces, provides, receives, reduces, requires, retrieves, studies, supports, tested_on, trained_on, transforms, used_for, uses, worse_than\n\nMost consistent with this chunk (candidates, not a decision):\n- `extracts` label: 提取;\n- `supports` label: 支持;\n- `enables` label: 使得;",
+        "entity_type_context": "[ENTITY TYPE CONTEXT]\nEntity types (closed vocabulary, 14) — a Mention is not an Entity:\n- Technology: A technically meaningful technology, architecture, technical system, capability or technology family that can be independently discussed.\n- Theory: A relatively coherent explanatory theory or theoretical framework.\n- Organization: A stable organization, institution, company, team or other organizational entity that is independently identifiable in context.\n- Model: An independently identifiable model used for training, inference, evaluation or deployment.\n- Software: An executable or deployable software system, program, library, framework or software tool.\n- Standard: A formally standardized or normative specification maintained by a recognized body, community or process.\n- Protocol: A defined protocol for communication, interaction, coordination or interoperability.\n- Method: A method, algorithm, procedure, workflow or way of achieving a goal.\n- Resource: A separately identifiable knowledge or technical resource that cannot reasonably be classified as one of the other 13 types.\n- Product: A product offered, distributed or provided as an identifiable product.\n- Person: A naturally identifiable person with independent identity.\n- Dataset: An independently identifiable organized collection of data.\n- Location: A separately identifiable geographic, spatial or site/location entity.\n- Concept: An abstract object that can be independently defined, discussed, compared or used as a durable knowledge topic.\n\nWhen type confidence is insufficient, omit the Entity — never default to Resource.",
+        "object_kind_context": {
+          "source": "skills/knowledge-extraction/SKILL.md",
+          "injected_here": false,
+          "reason": "the SKILL contract is already in the system prompt; one source only"
+        },
+        "general_extraction_context": "[EXTRACTION CONTEXT — ALREADY LOADED]\nThe registries this chunk needs are included below (claim predicates, entity types). No reference tool is registered for this call and none is needed: choose from what is here.",
+        "flags": []
+      },
+      "by_step": [
+        {
+          "step": "detect_batch",
+          "calls": 1,
+          "prompt_tokens": 821,
+          "completion_tokens": 161
+        },
+        {
+          "step": "extract_batch",
+          "calls": 1,
+          "prompt_tokens": 3108,
+          "completion_tokens": 464
+        }
+      ],
+      "prompt_tokens": 3929,
+      "completion_tokens": 625,
+      "raw_envelope": {
+        "entities": [
+          {
+            "name": "Context Runtime",
+            "types": [
+              "Technology"
+            ],
+            "aliases": [],
+            "description": "A runtime that supports on-demand loading of context.",
+            "properties": {}
+          }
+        ],
+        "claims": [
+          {
+            "subject": "Context Runtime",
+            "predicate": "supports",
+            "object": "按需加载上下文",
+            "object_kind": "concept",
+            "temporal_signal": null,
+            "claim_type": "factual",
+            "polarity": "positive",
+            "modality": "capable",
+            "content": null,
+            "context": {
+              "source_note": "文档明确指出"
+            },
+            "confidence": 0.85,
+            "source_chunk": "6fefdc22-03f3-4890-bf1c-b1b36c5f2d96",
+            "evidence_quote": "文档明确指出，Context Runtime 支持按需加载上下文。"
+          }
+        ],
+        "events": [],
+        "ideas": [],
+        "questions": []
+      },
+      "observed": {
+        "status": "COMPLETED",
+        "entities": [
+          {
+            "name": "Context Runtime",
+            "types": [
+              "Technology"
+            ],
+            "aliases": [],
+            "description": "A runtime that supports on-demand loading of context.",
+            "properties": {}
+          }
+        ],
+        "claims": [
+          {
+            "subject": "Context Runtime",
+            "predicate": "supports",
+            "object": "按需加载上下文",
+            "object_kind": "concept",
+            "temporal_signal": null,
+            "claim_type": "factual",
+            "polarity": "positive",
+            "modality": "capable",
+            "content": null,
+            "context": {
+              "source_note": "文档明确指出"
+            },
+            "confidence": 0.85,
+            "source_chunk": "6fefdc22-03f3-4890-bf1c-b1b36c5f2d96",
+            "evidence_quote": "文档明确指出，Context Runtime 支持按需加载上下文。"
           }
         ],
         "rejected": [],

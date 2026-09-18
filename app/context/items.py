@@ -29,6 +29,10 @@ TYPE_EXAMPLES = 'examples'
 TYPE_CONSTRAINTS = 'constraints'
 TYPE_CUSTOM = 'custom'
 TYPE_OUTPUT_CONTRACT = 'output_contract'
+# Deterministically prefetched context for one task (Step 15). Distinct from
+# TYPE_REFERENCE on purpose: a reference is a document the agent may pull itself, this is
+# the minimal slice the planner already selected, so it is rendered rather than lazy.
+TYPE_EXTRACTION_CONTEXT = 'extraction_context'
 
 # Types that carry the task itself; the compiler never drops these.
 CORE_TYPES = frozenset({TYPE_BOOTSTRAP, TYPE_TASK, TYPE_CONSTRAINTS, TYPE_CUSTOM, TYPE_OUTPUT_CONTRACT})

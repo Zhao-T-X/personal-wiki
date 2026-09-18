@@ -27,4 +27,8 @@ Core rules:
   The predicate's declared domain/range decide which side is the Subject: for `has_ceo` the
   Subject is the Organization and the Object is the Person.
 
-Use the `read_skill_reference` tool to load the detailed registries (entity-types.md, claim-predicates.md, relation-predicates.md, evidence.md, extraction-v2.md) only for tasks that need them.
+When you need a Predicate or Entity Type definition, use the Reference Context you were given:
+select from the closed vocabularies it defines and never author a registry definition of your own.
+A definition the context does not carry is a claim you may not assert — omit it rather than
+inventing one. How that context reaches you (resolved before the call, or loaded on demand) is a
+runtime concern; this contract names no retrieval tool.

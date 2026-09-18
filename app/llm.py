@@ -256,6 +256,9 @@ async def extract(chunks: list[dict], *, report: dict | None = None) -> dict:
     batch_size = max(1, int(runtime()['llm_batch_chunks']))
     batches = [chunks[i:i + batch_size] for i in range(0, len(chunks), batch_size)]
     run = current_run()
+    # Step 16 audit switch. "off" must mean the detection call never happens — not that it
+    # happens and is ignored — otherwise the A/B measures nothing.
+    detection_on = str(runtime().get('extraction_detection_mode') or 'on').strip().lower() != 'off'
     for n, batch in enumerate(batches, 1):
         if run is not None and is_cancelled(run.id):
             raise RuntimeError('提取已被用户取消')
@@ -263,7 +266,7 @@ async def extract(chunks: list[dict], *, report: dict | None = None) -> dict:
         chars = sum(len(c['content']) for c in batch)
         scope = f'batch {n}/{len(batches)} · {len(batch)} chunks · {chars} chars'
         # Pass 1: does this batch hold anything worth extracting?
-        wanted = await _detect_one(payload, 'detect_batch', scope)
+        wanted = await _detect_one(payload, 'detect_batch', scope) if detection_on else None
         if wanted is not None and not wanted:
             # Nothing named → skip Pass 2 entirely (no extraction call at all).
             results.append(_empty())

@@ -22,7 +22,9 @@ from agentscope.message import UserMsg
 
 from .base import build_agent
 from ..config import runtime
+from ..context.extraction_context import MODE_PREFETCH, plan_extraction_context
 from ..prompt_profiles import compose_prompt
+from ..runlog import current_run
 from ..tools.skill_tools import read_skill_reference
 
 EntityType = Literal[
@@ -292,29 +294,80 @@ EXTRACTION_REFERENCES: list[str] = ['claim-predicates.md']
 #                            contract and cannot be removed (Step 12 §4).
 EXTRACTION_TOOLS = [read_skill_reference]
 
+# Prefetch registers no function tool at all (Step 15). That is not a subtle preference —
+# it is what makes "one provider call" structural rather than hoped for: with nothing
+# callable but `GenerateStructuredOutput` (added by AgentScope from the schema), the model
+# has no way to open a second round. It also removes the last chance of a silent fallback
+# (§19): there is no `read_skill_reference` for the prefetch path to fall back *to*.
+PREFETCH_TOOLS: list = []
 
-def build_extraction_agent() -> Agent:
-    """Create the extraction agent with the slimmest tool surface that still extracts.
 
-    No skill loader: the Context Runtime already inlines the skill contract into this
-    prompt (`EXTRACTION_REFERENCES`), and no path in the extraction workflow opens a
-    skill through the viewer tool.
+def extraction_context_mode() -> str:
+    """``agentic`` (default) or ``prefetch`` — see ``app/context/extraction_context.py``."""
+    return str(runtime().get('extraction_context_mode') or 'agentic').strip().lower()
+
+
+def extraction_prompt_inputs(payload: str = '', *, mode: str | None = None) -> dict:
+    """The exact context inputs ``build_extraction_agent`` uses for one payload.
+
+    Exposed rather than inlined so the cost tooling measures the composition the
+    production path actually assembles. Re-deriving it in a script is how a report ends
+    up describing a prompt no call ever sends.
     """
+    resolved = (mode or extraction_context_mode()).strip().lower()
+    if resolved == MODE_PREFETCH:
+        plan = plan_extraction_context(payload)
+        return {'mode': resolved, 'references': [], 'tools': PREFETCH_TOOLS,
+                'extra_items': plan.items(), 'plan': plan}
+    return {'mode': resolved, 'references': EXTRACTION_REFERENCES, 'tools': EXTRACTION_TOOLS,
+            'extra_items': None, 'plan': None}
+
+
+def _agent_for(inputs: dict) -> Agent:
+    """Build the extraction agent from a prepared input set (one source of truth)."""
     return build_agent(
         "ExtractionAgent",
-        compose_prompt("extractor", references=EXTRACTION_REFERENCES, tools=EXTRACTION_TOOLS),
-        tools=EXTRACTION_TOOLS,
+        compose_prompt("extractor", references=inputs['references'], tools=inputs['tools'],
+                       extra_items=inputs['extra_items']),
+        tools=inputs['tools'],
         skills=False,
     )
 
 
-async def extract_structured(payload: str) -> dict:
+def build_extraction_agent(payload: str = '', *, mode: str | None = None) -> Agent:
+    """Create the extraction agent for one payload, in the configured context mode.
+
+    ``agentic`` — the agent fetches registries itself through ``read_skill_reference``
+    (one reference round, two provider calls per step).
+
+    ``prefetch`` — the Context Planner selects the minimal semantic context for *this*
+    payload up front, and the agent answers in one call. The references are still
+    delivered; they are just not re-delivered at full price.
+
+    No skill loader in either mode: the Context Runtime already puts the skill contract in
+    this prompt, and nothing here opens a skill through the viewer tool.
+    """
+    return _agent_for(extraction_prompt_inputs(payload, mode=mode))
+
+
+async def extract_structured(payload: str, *, mode: str | None = None) -> dict:
     """Run one extraction pass and return the structured output as a dict.
 
-    The agent may inspect the Knowledge Extraction skill and load further
-    reference documents before it commits to the required structured output.
+    In ``agentic`` mode the agent may load further reference documents before it commits
+    to the required structured output (a second provider call). In ``prefetch`` mode the
+    context it needs is already in the prompt, so the same call returns the output
+    directly. ``mode`` overrides the configured one for one call, which is what the A/B
+    harness uses; production reads ``extraction_context_mode``.
+
+    Which context the planner chose rides on the run, not in the return value: the call
+    stays ``extract_structured(payload) -> dict`` for every existing caller, while a
+    regression run can still report what each case was actually given.
     """
-    agent = build_extraction_agent()
+    inputs = extraction_prompt_inputs(payload, mode=mode)
+    run = current_run()
+    if run is not None and inputs['plan'] is not None:
+        run.extraction_context_plan = inputs['plan'].to_dict()
+    agent = _agent_for(inputs)
     from ..agent_usage import collect, context_length, record
     context_before = context_length(agent)
     message = await agent.reply(
