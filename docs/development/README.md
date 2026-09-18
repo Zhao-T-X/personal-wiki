@@ -21,6 +21,9 @@
 | [LOGGING-STANDARD.md](./LOGGING-STANDARD.md) | 日志与运行记录（runlog）规范 |
 | [TESTING-STANDARD.md](./TESTING-STANDARD.md) | 测试分层 + Domain Invariant Tests |
 | [FEATURE-DEVELOPMENT.md](./FEATURE-DEVELOPMENT.md) | 新功能开发流程与准入问题 |
+| [frontend-human-use-audit.md](./frontend-human-use-audit.md) | **前端人类使用审查（Step 18）**：10 个用户场景走查、Human Task Matrix、入口/上下文/错误恢复/高风险操作/移动端/无障碍审查、P0–P3 问题清单与代码位置 |
+| [frontend-interaction-inventory.md](./frontend-interaction-inventory.md) | 前端交互清单：每个可操作点 `Action → Feedback → Result → Next Action` 四段式核查、no-op 清单、缺失的「加载失败」通道、键盘可达性 |
+| [frontend-copy-audit.md](./frontend-copy-audit.md) | 前端文案与术语审查：中英混用统计、术语逐词判定与替换表、USER_SETTINGS / DEVELOPER_SETTINGS 分层 |
 
 ---
 
