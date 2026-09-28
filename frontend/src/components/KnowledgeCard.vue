@@ -14,13 +14,13 @@
  * *decided* (通过 / 拒绝), not read. Giving it a [纠正] button would offer two ways
  * to do the same thing and neither would be obviously right.
  */
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { patchJson, post } from '../api/client'
 import CorrectionFlow from './CorrectionFlow.vue'
 import StatusTag from './StatusTag.vue'
 import { useAppStore } from '../stores/app'
-import { labelOf, type KnowledgeCardClaim } from '../utils/claim'
+import { correctionSeedFor, labelOf, type KnowledgeCardClaim } from '../utils/claim'
 import { reportIssues } from '../utils/issues'
 
 /** The host is told when the card changed something, so it can refresh — and, when it
@@ -41,6 +41,15 @@ const router = useRouter()
 const store = useAppStore()
 const fixing = ref(false)
 const busy = ref(false)
+/** 这条知识刚刚被改过。要一直说到宿主把新的内容读回来为止，否则用户看到的还是旧值。 */
+const corrected = ref(false)
+
+/** The correction starting point: the current knowledge as a sentence — never the quote,
+    which is evidence about this fact, not a statement anyone wants to edit. */
+const seed = computed(() => correctionSeedFor(props.claim))
+
+// 换了一张卡（宿主刷新后渲染另一条）就清掉"已更新"，否则那句话会跟着新卡一起显示。
+watch(() => props.claim.id, () => { corrected.value = false })
 
 /** Knowledge nobody has accepted yet. Its fitting action is [采纳], not [纠正] —
     and the action follows the *state*, not the page, so the same card never offers
@@ -92,6 +101,14 @@ function openEvidence() {
 function openHistory() {
   if (props.claim.id) router.push({ path: '/knowledge/claim/' + props.claim.id, query: { history: '1' } })
 }
+
+/** 就地改完之后不能只是收起——用户必须看到「改成了什么」和「旧的那条去哪了」。
+    `status: 'corrected'` 让宿主知道要重新读，而不是把它当成一次采纳。 */
+function onCorrected() {
+  fixing.value = false
+  corrected.value = true
+  emit('changed', { id: props.claim.id, status: 'corrected' })
+}
 </script>
 
 <template>
@@ -126,8 +143,16 @@ function openHistory() {
       <span v-else-if="claim.createdAt" class="kcount">{{ claim.createdAt.slice(0, 10) }}</span>
     </div>
 
-    <!-- 纠正长在知识旁边，而不是一个叫 Correction 的页面里 -->
-    <CorrectionFlow v-if="fixing" compact :seed="claim.quote" style="margin-top:10px" />
+    <!-- 已更新：把结果说出来，并给出"看变化"的去处，而不是静默换掉一个数字 -->
+    <p v-if="corrected && !fixing" class="kupdated">
+      已更新 · 旧说法保留在历史里
+      <button class="btn sm ghost" @click="openHistory">查看变化 →</button>
+    </p>
+
+    <!-- 纠正长在知识旁边，而不是一个叫 Correction 的页面里。
+         起点是"这条知识现在怎么说"，不是它的原文引用。 -->
+    <CorrectionFlow v-if="fixing" compact :existing="seed.existing" :seed="seed.seed"
+                    style="margin-top:10px" @applied="onCorrected" />
   </div>
 </template>
 
@@ -151,4 +176,6 @@ function openHistory() {
 .kactions{display:flex;align-items:center;gap:7px;margin-top:12px}
 .compact .kactions{margin-top:10px}
 .kcount{font-size:9.5px;color:var(--faint)}
+.kupdated{display:flex;align-items:center;gap:8px;margin:10px 0 0;padding:8px 11px;
+  border-radius:10px;background:var(--tint-mint);color:#1e8f6b;font-size:10.5px}
 </style>

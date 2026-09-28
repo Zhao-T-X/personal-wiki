@@ -17,6 +17,7 @@
  */
 import { ref } from 'vue'
 import { api } from '../api/client'
+import { buildCorrectionSeed, type CorrectionSeed } from './correction'
 
 export interface KnowledgeCardClaim {
   id: string
@@ -94,4 +95,22 @@ export function toCard(raw: any, opts: { documentId?: string } = {}): KnowledgeC
     chunkId: pick(raw, 'source_chunk_id', 'evidence.chunk_id'),
     createdAt: pick(raw, 'created_at', 'updated_at'),
   }
+}
+
+/**
+ * The correction starting point for a card claim — the human sentence, with the
+ * registry's own word for the predicate.
+ *
+ * Every surface that opens `CorrectionFlow` goes through this, so "what is in the box"
+ * has exactly one answer instead of one per page (the answer used to be "the question
+ * you asked" from QA and "the source quote" from a card, and both were wrong).
+ */
+export function correctionSeedFor(claim: KnowledgeCardClaim | null | undefined): CorrectionSeed {
+  if (!claim) return buildCorrectionSeed(null)
+  return buildCorrectionSeed({
+    subject: claim.subject,
+    predicate: claim.predicate,
+    predicateLabel: labelOf(claim.predicate),
+    object: claim.object,
+  })
 }

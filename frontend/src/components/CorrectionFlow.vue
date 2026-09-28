@@ -7,6 +7,16 @@
  *
  * 计划接口只规划、不落库（POST /api/knowledge/corrections），
  * 用户看到建议后再走 /corrections/apply —— 不存在「AI 静默改知识」。
+ *
+ * 两个输入口刻意分开，因为它们回答的是不同问题：
+ *
+ * * ``existing`` —— **要改的是哪条知识**（当前那条，人话）。它只显示，不进输入框。
+ * * ``seed`` —— **用户已经写好的一句纠正**。只有"他刚刚就是这么说的"才该预填，
+ *   例如 One Box 里那句话本身。
+ *
+ * 曾经每个入口各自填框：答案旁填的是刚问的问题，知识卡里填的是原文引用。两者都不是
+ * "可以被改成另一句话的陈述"，所以用户打开纠正框的第一步就是走偏的。起点由
+ * `buildCorrectionSeed()`（utils/correction.ts）唯一构造。
  */
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
@@ -18,13 +28,16 @@ import { reportIssues } from '../utils/issues'
 const props = withDefaults(defineProps<{
   /** 内联用（答案卡片 / 知识卡片）：只留结论与两个按钮。 */
   compact?: boolean
-  /** 预填内容，例如把刚问到的问题带进来。 */
+  /** 用户已经写好的一句纠正（One Box 场景）。它是要提交的内容，所以进输入框。 */
   seed?: string
+  /** 当前那条知识的人话说法：要改的就是它。只显示，不预填。 */
+  existing?: string
   /** 确认按钮文案。 */
   confirmLabel?: string
 }>(), {
   compact: false,
   seed: '',
+  existing: '',
   confirmLabel: '确认修改',
 })
 
@@ -138,8 +151,12 @@ defineExpose({ analyze, applyPayload, reset, applyState: applying })
 
 <template>
   <div class="cflow" :class="{ compact }">
+    <!-- 要改的是哪条知识：只说一次，而且是给人看的说法 -->
+    <p v-if="existing" class="existing">当前知识：<b>{{ existing }}</b></p>
     <textarea v-model="text" :rows="compact ? 2 : 3" class="ta"
-              :placeholder="compact ? '哪里不对？例如：苹果现在的 CEO 是 John Ternus。' : '例如：苹果公司的新任 CEO 是约翰·特努斯。'" />
+              :placeholder="existing
+                ? '把它改成正确的说法，例如：苹果的首席执行官 John Ternus'
+                : (compact ? '哪里不对？例如：苹果现在的 CEO 是 John Ternus。' : '写下你认为正确的说法，例如：苹果公司的新任 CEO 是约翰·特努斯。')" />
     <div class="row" style="margin-top:8px">
       <button class="btn primary sm" :disabled="analyzing" @click="analyze">
         {{ analyzing ? '分析中…' : '分析' }}
@@ -223,6 +240,10 @@ defineExpose({ analyze, applyPayload, reset, applyState: applying })
 
 <style scoped>
 .ta{width:100%;border:1px solid var(--hair);border-radius:11px;padding:10px 12px;font:inherit;font-size:12.5px;resize:vertical;background:#fff;color:var(--text)}
+/* 「当前知识」是背景信息，不是输入内容——所以它长得像说明，不像输入框 */
+.existing{margin:0 0 8px;padding:8px 11px;border-left:2px solid #dbe3f2;background:var(--surface2);
+  border-radius:0 9px 9px 0;font-size:10.5px;color:var(--sub);line-height:1.6;overflow-wrap:anywhere}
+.existing b{color:var(--text);font-weight:650}
 .cflow.compact .ta{font-size:11.5px;border-radius:10px}
 .small{font-size:10px}
 .result{padding:12px;border:1px solid var(--hair);border-radius:12px;background:#fcfdff}

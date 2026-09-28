@@ -7,15 +7,22 @@
  *
  *  数字下面就是能动手的地方，没有只用来展示的统计。
  */
-import { onMounted, ref } from 'vue'
+import { computed, onMounted } from 'vue'
 import PageHead from '../components/PageHead.vue'
 import ClaimChanges from '../components/ClaimChanges.vue'
 import ReviewQueue from '../components/ReviewQueue.vue'
 import IntegrityPanel from '../components/IntegrityPanel.vue'
+import LoadBoundary from '../components/LoadBoundary.vue'
 import { api } from '../api/client'
+import { useAsyncState } from '../utils/useAsyncState'
 
-const inbox = ref<{ total: number; groups: Record<string, number> } | null>(null)
-const loading = ref(false)
+/* 数字条读不到时不能整块消失——"什么都没显示"和"没有待办"在用户眼里是同一件事。 */
+const inboxRes = useAsyncState(
+  () => api<{ total: number; groups: Record<string, number> }>('/api/review/inbox'),
+  { total: 0, groups: {} as Record<string, number> },
+)
+const inbox = inboxRes.data
+const loading = computed(() => inboxRes.status.value === 'loading')
 
 /** 顺序即处理顺序：先看重复主体（一次判断能理顺好几条知识），再看事实冲突。
     对象关联建议不在这里计数——它是提醒，不是待办（见后端 app/review.py）。 */
@@ -27,11 +34,7 @@ const GROUPS: { key: string; label: string; where: string }[] = [
   { key: 'relations', label: '待审关系', where: '下方「关系」' },
 ]
 
-async function load() {
-  loading.value = true
-  try { inbox.value = await api('/api/review/inbox') } catch { inbox.value = null }
-  finally { loading.value = false }
-}
+const load = inboxRes.reload
 onMounted(load)
 </script>
 
@@ -44,17 +47,22 @@ onMounted(load)
       <template #actions><button class="btn" :disabled="loading" @click="load">刷新</button></template>
     </PageHead>
 
-    <div v-if="inbox" class="inboxstrip">
-      <div class="icell total">
-        <b>{{ inbox.total }}</b>
-        <span>件待处理</span>
+    <LoadBoundary :state="inboxRes.state.value" loading-text="正在统计需要你确认的内容…"
+                  error-title="暂时无法读取待处理数量"
+                  error-text="现在数不出还有多少件事在等你——这不代表数字是 0。"
+                  :reload="load">
+      <div class="inboxstrip">
+        <div class="icell total">
+          <b>{{ inbox.total }}</b>
+          <span>件待处理</span>
+        </div>
+        <div v-for="g in GROUPS" :key="g.key" class="icell" :class="{ zero: !inbox.groups[g.key] }">
+          <b>{{ inbox.groups[g.key] || 0 }}</b>
+          <span>{{ g.label }}</span>
+          <small>{{ g.where }}</small>
+        </div>
       </div>
-      <div v-for="g in GROUPS" :key="g.key" class="icell" :class="{ zero: !inbox.groups[g.key] }">
-        <b>{{ inbox.groups[g.key] || 0 }}</b>
-        <span>{{ g.label }}</span>
-        <small>{{ g.where }}</small>
-      </div>
-    </div>
+    </LoadBoundary>
 
     <!-- 重复主体与对象关联建议就地处理；其余流程在下面各自的区块里。 -->
     <IntegrityPanel @changed="load" />

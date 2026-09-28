@@ -83,17 +83,28 @@ def _marked(text: str, marks: tuple[str, ...]) -> str | None:
     return next((m for m in marks if m in text), None)
 
 
-def classify(text: str, *, context_claim_id: str | None = None) -> Intent:
+def classify(text: str, *, context_claim_id: str | None = None,
+             intent: str | None = None) -> Intent:
     """Read a sentence as one of the four intents, or admit that it cannot.
 
     Order matters and is deliberate: an explicit phrasing first ("记住", "不对"), then
     the shape of the sentence, then — for a plain declarative about something the wiki
     knows — a statement of fact, which is a correction *in intent* because the only
     thing a user can mean by asserting something is that the wiki should hold it.
+
+    ``intent`` is the caller overruling the reading: the user said "其实我是想问", and
+    the honest response is to plan *that* route for the same sentence rather than to
+    argue. Only a real destination can be forced (``UNKNOWN`` is not one), an empty
+    sentence still has nothing to route, and the steps come from `_route` either way,
+    so there is no second routing table anywhere.
     """
     sentence = ' '.join(str(text or '').split())
     if not sentence:
         return Intent(UNKNOWN, 0.0, '空输入', sentence, suggestions=_SUGGESTIONS)
+
+    if intent in INTENTS and intent != UNKNOWN:
+        return _planned(intent, 1.0, '按你选择的意图', sentence,
+                        context_claim_id=context_claim_id)
 
     # A follow-up on something the user is looking at: no subject named, but the
     # context supplies it. This is what makes "这个不对，应该是……" work.
@@ -172,7 +183,12 @@ def _route(intent: str, sentence: str) -> tuple[list[dict], str]:
                            'source_type': 'note'}}],
                 '正在整理为知识…')
     if intent == CORRECT:
-        return ([{'method': 'POST', 'endpoint': '/api/correction/plan', 'body': {'text': sentence}}],
+        # The planning endpoint is `/api/knowledge/corrections` (see app/main.py) — the
+        # older `/api/correction/plan` path never existed, so One Box's correction route
+        # answered 404 and its correction branch could never render. A route table that
+        # names a dead endpoint makes an intent unexecutable while looking planned.
+        return ([{'method': 'POST', 'endpoint': '/api/knowledge/corrections',
+                  'body': {'text': sentence}}],
                 '正在对照现有知识…')
     if intent == RESEARCH:
         return ([{'method': 'POST', 'endpoint': '/api/research',

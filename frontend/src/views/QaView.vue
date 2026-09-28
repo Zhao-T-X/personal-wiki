@@ -5,7 +5,9 @@ import { api, post } from '../api/client'
 import type { Run } from '../api/types'
 import CorrectionFlow from '../components/CorrectionFlow.vue'
 import KnowledgeCard from '../components/KnowledgeCard.vue'
-import { toCard } from '../utils/claim'
+import LoadBoundary from '../components/LoadBoundary.vue'
+import { correctionSeedFor, toCard } from '../utils/claim'
+import { useAsyncState } from '../utils/useAsyncState'
 import StatusTag from '../components/StatusTag.vue'
 import DataTable from '../components/DataTable.vue'
 import RunDrawer from '../components/RunDrawer.vue'
@@ -37,12 +39,25 @@ const validating = ref(false)
 /* 「这条有问题」：答案旁边的纠正入口。打开后由 CorrectionFlow 负责
    分析 → 建议 → 确认，这里只负责把它放在答案该在的位置。 */
 const fixOpen = ref(false)
+/** 这条答案是用哪条知识算出来的——要改的就是它，而不是用户刚刚问的那句话。
+    没有任何知识支撑这个答案时（答案来自模型常识），起点为空，请用户直接写下正确说法。 */
+const correction = computed(() => correctionSeedFor(result.value?.knowledge?.[0]))
+
+/** 知识被改过之后，这条答案就不该再装作还成立。 */
+const answerStale = ref(false)
+
 function onCorrected(r: any) {
   fixOpen.value = false
+  answerStale.value = true
   store.toast('知识已更新 · 再问一次会得到新答案', {
     label: '看这条知识', run: () => { if (r?.claim_id) router.push('/knowledge/claim/' + r.claim_id) },
   })
 }
+
+/** 支持知识被就地改了（卡片自带纠正）：答案同样过期。 */
+function onSupportingChanged() { answerStale.value = true }
+
+function reask() { void askKnowledge() }
 
 /* agent mode */
 const agentLoading = ref(false)
@@ -50,8 +65,8 @@ const agentResult = ref<{ answer: string; agent: string; framework?: string } | 
 const agentRole = ref('auto')
 const agentMs = ref<number | null>(null)
 const agentRoles = ref<{ id: string; name: string; description: string }[]>([])
-const openQuestions = ref<any[]>([])
-const recent = ref<Run[]>([])
+/** 读不到 Agent 列表时要说出来：只剩「自动路由」看起来像"系统里只有一个 Agent"。 */
+const rolesError = ref('')
 const runDrawerId = ref<string | null>(null)
 const resultBox = ref<HTMLElement | null>(null)
 
@@ -67,20 +82,35 @@ async function scrollToResult() {
   resultBox.value?.scrollIntoView({ block: 'start', behavior: 'smooth' })
 }
 
-async function loadMeta() {
+/* 最近问答 / 开放问题：读不到时必须说"读不到"。
+   曾经失败会渲染成一张空表 —— 用户由此得到的结论是"我从来没问过问题"。 */
+const meta = useAsyncState(async () => {
   const [ask, agent, qs] = await Promise.all([
     api<Run[]>('/api/runs?task_type=ask&limit=10'),
     api<Run[]>('/api/runs?task_type=agent&limit=10'),
     api<any[]>('/api/questions?limit=200'),
   ])
-  recent.value = [...ask, ...agent].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 12)
-  openQuestions.value = qs.filter(q => q.status === 'open')
+  return {
+    recent: [...ask, ...agent].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 12),
+    open: qs.filter(q => q.status === 'open'),
+  }
+}, { recent: [] as Run[], open: [] as any[] })
+const recent = computed(() => meta.data.value.recent)
+const openQuestions = computed(() => meta.data.value.open)
+
+async function loadRoles() {
+  rolesError.value = ''
   try {
     const r = await api<{ roles: { id: string; name: string; description: string }[] }>('/api/agent/roles')
     agentRoles.value = r.roles
-  } catch { agentRoles.value = [] }
+  } catch (e: any) {
+    agentRoles.value = []
+    rolesError.value = '暂时读不到可选的 Agent 列表——自动路由仍然可用。'
+    void e
+  }
 }
-onMounted(() => { loadMeta(); if (question.value) send() })
+async function loadMeta() { await Promise.all([meta.reload(), loadRoles()]) }
+onMounted(() => { void loadMeta(); if (question.value) send() })
 
 const trace = computed(() => {
   const byMethod: Record<string, number> = {}
@@ -120,6 +150,7 @@ async function send() {
 
 async function askKnowledge() {
   loading.value = true; result.value = null; agentResult.value = null; validation.value = null
+  answerStale.value = false; fixOpen.value = false
   try {
     result.value = await post('/api/ask', { question: question.value.trim(), top_k: 8 })
     await loadMeta()
@@ -199,6 +230,7 @@ const columns = [
         <option value="auto">自动路由 Agent</option>
         <option v-for="r in agentRoles" :key="r.id" :value="r.id">{{ r.name }} · {{ r.description }}</option>
       </select>
+      <span v-if="mode === 'agent' && rolesError" class="faint" style="font-size:9.5px">{{ rolesError }}</span>
     </div>
 
     <div class="askbox" style="max-width:760px;margin:0 auto">
@@ -259,8 +291,18 @@ const columns = [
           </button>
           <span v-if="!fixOpen" class="faint" style="font-size:9.5px">答案与事实不符时，直接改掉它</span>
         </div>
-        <CorrectionFlow v-if="fixOpen" compact :seed="question"
+        <!-- 纠正的起点是"这个答案依据的那条知识"，不是"我刚才问了什么"。
+             没有知识支撑时起点为空，输入框会请用户直接写下正确的说法。 -->
+        <CorrectionFlow v-if="fixOpen" compact :existing="correction.existing" :seed="correction.seed"
                         style="margin-top:10px" @applied="onCorrected" />
+
+        <!-- 改完之后答案就过期了，说出来并把手边的下一步给出来 -->
+        <div v-if="answerStale && !fixOpen" class="notice violet" style="margin-top:12px">
+          这条答案是在修改前的知识上算出来的，可能已经过期。
+          <div class="row" style="margin-top:8px;gap:8px">
+            <button class="btn sm primary" :disabled="loading" @click="reask">用新的知识重新提问 →</button>
+          </div>
+        </div>
 
         <!-- 支持知识：答案下面是「凭什么」，但只给最少的那几条。
              卡片本身自带 [依据][历史][纠正]，所以每条支持知识都能直接追查或就地纠正
@@ -274,7 +316,8 @@ const columns = [
           </div>
           <div class="ksupport">
             <KnowledgeCard v-for="k in (result?.knowledge || [])" :key="k.claim_id"
-                           :claim="toCard(k)" :evidence-count="k.sources" compact />
+                           :claim="toCard(k)" :evidence-count="k.sources" compact
+                           @changed="onSupportingChanged" />
           </div>
         </template>
 
@@ -361,16 +404,21 @@ const columns = [
       </div>
 
       <div class="sechead"><h3>最近问答</h3><button class="btn sm" @click="loadMeta">刷新</button></div>
-      <div class="panel pad" style="padding:6px">
-        <DataTable :columns="columns" :rows="recent" clickable @row-click="(r: Run) => (runDrawerId = r.id)">
-          <template #cell-task_type="{ row }">
-            <span class="tag" :class="row.task_type === 'agent' ? 'violet' : 'blue'">{{ row.task_type === 'agent' ? 'Agent · ' + (row.agent_role || '') : '知识库' }}</span>
-          </template>
-          <template #cell-question="{ row }"><b>{{ row.summary?.question || (row.task_type === 'agent' ? '(Agent 对话)' : '(历史记录)') }}</b></template>
-          <template #cell-status="{ row }"><StatusTag :status="row.status" /></template>
-          <template #cell-created_at="{ row }">{{ fmtDateTime(row.created_at) }}</template>
-        </DataTable>
-      </div>
+      <!-- 读不到历史时说"读不到"：一张空表会让人以为"我从来没问过问题" -->
+      <LoadBoundary :state="meta.state.value" loading-text="正在读取最近的问答…"
+                    error-text="暂时读不到历史问答——这不代表你没有问过。"
+                    :reload="meta.reload">
+        <div class="panel pad" style="padding:6px">
+          <DataTable :columns="columns" :rows="recent" clickable @row-click="(r: Run) => (runDrawerId = r.id)">
+            <template #cell-task_type="{ row }">
+              <span class="tag" :class="row.task_type === 'agent' ? 'violet' : 'blue'">{{ row.task_type === 'agent' ? 'Agent · ' + (row.agent_role || '') : '知识库' }}</span>
+            </template>
+            <template #cell-question="{ row }"><b>{{ row.summary?.question || (row.task_type === 'agent' ? '(Agent 对话)' : '(历史记录)') }}</b></template>
+            <template #cell-status="{ row }"><StatusTag :status="row.status" /></template>
+            <template #cell-created_at="{ row }">{{ fmtDateTime(row.created_at) }}</template>
+          </DataTable>
+        </div>
+      </LoadBoundary>
     </div>
 
     <RunDrawer :run-id="runDrawerId" @close="runDrawerId = null" />

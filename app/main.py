@@ -605,9 +605,14 @@ def onebox_intent(req:IntentRequest):
     Deliberately no model call. The sentence's own shape, plus the registry-driven
     signals the query router already extracts, decide this — asking a model here would
     make One Box the slowest way to use the wiki.
+
+    ``req.intent`` lets the caller overrule the reading without retyping the sentence.
+    It is still the same table that answers: the steps for a chosen intent come from
+    ``intent._route``, not from the caller, so a re-route can never point at an endpoint
+    the reading path would not have used.
     """
     from .intent import classify
-    return classify(req.text,context_claim_id=req.context_claim_id).to_dict()
+    return classify(req.text,context_claim_id=req.context_claim_id,intent=req.intent).to_dict()
 
 
 @app.get('/api/integrity/scan')

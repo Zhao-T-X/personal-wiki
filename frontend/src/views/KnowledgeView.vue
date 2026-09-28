@@ -14,8 +14,11 @@ import AppDrawer from '../components/AppDrawer.vue'
 import AppModal from '../components/AppModal.vue'
 import EmptyState from '../components/EmptyState.vue'
 import IntegrityPanel from '../components/IntegrityPanel.vue'
+import LoadBoundary from '../components/LoadBoundary.vue'
 import { useAppStore } from '../stores/app'
 import { toCard } from '../utils/claim'
+import { safeErrorText } from '../utils/dataState'
+import { useAsyncState } from '../utils/useAsyncState'
 import { fmtDateTime } from '../utils/time'
 
 const route = useRoute()
@@ -41,6 +44,8 @@ const searching = ref(false)
 const searchResults = ref<any[]>([])
 /** Projected claims for the same query — the knowledge layer. */
 const searchKnowledge = ref<any[]>([])
+/** 搜索失败必须说出来：一次失败的检索和「库里没有」看起来完全一样。 */
+const searchError = ref('')
 let searchTimer: number | undefined
 /** Why a result matched — replaces the raw RRF score, which told users nothing. */
 const MATCH_LABEL: Record<string, string> = { title: '标题命中', content: '正文命中', semantic: '语义相近' }
@@ -52,6 +57,7 @@ watch(searchQ, () => {
 
 async function runSearch() {
   const q = searchQ.value.trim()
+  searchError.value = ''
   if (!q) { searchResults.value = []; searchKnowledge.value = []; return }
   searching.value = true
   try {
@@ -59,7 +65,12 @@ async function runSearch() {
       `/api/search/knowledge?q=${encodeURIComponent(q)}&limit=20&semantic=true`)
     searchKnowledge.value = body.knowledge || []
     searchResults.value = body.results || []
-  } catch (e: any) { store.toast(e.message) } finally { searching.value = false }
+  } catch (e: any) {
+    searchKnowledge.value = []
+    searchResults.value = []
+    searchError.value = '搜索失败——这不代表知识库里没有相关内容。'
+    void e
+  } finally { searching.value = false }
 }
 
 function openResult(r: any) {
@@ -68,18 +79,47 @@ function openResult(r: any) {
   else router.push('/knowledge/object/' + r.document_id)
 }
 
-/* ---------- documents ---------- */
-const docs = ref<DocumentRow[]>([])
-const entities = ref<Entity[]>([])
-const events = ref<EventRow[]>([])
+/* ---------- documents ----------
+   三个数据面各有各的状态：文档读不到不该让实体列表也变成错误页，但两者都不许
+   把失败说成"空"。 */
 const entityTotal = ref(0)
 const docTotal = ref(0)
 const docLimit = ref(50)
-const entityOffset = ref(0)
+
+const docsRes = useAsyncState(async () => {
+  const ds = await api<DocumentRow[]>(`/api/documents?limit=${docLimit.value}`)
+  if (ds.length) docTotal.value = (ds[0] as any).total ?? ds.length
+  return ds
+}, [] as DocumentRow[])
+const entitiesRes = useAsyncState(async () => {
+  const es = await api<Entity[]>('/api/entities?limit=60&offset=0')
+  if (es.length) entityTotal.value = (es[0] as any).total ?? es.length
+  return es
+}, [] as Entity[])
+const eventsRes = useAsyncState(
+  () => api<EventRow[]>('/api/events?limit=100'), [] as EventRow[])
+
+const docs = docsRes.data
+const entities = entitiesRes.data
+const events = eventsRes.data
+const loadDocs = docsRes.reload
+const loadEntities = entitiesRes.reload
+const loadEvents = eventsRes.reload
+
+/** 追加一页是动作，不是页面加载：失败要单独说，而不是把已读到的列表也算废。 */
+async function moreEntities() {
+  try {
+    const es = await api<Entity[]>(`/api/entities?limit=60&offset=${entities.value.length}`)
+    if (es.length) entityTotal.value = (es[0] as any).total ?? entityTotal.value
+    entitiesRes.set([...entities.value, ...es])
+  } catch (e: any) { store.toast('加载更多实体失败：' + e.message) }
+}
 
 const drawerDoc = ref<DocumentRow | null>(null)
 const drawerChunks = ref<Chunk[]>([])
 const drawerKnowledge = ref<any>(null)
+/** 抽屉里"读不到它产生的知识"要单独说：整篇打不开已经由 toast 说了。 */
+const drawerKnowledgeError = ref('')
 /** The drawer's rows go through the same normaliser every other surface uses, so
     there is one answer to "what does a claim look like in this product". */
 const drawerCards = computed(() => (drawerKnowledge.value?.claims || [])
@@ -90,19 +130,6 @@ const showNewEntity = ref(false)
 const newTitle = ref(''); const newBody = ref(''); const newType = ref('note')
 const entName = ref(''); const entType = ref('Technology'); const entDesc = ref('')
 const evType = ref('meeting'); const evDesc = ref(''); const evDate = ref(''); const showNewEvent = ref(false)
-
-async function loadDocs() {
-  const ds = await api<DocumentRow[]>(`/api/documents?limit=${docLimit.value}`)
-  docs.value = ds
-  if (ds.length) docTotal.value = (ds[0] as any).total ?? ds.length
-}
-async function loadEntities(append = false) {
-  const es = await api<Entity[]>(`/api/entities?limit=60&offset=${append ? entityOffset.value : 0}`)
-  entities.value = append ? [...entities.value, ...es] : es
-  entityOffset.value = entities.value.length
-  if (es.length) entityTotal.value = (es[0] as any).total ?? es.length
-}
-async function loadEvents() { events.value = await api<EventRow[]>('/api/events?limit=100') }
 
 /* ---------- timeline grouping ---------- */
 /** Day bucket: the date extracted from the source text when present, else the creation date. */
@@ -138,13 +165,38 @@ onMounted(async () => {
 })
 watch(() => route.query.doc, d => { if (d) openSource(d as string, route.query.chunk as string | undefined) })
 
-async function openDoc(d: DocumentRow) {
-  drawerDoc.value = await api<DocumentRow>('/api/documents/' + d.id)
-  drawerChunks.value = await api<Chunk[]>('/api/documents/' + d.id + '/chunks')
-  // 「这篇产生了什么知识」比原文更该先看到——抽屉的默认内容不该是 raw markdown。
-  try { drawerKnowledge.value = await api<any>('/api/documents/' + d.id + '/knowledge') }
-  catch { drawerKnowledge.value = null }
+/** 打开抽屉。返回是否打开成功——调用方（`openSource`）要据此决定还要不要滚动定位。
+ *  打不开时抽屉没有可承载错误的地方，所以走 toast（原因已消毒，不给人看堆栈）。 */
+async function openDoc(d: DocumentRow): Promise<boolean> {
+  drawerKnowledgeError.value = ''
+  drawerKnowledge.value = null
+  try {
+    drawerDoc.value = await api<DocumentRow>('/api/documents/' + d.id)
+    drawerChunks.value = await api<Chunk[]>('/api/documents/' + d.id + '/chunks')
+  } catch (e: any) {
+    drawerDoc.value = null
+    store.toast('打开文档失败——' + (safeErrorText(e) || '暂时没能读取这篇文档。'))
+    return false
+  }
+  await loadDrawerKnowledge()
+  return true
 }
+
+/** 「这篇产生了什么知识」比原文更该先看到——抽屉的默认内容不该是 raw markdown。
+ *  它读不到时要说出来：一个空白的"知识"区看起来就像这篇什么都没抽出来。 */
+async function loadDrawerKnowledge() {
+  if (!drawerDoc.value) return
+  drawerKnowledgeError.value = ''
+  try {
+    drawerKnowledge.value = await api<any>('/api/documents/' + drawerDoc.value.id + '/knowledge')
+  } catch {
+    drawerKnowledge.value = null
+    drawerKnowledgeError.value = '暂时读不到这篇产生的知识——这不代表这篇没有产出。'
+  }
+}
+
+/** 卡片被就地改过（自带纠正）之后重读一次，否则卡片还显示旧值。 */
+const refreshDrawerKnowledge = loadDrawerKnowledge
 
 /* ---------- source jump (?doc=&chunk=) ---------- */
 const chunksBox = ref<HTMLDetailsElement | null>(null)
@@ -154,9 +206,7 @@ const highlightChunk = ref<string | null>(null)
 async function openSource(docId: string, chunkId?: string) {
   tab.value = '文档'
   highlightChunk.value = chunkId || null
-  try {
-    await openDoc({ id: docId } as DocumentRow)
-  } catch (e: any) { store.toast('打开来源失败：' + e.message); return }
+  if (!await openDoc({ id: docId } as DocumentRow)) return
   await nextTick()
   if (chunksBox.value) chunksBox.value.open = true
   await nextTick()
@@ -291,7 +341,7 @@ const showAllDocs = computed(() => docLimit.value >= docTotal.value)
         </div>
         <div class="khits">
           <KnowledgeCard v-for="k in searchKnowledge" :key="k.claim_id" :claim="toCard(k)"
-                         :evidence-count="k.sources" compact />
+                         :evidence-count="k.sources" compact @changed="runSearch" />
         </div>
       </template>
 
@@ -311,7 +361,9 @@ const showAllDocs = computed(() => docLimit.value >= docTotal.value)
           </div>
         </div>
       </div>
-      <EmptyState v-if="!searchResults.length && !searching" text="没有匹配结果——试试更短的关键词，或先为文档生成嵌入" />
+      <!-- 搜索失败时明确说是失败：此时空结果不代表"库里没有" -->
+      <div v-if="searchError" class="notice red" style="margin:0">{{ searchError }}</div>
+      <EmptyState v-else-if="!searchResults.length && !searching" text="没有匹配结果——试试更短的关键词，或先为文档生成嵌入" />
     </div>
 
     <SegTabs v-model="tab" :options="TABS" style="margin:0 0 14px" />
@@ -328,33 +380,42 @@ const showAllDocs = computed(() => docLimit.value >= docTotal.value)
           <button class="btn primary" @click="showNew = true">＋ 新建文档</button>
         </span>
       </div>
-      <div class="panel pad" style="padding:6px">
-        <div v-for="d in docs" :key="d.id" class="item" @click="openDoc(d)">
-          <div class="ico-badge ib-blue">▤</div>
-          <div class="grow"><b>{{ d.title }}</b><p>{{ d.source_type }} · {{ d.chunk_count }} chunks · {{ fmtDateTime(d.updated_at) }}</p></div>
-          <StatusTag v-if="d.last_run_status" :status="d.last_run_status" /><span v-else class="tag amber">未索引</span>
+      <!-- 读不到文档时说"读不到"，而不是"还没有文档" -->
+      <LoadBoundary :state="docsRes.state.value" loading-text="正在读取文档…"
+                    error-text="暂时无法加载文档——这不代表你的文档不见了。"
+                    :reload="loadDocs">
+        <div class="panel pad" style="padding:6px">
+          <div v-for="d in docs" :key="d.id" class="item" @click="openDoc(d)">
+            <div class="ico-badge ib-blue">▤</div>
+            <div class="grow"><b>{{ d.title }}</b><p>{{ d.source_type }} · {{ d.chunk_count }} chunks · {{ fmtDateTime(d.updated_at) }}</p></div>
+            <StatusTag v-if="d.last_run_status" :status="d.last_run_status" /><span v-else class="tag amber">未索引</span>
+          </div>
+          <EmptyState v-if="!docs.length" text="还没有文档——导入或新建一篇" />
         </div>
-        <EmptyState v-if="!docs.length" text="还没有文档——导入或新建一篇" />
-      </div>
-      <div v-if="!showAllDocs" style="text-align:center;margin-top:10px">
-        <button class="btn" @click="docLimit += 50; loadDocs()">加载更多（{{ docTotal - docs.length }} 条）</button>
-      </div>
+        <div v-if="!showAllDocs" style="text-align:center;margin-top:10px">
+          <button class="btn" @click="docLimit += 50; loadDocs()">加载更多（{{ docTotal - docs.length }} 条）</button>
+        </div>
+      </LoadBoundary>
 
       <div class="sechead"><h3>Knowledge Objects <span class="faint" style="font-weight:400;font-size:9px">· {{ entities.length }}/{{ entityTotal }}</span></h3>
         <button class="btn" @click="showNewEntity = true">＋ 新建实体</button>
       </div>
-      <div class="grid g3">
-        <div v-for="e in entities" :key="e.id" class="panel pad item" style="display:block" @click="router.push('/knowledge/object/' + e.id)">
-          <div class="row"><div class="ico-badge" :class="e.status === 'verified' ? 'ib-mint' : 'ib-blue'">✦</div>
-            <div><b>{{ e.name }}</b><div class="faint" style="font-size:8.5px">{{ e.type }}</div></div></div>
-          <hr class="hairline" />
-          <p style="margin:0">{{ e.description?.slice(0, 60) || '—' }}</p>
-          <div style="margin-top:9px"><StatusTag :status="e.status" /></div>
+      <LoadBoundary :state="entitiesRes.state.value" loading-text="正在读取知识对象…"
+                    error-text="暂时无法加载知识对象——这不代表它们不存在。"
+                    :reload="loadEntities">
+        <div class="grid g3">
+          <div v-for="e in entities" :key="e.id" class="panel pad item" style="display:block" @click="router.push('/knowledge/object/' + e.id)">
+            <div class="row"><div class="ico-badge" :class="e.status === 'verified' ? 'ib-mint' : 'ib-blue'">✦</div>
+              <div><b>{{ e.name }}</b><div class="faint" style="font-size:8.5px">{{ e.type }}</div></div></div>
+            <hr class="hairline" />
+            <p style="margin:0">{{ e.description?.slice(0, 60) || '—' }}</p>
+            <div style="margin-top:9px"><StatusTag :status="e.status" /></div>
+          </div>
         </div>
-      </div>
-      <div v-if="entities.length < entityTotal" style="text-align:center;margin-top:10px">
-        <button class="btn" @click="loadEntities(true)">加载更多（{{ entityTotal - entities.length }} 个）</button>
-      </div>
+        <div v-if="entities.length < entityTotal" style="text-align:center;margin-top:10px">
+          <button class="btn" @click="moreEntities">加载更多（{{ entityTotal - entities.length }} 个）</button>
+        </div>
+      </LoadBoundary>
     </div>
 
     <!-- 图谱 -->
@@ -370,23 +431,27 @@ const showAllDocs = computed(() => docLimit.value >= docTotal.value)
     <!-- 时间线 -->
     <div v-if="tab === '时间线'">
       <div class="sechead"><h3>时间线</h3><button class="btn" @click="showNewEvent = true">＋ 新建事件</button></div>
-      <div class="panel pad">
-        <div class="timeline">
-          <template v-for="g in groupedEvents" :key="g.date">
-            <div class="tlday">{{ g.date }}</div>
-            <div v-for="e in g.items" :key="e.id" class="tle">
-              <b>{{ e.description }}</b>
-              <div>
-                <StatusTag :status="e.status" />
-                <span class="tag">{{ e.event_type }}</span>
-                <span v-if="e.location" class="tag">📍 {{ e.location }}</span>
-                <span v-if="eventClock(e)" class="when">{{ eventClock(e) }}</span>
+      <LoadBoundary :state="eventsRes.state.value" loading-text="正在读取事件…"
+                    error-text="暂时无法加载事件——这不代表时间线是空的。"
+                    :reload="loadEvents">
+        <div class="panel pad">
+          <div class="timeline">
+            <template v-for="g in groupedEvents" :key="g.date">
+              <div class="tlday">{{ g.date }}</div>
+              <div v-for="e in g.items" :key="e.id" class="tle">
+                <b>{{ e.description }}</b>
+                <div>
+                  <StatusTag :status="e.status" />
+                  <span class="tag">{{ e.event_type }}</span>
+                  <span v-if="e.location" class="tag">📍 {{ e.location }}</span>
+                  <span v-if="eventClock(e)" class="when">{{ eventClock(e) }}</span>
+                </div>
               </div>
-            </div>
-          </template>
-          <EmptyState v-if="!events.length" text="还没有事件" />
+            </template>
+            <EmptyState v-if="!events.length" text="还没有事件" />
+          </div>
         </div>
-      </div>
+      </LoadBoundary>
     </div>
 
     <AppDrawer :open="!!drawerDoc" :title="drawerDoc?.title || ''" @close="drawerDoc = null">
@@ -402,14 +467,17 @@ const showAllDocs = computed(() => docLimit.value >= docTotal.value)
           <button class="btn" @click="actDoc(drawerDoc, 'embed')">Embeddings</button>
           <button class="btn danger" @click="actDoc(drawerDoc, 'delete')">删除</button>
         </div>
-        <!-- 这篇产生的知识。文档抽屉 = 该文档作用域的视图，不是"知识库首页"。 -->
-        <div v-if="drawerKnowledge?.claims?.length" style="margin:14px 0 4px">
+        <!-- 这篇产生的知识。文档抽屉 = 该文档作用域的视图，不是"知识库首页"。
+             读不到它时说明"读不到"——空白的知识区看起来就像这篇什么都没抽出来。 -->
+        <div v-if="drawerKnowledgeError" class="notice violet" style="margin:14px 0 4px">{{ drawerKnowledgeError }}</div>
+        <div v-else-if="drawerKnowledge?.claims?.length" style="margin:14px 0 4px">
           <div class="sechead" style="margin-top:0">
             <h3>这篇产生的知识</h3>
             <span class="tag" style="margin:0">{{ drawerKnowledge.counts.claims }}</span>
           </div>
           <div class="dkl">
-            <KnowledgeCard v-for="c in drawerCards" :key="c.id" :claim="c" compact />
+            <KnowledgeCard v-for="c in drawerCards" :key="c.id" :claim="c" compact
+                           @changed="refreshDrawerKnowledge" />
           </div>
           <p v-if="drawerKnowledge.counts.claims > drawerCards.length" class="faint" style="font-size:9.5px;margin:7px 0 0">
             另有 {{ drawerKnowledge.counts.claims - drawerCards.length }} 条未在此列出。

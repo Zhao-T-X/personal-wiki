@@ -99,9 +99,15 @@ class IntentRequest(BaseModel):
     ``context_claim_id`` is what makes 「这个不对，应该是……」 work: the subject is
     already on screen, so the sentence does not have to name it — and the user must not
     have to retype what the app can see.
+
+    ``intent`` is the user overruling the reading ("其实我是想问"). It changes nothing
+    about the sentence and nothing about which endpoints exist: the same route table
+    answers, just for the chosen intent — so the UI never has to keep a second copy of
+    the routing to make a wrong reading cheap to fix.
     """
     text: str = ''
     context_claim_id: str | None = None
+    intent: str | None = None
 
 
 class CurationDecisionRequest(BaseModel):

@@ -8,11 +8,17 @@
  *   2. 按判断结果执行——**用已经存在的接口**，所以这里没有第二套 Ask / Research /
  *      Correction / 导入逻辑，任何一条被修好，这里自动跟着好。
  *
- * 两条产品规则写在这里：
+ * 三条产品规则写在这里：
  *
  * * **读取直接执行，写入先确认。** 问错了只是重说一句；写错了是用户对自己知识库的
  *   信任。所以只有 ASK 会自己跑。
  * * **读错了要容易改。** 判断结果与理由一直显示着，用户可以一键换一个意图，不用重打。
+ * * **看得见的按钮背后一定有动作。** 改判不是把意图字段改掉就完事——它带着同一个句子
+ *   重新问一次那张唯一的路由表，所以「按这个执行」永远有真正的步骤。这个不变量由
+ *   `canExecute()` 一个谓词同时守住按钮的渲染与 `run()` 的入口，见 utils/onebox.ts。
+ *
+ * 改判之所以要回到服务端，而不是在这里自己拼步骤：步骤映射只应该有一份（`app/intent.py`
+ * 的 `_route`）。前端复制一份，等于制造第二个真相，而且它一定会漂移。
  */
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
@@ -22,6 +28,7 @@ import CorrectionFlow from './CorrectionFlow.vue'
 import KnowledgeCard from './KnowledgeCard.vue'
 import MarkdownView from './MarkdownView.vue'
 import { toCard } from '../utils/claim'
+import { INTENT_LABEL, canExecute, overrideOptions, overrideRequest, type IntentPlan } from '../utils/onebox'
 
 const props = withDefaults(defineProps<{
   /** 用户当前正在看的知识——让「这个不对」不必重新说明它在说哪条。 */
@@ -34,43 +41,55 @@ const text = ref('')
 const reading = ref(false)
 const running = ref(false)
 /** 判断结果：意图、置信度、理由，以及要执行哪几步。 */
-const plan = ref<any>(null)
+const plan = ref<IntentPlan | null>(null)
 /** 执行结果，按意图不同渲染。 */
 const result = ref<{ kind: string; body: any } | null>(null)
+/** 这一次的判断是用户改的，还是系统读的——决定要不要给「恢复系统判断」。 */
+const overridden = ref(false)
 
-const INTENT_LABEL: Record<string, string> = {
-  ask: '查你的知识', knowledge: '记为知识', research: '去研究', correct: '纠正知识', unknown: '不确定',
-}
-
-const needsConfirm = computed(() => !!plan.value?.needs_confirmation)
+/** 按钮是否存在、和 run() 是否真的有事可做，是同一个判断。 */
+const executable = computed(() => canExecute(plan.value))
+/** 除当前意图之外的改法：当前意图的按钮出现只会是废话。 */
+const options = computed(() => overrideOptions(plan.value?.intent))
 
 /** 宿主（首页的示例问题）走同一个入口，所以同一句话不会有两套行为。 */
-defineExpose({ run: (sentence: string) => { text.value = sentence; return route() } })
+defineExpose({ ask: (sentence: string) => { text.value = sentence; return route() } })
 
-async function route() {
+async function route(opts: { intent?: string } = {}) {
   const sentence = text.value.trim()
   if (!sentence) return
   reading.value = true
   result.value = null
   try {
-    plan.value = await post('/api/onebox/intent',
-      { text: sentence, context_claim_id: props.contextClaimId })
+    // 改判不自己编步骤：把选择交给服务端那张唯一的路由表，前端不留第二份映射。
+    plan.value = await post<IntentPlan>('/api/onebox/intent', opts.intent
+      ? overrideRequest(sentence, opts.intent, props.contextClaimId)
+      : { text: sentence, context_claim_id: props.contextClaimId })
+    overridden.value = !!opts.intent
     // 读取类直接执行：问对了立刻有答案，问错了只是重说一句。
-    if (!plan.value.needs_confirmation && plan.value.steps?.length) await run()
-  } catch (e: any) { store.toast(e.message) } finally { reading.value = false }
+    if (!plan.value.needs_confirmation && canExecute(plan.value)) await run()
+  } catch (e: any) {
+    plan.value = null
+    overridden.value = false
+    store.toast(e.message)
+  } finally { reading.value = false }
 }
 
 /** 按计划的步骤调用既有接口。步骤描述由服务端给出，这里不含业务判断。 */
 async function run() {
-  if (!plan.value?.steps?.length) return
+  if (!canExecute(plan.value)) {
+    // 界面不可达（按钮用同一个谓词），但绝不静默返回：宁可说清「没有下一步」。
+    store.toast('这一步没有可执行的动作——换一种说法，或从上面选一个意图')
+    return
+  }
   running.value = true
   try {
     let body: any = null
-    for (const step of plan.value.steps) {
+    for (const step of plan.value!.steps!) {
       body = await post(step.endpoint, step.body || {})
     }
-    result.value = { kind: plan.value.intent, body }
-    if (plan.value.intent === 'knowledge' && body?.id) {
+    result.value = { kind: plan.value!.intent, body }
+    if (plan.value!.intent === 'knowledge' && body?.id) {
       // 导入是两步（建文档 → 抽取），和导入面板走的是同一对接口。
       const indexed = await post(`/api/documents/${body.id}/index`)
       result.value = { kind: 'knowledge', body: { ...body, index: indexed } }
@@ -78,12 +97,10 @@ async function run() {
   } catch (e: any) { store.toast(e.message) } finally { running.value = false }
 }
 
-function override(intent: string) {
-  if (!plan.value) return
-  plan.value = { ...plan.value, intent, needs_confirmation: true, steps: [] }
-  store.toast('先选一个意图，我再按它执行')
-  void intent
-}
+/** 改判：用同一个句子重新规划，于是按钮背后一定真的有动作。 */
+function override(intent: string) { void route({ intent }) }
+/** 回到系统原来的判断——改错了要能退出来。 */
+function restoreReading() { void route() }
 
 function useSuggestion(s: string) { text.value = s; void route() }
 
@@ -113,14 +130,21 @@ const knowledge = computed<any[]>(() => result.value?.body?.knowledge || [])
       <span class="faint" style="font-size:9.5px">{{ plan.reason }}</span>
       <div class="grow"></div>
       <template v-if="plan.intent === 'unknown'">
-        <button v-for="s in plan.suggestions" :key="s" class="btn sm" @click="useSuggestion(s)">{{ s }}</button>
+        <button v-for="s in plan.suggestions || []" :key="s" class="btn sm" @click="useSuggestion(s)">{{ s }}</button>
       </template>
       <template v-else>
-        <button class="btn sm ghost" @click="override('ask')">其实我是想问</button>
-        <button class="btn sm ghost" @click="override('research')">其实我是想研究</button>
-        <button v-if="needsConfirm" class="btn primary" :disabled="running" @click="run">
+        <button v-for="o in options" :key="o.intent" class="btn sm ghost" @click="override(o.intent)">
+          {{ o.label }}
+        </button>
+        <button v-if="overridden" class="btn sm ghost" @click="restoreReading">恢复系统判断</button>
+        <!-- 按钮与 run() 共用 canExecute：没有可执行步骤时按钮不存在，
+             而不是存在但点了没反应。 -->
+        <button v-if="executable" class="btn primary" :disabled="running" @click="run">
           按这个执行
         </button>
+        <span v-else class="faint hint">
+          这一步没有可执行的下一步——换一种说法，或从上面选一个意图。
+        </span>
       </template>
     </div>
 
@@ -179,6 +203,7 @@ const knowledge = computed<any[]>(() => result.value?.body?.knowledge || [])
 .obstatus{margin-top:10px;font-size:10px;color:var(--sub)}
 .obplan{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px;
   padding:9px 11px;border:1px solid var(--hair);border-radius:11px;background:var(--surface2)}
+.hint{font-size:9.5px;line-height:1.6}
 .obcards{display:grid;gap:9px}
 .askbox input{flex:1}
 </style>

@@ -4,8 +4,10 @@ import { useRouter } from 'vue-router'
 import { api, patchJson } from '../api/client'
 import KpiStrip from './KpiStrip.vue'
 import EmptyState from './EmptyState.vue'
+import LoadBoundary from './LoadBoundary.vue'
 import { useAppStore } from '../stores/app'
 import { statusStyle } from '../utils/status'
+import { useAsyncState } from '../utils/useAsyncState'
 
 const router = useRouter()
 const store = useAppStore()
@@ -14,7 +16,6 @@ type Kind = 'entities' | 'claims' | 'relations'
 type Decision = 'verified' | 'rejected'
 
 const kind = ref<Kind>('entities')
-const data = ref<{ entities: any[]; claims: any[]; relations: any[] }>({ entities: [], claims: [], relations: [] })
 const filter = ref('')
 const busy = ref(false)
 const expanded = ref<Set<string>>(new Set())
@@ -28,11 +29,21 @@ const KIND_META: Record<Kind, { label: string; idKey: string }> = {
   relations: { label: '关系', idKey: 'relation' },
 }
 
+/* 不传 limit：窗口由后端默认值决定，Review Inbox 数的是同一个窗口——
+   角标和它打开的这一页必须描述同一批东西。
+
+   读不到时**绝不能说「已经清空」**：那是这个界面能说出的最危险的一句话，它会让用户
+   放弃本来必须做的确认，并且以为候选知识已经被处理过了。所以成功、为空、读不到
+   是三件不同的事，由 LoadBoundary 分别渲染。 */
+const review = useAsyncState(
+  () => api<{ entities: any[]; claims: any[]; relations: any[] }>('/api/review'),
+  { entities: [], claims: [], relations: [] },
+)
+const data = review.data
+
 async function load() {
-  /* 不传 limit：窗口由后端默认值决定，Review Inbox 数的是同一个窗口——
-     角标和它打开的这一页必须描述同一批东西。 */
-  data.value = await api('/api/review')
   expanded.value = new Set()
+  await review.reload()
 }
 onMounted(load)
 
@@ -81,6 +92,8 @@ const kindHint = computed(() => {
    展开时才按需拉取：200 条候选不该在列表加载时打 200 个请求。 */
 interface EntityDetail {
   loading: boolean
+  /** 读不到详情时必须这么说：空的详情区会被读成「系统没有找到理由」。 */
+  error: string
   evidence: { quote: string; documentId: string; chunkId: string } | null
   duplicates: { id: string; name: string; type: string; status: string; similarity: number }[]
 }
@@ -90,13 +103,23 @@ const detailOf = (id: string) => detailCache.value[id] || null
 const duplicatesOf = (id: string) => detailCache.value[id]?.duplicates || []
 const evidenceOf = (id: string) => detailCache.value[id]?.evidence || null
 
-async function loadEntityDetail(id: string) {
-  if (detailCache.value[id]) return
-  detailCache.value = { ...detailCache.value, [id]: { loading: true, evidence: null, duplicates: [] } }
-  const [obj, dup] = await Promise.all([
-    api<any>('/api/entities/' + id + '/object').catch(() => null),
-    api<any>('/api/entities/' + id + '/duplicates').catch(() => null),
-  ])
+async function loadEntityDetail(id: string, force = false) {
+  if (detailCache.value[id] && !force) return
+  detailCache.value = { ...detailCache.value, [id]: { loading: true, error: '', evidence: null, duplicates: [] } }
+  let obj: any = null, dup: any = null
+  try {
+    ;[obj, dup] = await Promise.all([
+      api<any>('/api/entities/' + id + '/object'),
+      api<any>('/api/entities/' + id + '/duplicates'),
+    ])
+  } catch (e: any) {
+    detailCache.value = {
+      ...detailCache.value,
+      [id]: { loading: false, error: '暂时读不到这条候选的来源与相似实体。', evidence: null, duplicates: [] },
+    }
+    void e
+    return
+  }
   // An entity has no document of its own; its first claim quote is the closest
   // thing to "the text that produced this".
   const sample = obj?.evidence?.[0] || obj?.claims?.[0] || null
@@ -104,6 +127,7 @@ async function loadEntityDetail(id: string) {
     ...detailCache.value,
     [id]: {
       loading: false,
+      error: '',
       evidence: sample ? {
         quote: sample.source_quote || sample.content || '',
         documentId: sample.source_document_id || '',
@@ -160,7 +184,7 @@ async function applyStatus(items: any[], status: Decision) {
   if (!done.length) { store.toast('操作失败，候选保持不变'); return }
 
   const ids = new Set(done.map(r => r.id))
-  data.value = { ...data.value, [k]: (data.value[k] as any[]).filter(r => !ids.has(r.id)) }
+  review.set({ ...data.value, [k]: (data.value[k] as any[]).filter(r => !ids.has(r.id)) })
   expanded.value = new Set()
 
   const verb = status === 'verified' ? '通过' : '拒绝'
@@ -191,6 +215,13 @@ function rejectAll() {
 
 <template>
   <div>
+    <!-- 读不到的时候，连"还有 0 件待审"都不许说。
+         统计、分类计数、批量操作、列表全部在成功分支里——它们在读不到时全是谎话。 -->
+    <LoadBoundary :state="review.state.value"
+                  loading-text="正在检查需要你确认的内容…"
+                  error-title="暂时无法读取待确认内容"
+                  error-text="现在读不到审核队列——这不代表没有等你确认的内容。"
+                  :reload="load">
     <KpiStrip :cells="[
       { label: '待审实体', value: data.entities.length },
       { label: '待审 Claims', value: data.claims.length },
@@ -245,6 +276,11 @@ function rejectAll() {
           <!-- 实体候选：先讲清楚「为什么会有它」和「是否已经有一个」 -->
           <template v-if="kind === 'entities'">
             <div v-if="detailOf(r.id)?.loading" class="faint" style="font-size:9px">正在查找来源与相似实体…</div>
+            <!-- 详情读不到时说"读不到"，而不是摆出一个空的"为什么会有这条候选" -->
+            <div v-else-if="detailOf(r.id)?.error" class="row" style="gap:10px">
+              <span class="muted" style="font-size:10px">{{ detailOf(r.id)?.error }}</span>
+              <button class="btn sm" @click="loadEntityDetail(r.id, true)">重新加载</button>
+            </div>
             <template v-else>
               <div v-if="duplicatesOf(r.id).length">
                 <div class="sechead" style="margin-top:0"><h3>可能的重复</h3></div>
@@ -296,10 +332,11 @@ function rejectAll() {
         </div>
       </div>
 
+      <!-- 这句话只在"确实读到了、而且确实没有"时才出现 -->
       <EmptyState
         v-if="!rows.length"
-        :title="filter ? '没有匹配的候选' : '这里已经清空了'"
-        :text="filter ? '换个关键词，或清除搜索查看全部候选。' : '没有等待你判断的候选知识——导入并抽取文档后，新候选会出现在这里。'"
+        :title="filter ? '没有匹配的候选' : '目前没有需要确认的内容'"
+        :text="filter ? '换个关键词，或清除搜索查看全部候选。' : '导入并抽取文档后，新候选会出现在这里；确认过它们才会被当作可信知识使用。'"
       >
         <template #action>
           <button v-if="filter" class="btn" @click="filter = ''">清除搜索</button>
@@ -307,6 +344,7 @@ function rejectAll() {
         </template>
       </EmptyState>
     </div>
+    </LoadBoundary>
 
     <div class="notice violet" style="margin-top:12px">
       通过（verified）的知识会成为可信锚点进入图谱与问答；拒绝（rejected）会被检索与图谱排除。两种操作都可以在提示条里「撤销」。

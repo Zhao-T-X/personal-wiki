@@ -3,38 +3,48 @@
  *
  * 空知识库不再展示六个空面板。第一次来的人只需要做一件事，
  * 所以第一屏只有那件事（拖入）+ 它的替代动作（提问）。
- * 「需要你判断的事」只在真的有事时才出现——那才是首页的职责。 */
+ * 「需要你判断的事」只在真的有事时才出现——那才是首页的职责。
+ *
+ * 但"确实什么都没有"和"读不到"必须分开：一次失败的请求曾经把整页退回成
+ * 新用户空库的首屏，那对一个知识库产品来说是能说出的最坏的一句话——用户会
+ * 理解成"我的知识全没了"。所以首用提示只在 `success && 空` 时出现。 */
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../api/client'
 import type { DocumentRow, Entity } from '../api/types'
 import ImportPanel from '../components/ImportPanel.vue'
+import LoadBoundary from '../components/LoadBoundary.vue'
 import OneBox from '../components/OneBox.vue'
 import StatusTag from '../components/StatusTag.vue'
+import { useAsyncState } from '../utils/useAsyncState'
 import { fmtDateTime } from '../utils/time'
 
 const router = useRouter()
-
-const entities = ref<Entity[]>([])
-const docs = ref<DocumentRow[]>([])
-const openQuestions = ref(0)
-const conflicts = ref(0)
-const review = ref({ entities: 0, claims: 0, relations: 0 })
-const staleCandidates = ref(0)
-const changes = ref<{ day: string; added: number; updated: { label: string; claim_id: string | null }[]; evidenced: number } | null>(null)
-/** A 7-day roll-up — null when the fetched window does not actually reach back 7 days. */
-const window7 = ref<{ added: number; updated: number; evidenced: number } | null>(null)
-
-/** What the system wants from the user, not how much data it holds. */
-const pendingTotal = computed(() => review.value.entities + review.value.claims + review.value.relations)
-const dueTotal = computed(() => pendingTotal.value + conflicts.value)
 
 const DEFAULT_EXAMPLES = [
   '我的知识库里有哪些核心概念？',
   '最近导入的内容讲了什么？',
   '有哪些结论在不同来源里互相冲突？',
 ]
-const examples = ref<string[]>([...DEFAULT_EXAMPLES])
+
+interface Changes {
+  day: string
+  added: number
+  updated: { label: string; claim_id: string | null }[]
+  evidenced: number
+}
+interface HomeData {
+  entities: Entity[]
+  docs: DocumentRow[]
+  openQuestions: number
+  conflicts: number
+  review: { entities: number; claims: number; relations: number }
+  staleCandidates: number
+  examples: string[]
+  changes: Changes | null
+  /** A 7-day roll-up — null when the fetched window does not actually reach back 7 days. */
+  window7: { added: number; updated: number; evidenced: number } | null
+}
 
 const greeting = computed(() => {
   const h = new Date().getHours()
@@ -52,45 +62,92 @@ function dayOf(value: unknown) { return String(value || '').slice(0, 10) }
  * 多了多少、哪些拿到了新证据。这些事实后端全都有（审计轨迹 + 已接受的
  * duplicate 关系 = 同一断言又有了一个来源），只是从来没有人把它们读出来。
  * 这里只做翻译，不做推断：没有数据就不显示那一行。 */
-async function loadChanges() {
-  // 200 而不是 100：7 天窗口要用同一份数据算，取太少会把"新增"算小。
-  const [ops, rels] = await Promise.all([
-    api<any[]>('/api/knowledge/operations?limit=200').catch(() => []),
-    api<any[]>('/api/claim-relations?status=accepted&limit=200').catch(() => []),
-  ])
-  const opList = ops || [], relList = rels || []
-
-  // 只有当取回的记录确实覆盖到 7 天前时才给出 7 天数字。否则宁可整行不显示——
-  // 一个被截断的"新增 42"比没有更糟，它看起来精确。
-  const stamps = [...opList, ...relList].map(r => String(r.created_at || '')).filter(Boolean)
-  const since = new Date(Date.now() - 7 * 86400e3).toISOString().slice(0, 19).replace('T', ' ')
-  if (stamps.length && stamps.sort()[0] <= since) {
-    const within = (r: any) => String(r.created_at || '') >= since
-    window7.value = {
-      added: opList.filter(o => within(o) && o.kind === 'CREATE').length,
-      updated: opList.filter(o => within(o) && (o.kind === 'SUPERSEDE'
-        || (o.kind === 'CORRECT' && o.result?.superseded_claim_id))).length,
-      evidenced: relList.filter(r => within(r) && r.relationship === 'duplicate').length,
-    }
-  } else {
-    window7.value = null
-  }
-  const newest = [...opList, ...relList].map(r => dayOf(r.created_at)).filter(Boolean).sort().pop()
-  if (!newest) { changes.value = null; return }
+function changesOf(ops: any[], rels: any[]): Changes | null {
+  const newest = [...ops, ...rels].map(r => dayOf(r.created_at)).filter(Boolean).sort().pop()
+  if (!newest) return null
   const onDay = (r: any) => dayOf(r.created_at) === newest
-  const superseding = opList.filter(o => onDay(o) && (
+  const superseding = ops.filter(o => onDay(o) && (
     o.kind === 'SUPERSEDE' || (o.kind === 'CORRECT' && o.result?.superseded_claim_id)))
-  changes.value = {
+  return {
     // 「今天」只在真的匹配本地日期时才说，否则如实显示那一天。
     day: newest === dayOf(new Date().toISOString()) ? '今天' : newest,
-    added: opList.filter(o => onDay(o) && o.kind === 'CREATE').length,
+    added: ops.filter(o => onDay(o) && o.kind === 'CREATE').length,
     updated: superseding.slice(0, 3).map(o => ({
       label: o.payload?.subject ? `${o.payload.subject} 已更新` : '一条知识已更新',
       claim_id: o.result?.claim_id || o.result?.superseded_claim_id || null,
     })),
-    evidenced: relList.filter(r => onDay(r) && r.relationship === 'duplicate').length,
+    evidenced: rels.filter(r => onDay(r) && r.relationship === 'duplicate').length,
   }
 }
+
+/** 只有当取回的记录确实覆盖到 7 天前时才给出 7 天数字。否则宁可整行不显示——
+ *  一个被截断的"新增 42"比没有更糟，它看起来精确。 */
+function window7Of(ops: any[], rels: any[]): HomeData['window7'] {
+  const stamps = [...ops, ...rels].map(r => String(r.created_at || '')).filter(Boolean)
+  if (!stamps.length) return null
+  const since = new Date(Date.now() - 7 * 86400e3).toISOString().slice(0, 19).replace('T', ' ')
+  if (stamps.sort()[0] > since) return null
+  const within = (r: any) => String(r.created_at || '') >= since
+  return {
+    added: ops.filter(o => within(o) && o.kind === 'CREATE').length,
+    updated: ops.filter(o => within(o) && (o.kind === 'SUPERSEDE'
+      || (o.kind === 'CORRECT' && o.result?.superseded_claim_id))).length,
+    evidenced: rels.filter(r => within(r) && r.relationship === 'duplicate').length,
+  }
+}
+
+/** 整页一次读取：一部分读不到和全部读不到，对用户是同一件事——"这一页读不到"。
+ *  所以原来那些 `.catch(() => [])` 全部去掉：静默吞掉失败正是"读不到"变成"空"的入口。 */
+const home = useAsyncState<HomeData>(async () => {
+  // 200 而不是 100：7 天窗口要用同一份数据算，取太少会把"新增"算小。
+  const [ops, rels, es, ds, qs, cf, rv, health] = await Promise.all([
+    api<any[]>('/api/knowledge/operations?limit=200'),
+    api<any[]>('/api/claim-relations?status=accepted&limit=200'),
+    api<Entity[]>('/api/entities?limit=6'),
+    api<DocumentRow[]>('/api/documents?limit=8'),
+    api<any[]>('/api/questions?limit=200'),
+    api<any[]>('/api/conflicts'),
+    api<any>('/api/review?limit=200'),
+    api<any>('/api/knowledge/health').catch(() => null),
+  ])
+  const open = qs.filter(q => q.status === 'open')
+  return {
+    entities: es,
+    docs: ds,
+    openQuestions: open.length,
+    conflicts: cf.length,
+    review: {
+      entities: rv.entities?.length || 0,
+      claims: rv.claims?.length || 0,
+      relations: rv.relations?.length || 0,
+    },
+    staleCandidates: health?.stale_candidates || 0,
+    // Example questions come from the user's own open questions when they have any.
+    examples: open.length ? open.slice(0, 3).map(q => q.content) : [...DEFAULT_EXAMPLES],
+    changes: changesOf(ops, rels),
+    window7: window7Of(ops, rels),
+  }
+}, {
+  entities: [] as Entity[], docs: [] as DocumentRow[], openQuestions: 0, conflicts: 0,
+  review: { entities: 0, claims: 0, relations: 0 }, staleCandidates: 0,
+  examples: [...DEFAULT_EXAMPLES], changes: null, window7: null,
+})
+
+const entities = computed(() => home.data.value.entities)
+const docs = computed(() => home.data.value.docs)
+const openQuestions = computed(() => home.data.value.openQuestions)
+const conflicts = computed(() => home.data.value.conflicts)
+const review = computed(() => home.data.value.review)
+const staleCandidates = computed(() => home.data.value.staleCandidates)
+const examples = computed(() => home.data.value.examples)
+const changes = computed(() => home.data.value.changes)
+const window7 = computed(() => home.data.value.window7)
+
+const loadAll = home.reload
+
+/** What the system wants from the user, not how much data it holds. */
+const pendingTotal = computed(() => review.value.entities + review.value.claims + review.value.relations)
+const dueTotal = computed(() => pendingTotal.value + conflicts.value)
 
 /** One list, so the panel can be empty, partial or full without special cases. */
 const changeRows = computed(() => {
@@ -116,39 +173,13 @@ function gotoChange(r: { to?: any }) { if (r.to) router.push(r.to) }
 /** Nothing has been given to it yet — so the page is only the way to give it something. */
 const hasContent = computed(() =>
   !!(entities.value.length || docs.value.length || openQuestions.value || changeRows.value.length))
-
-async function loadAll() {
-  await Promise.all([
-    loadChanges(),
-    (async () => {
-      const [es, ds, qs, cf, rv, health] = await Promise.all([
-        api<Entity[]>('/api/entities?limit=6'),
-        api<DocumentRow[]>('/api/documents?limit=8'),
-        api<any[]>('/api/questions?limit=200'),
-        api<any[]>('/api/conflicts'),
-        api<any>('/api/review?limit=200'),
-        api<any>('/api/knowledge/health').catch(() => null),
-      ])
-      entities.value = es; docs.value = ds
-      openQuestions.value = qs.filter(q => q.status === 'open').length
-      conflicts.value = cf.length
-      review.value = {
-        entities: rv.entities?.length || 0,
-        claims: rv.claims?.length || 0,
-        relations: rv.relations?.length || 0,
-      }
-      staleCandidates.value = health?.stale_candidates || 0
-      // Example questions come from the user's own open questions when they have any.
-      const fromUser = qs.filter(q => q.status === 'open').slice(0, 3).map(q => q.content)
-      examples.value = fromUser.length ? fromUser : [...DEFAULT_EXAMPLES]
-    })(),
-  ])
-}
+/** 首用提示只在"确实读到了、而且确实是空的"时出现——读不到时绝不显示它。 */
+const firstUse = computed(() => home.status.value === 'success' && !hasContent.value)
 
 onMounted(loadAll)
 
 /** 首页示例问题走 One Box 的同一个入口：同一句话不该有两种行为。 */
-const onebox = ref<{ run: (sentence: string) => Promise<void> } | null>(null)
+const onebox = ref<{ ask: (sentence: string) => Promise<void> } | null>(null)
 /** Reading the source stays one click away — but it is not the post-import destination. */
 function openDocument(id: string) {
   router.push({ path: '/knowledge', query: { doc: id } })
@@ -172,14 +203,23 @@ function openDocument(id: string) {
       <!-- 一个入口，四条路径：问、记、研究、纠正。判断与执行都在组件里，
            用已经存在的接口——首页不再自己决定一句话该去哪里。 -->
       <OneBox ref="onebox" />
-      <div v-if="hasContent" class="row" style="justify-content:center;gap:8px;margin-top:14px;flex-wrap:wrap">
-        <span v-for="e in examples" :key="e" class="tag" style="cursor:pointer" @click="onebox?.run(e)">{{ e }}</span>
+      <!-- 示例问题只在真的读到内容时给；读不到时不冒充"你还没有内容" -->
+      <div v-if="loaded && hasContent" class="row" style="justify-content:center;gap:8px;margin-top:14px;flex-wrap:wrap">
+        <span v-for="e in examples" :key="e" class="tag" style="cursor:pointer" @click="onebox?.ask(e)">{{ e }}</span>
       </div>
-      <p v-else class="faint" style="font-size:10px;margin-top:14px;line-height:1.8">
+      <p v-else-if="firstUse" class="faint" style="font-size:10px;margin-top:14px;line-height:1.8">
         还没有内容时，先丢一篇进来。它会读过之后告诉你整理出了什么，之后你问它就有据可依。
       </p>
     </div>
 
+    <!-- 读不到首页数据时说"读不到"。绝不退回成上面那句新用户提示：
+         对用户来说"我的知识全没了"和"这次没读到"是两个完全不同的结论。 -->
+    <LoadBoundary :state="home.state.value" loading-text="正在读取你的知识库…"
+                  error-title="首页内容暂时无法加载"
+                  error-text="这次没能读到你的知识库——这不代表里面的内容有问题，也不代表它是空的。"
+                  :reload="loadAll" />
+
+    <template v-if="loaded">
     <!-- 需要你的判断 —— 只在真的有事时出现，这才是首页的职责 -->
     <div v-if="dueTotal" class="panel pad" style="max-width:720px;margin:34px auto 0">
       <div class="row">
@@ -251,6 +291,7 @@ function openDocument(id: string) {
         </div>
       </div>
     </div>
+    </template>
   </div>
 </template>
 
