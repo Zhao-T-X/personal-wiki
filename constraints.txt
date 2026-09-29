@@ -1,1 +1,13 @@
-numpy==2.5.0
+# NumPy 2.x is what the embedding stack (fastembed + onnxruntime) expects, but the
+# exact pin depends on the interpreter: 2.5.x requires Python >= 3.12, while the
+# project's 3.11 venv can only reach 2.4.6 — an impossible pin there made the whole
+# requirements set uninstallable.
+numpy==2.5.0; python_version >= "3.12"
+numpy==2.4.6; python_version < "3.12"
+
+# onnxruntime < 1.19 is compiled against the NumPy 1.x C API and refuses to load
+# under NumPy 2.x ("_ARRAY_API not found"), which takes fastembed — and with it every
+# document import — down. 1.19.0 is the first NumPy-2-compatible release; a bare
+# `fastembed` resolution is happy to keep an older one, so the floor is pinned here.
+# Verified working on the 3.11 venv with onnxruntime==1.19.2.
+onnxruntime>=1.19
