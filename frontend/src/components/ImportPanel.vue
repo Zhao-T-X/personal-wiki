@@ -22,11 +22,14 @@ withDefaults(defineProps<{
   hint?: string
   /** 队列处理完后是否显示「去审核」。 */
   showReview?: boolean
+  /** One Box 复用导入逻辑时，只显示进度队列，不渲染大拖拽框。 */
+  hideDropzone?: boolean
 }>(), {
   hero: false,
   title: '把文件拖到这里导入',
   hint: '支持 Markdown / TXT / HTML，可一次拖入多个文件',
   showReview: true,
+  hideDropzone: false,
 })
 
 const emit = defineEmits<{
@@ -214,8 +217,8 @@ defineExpose({ pick, importFiles, closeQueue })
 
 <template>
   <div class="importpanel">
-    <!-- 拖拽导入：一次可以拖入多个文件 -->
-    <div v-if="!importQueue.length" class="dropzone" :class="{ over: dragOver, hero }"
+    <!-- 拖拽导入：一次可以拖入多个文件（hideDropzone 时不渲染，由 One Box 承担入口） -->
+    <div v-if="!importQueue.length && !hideDropzone" class="dropzone" :class="{ over: dragOver, hero }"
          @dragover.prevent="dragOver = true"
          @dragleave.prevent="dragOver = false"
          @drop.prevent="onDrop"

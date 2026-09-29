@@ -75,17 +75,16 @@ const MOBILE_ITEMS = items
         <div class="brandmark">✦</div>
         <div><b>LLM-Wiki</b><small>PERSONAL KNOWLEDGE OS</small></div>
       </div>
-      <div class="navlbl">空间</div>
       <div v-for="it in items" :key="it.id" class="nav" :class="{ active: route.path === it.id || (it.id !== '/' && route.path.startsWith(it.id)) }" @click="router.push(it.id)">
         <span class="nico">{{ it.icon }}</span><span>{{ it.text }}</span>
       </div>
 
-      <!-- 待确认是一个「状态」，不是一个「目的地」：它长得不像菜单项，也不算一级
-           导航，只在真的有事时出现。点击才进入审核。 -->
-      <div v-if="store.pendingReview" class="nav due" :class="{ active: route.path === '/review' }"
+      <!-- 待确认是一个「状态」，不是一个「目的地」：用普通导航样式，不抢戏；
+           只有真正重要的冲突才用强调色。点击才进入审核。 -->
+      <div v-if="store.pendingReview" class="nav" :class="{ active: route.path === '/review' }"
            :title="`${store.pendingReview} 条候选知识等你确认`" @click="router.push('/review')">
-        <span class="nico">⚠</span><span>需要你确认</span>
-        <span class="npill">{{ store.pendingReview }}</span>
+        <span class="nico">◷</span><span>待确认</span>
+        <span class="pill">{{ store.pendingReview }}</span>
       </div>
 
       <div class="spacer"></div>
@@ -111,7 +110,7 @@ const MOBILE_ITEMS = items
         </div>
         <div class="grow"></div>
         <div class="omni" @click="cmdOpen = true">
-          <span>⌕</span><span>搜索知识，或直接提问…</span><kbd>⌘K</kbd>
+          <span>⌕</span><span>搜索知识</span><kbd>⌘K</kbd>
         </div>
       </header>
       <div class="content">
@@ -132,11 +131,6 @@ const MOBILE_ITEMS = items
 </template>
 
 <style scoped>
-.npill{margin-left:auto;font-size:8.5px;background:var(--tint-amber);color:#b97b22;border-radius:99px;padding:2px 7px;font-weight:700}
-/* 待确认：读起来像提醒，不像一个空间 */
-.nav.due{color:#b97b22;background:var(--tint-amber)}
-.nav.due:hover{background:var(--tint-amber);color:#9c6a12}
-.nav.due.active{background:var(--tint-amber);color:#b97b22;font-weight:650}
 .mobilebar{display:none}
 .side{background:#fff;border-right:1px solid var(--hair);padding:20px 13px 14px;display:flex;flex-direction:column;min-height:0;overflow:auto}
 .brand{display:flex;align-items:center;gap:11px;padding:4px 8px 22px}

@@ -3,10 +3,9 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api, post } from '../api/client'
 import type { Run } from '../api/types'
-import CorrectionFlow from '../components/CorrectionFlow.vue'
-import KnowledgeCard from '../components/KnowledgeCard.vue'
+import AnswerCard from '../components/AnswerCard.vue'
 import LoadBoundary from '../components/LoadBoundary.vue'
-import { correctionSeedFor, toCard } from '../utils/claim'
+import { correctionSeedFor } from '../utils/claim'
 import { useAsyncState } from '../utils/useAsyncState'
 import StatusTag from '../components/StatusTag.vue'
 import DataTable from '../components/DataTable.vue'
@@ -41,9 +40,8 @@ const result = ref<{ answer: string; evidence: any[]; citations: any[]; knowledg
 const validation = ref<any>(null)
 const validating = ref(false)
 
-/* 「这条有问题」：答案旁边的纠正入口。打开后由 CorrectionFlow 负责
-   分析 → 建议 → 确认，这里只负责把它放在答案该在的位置。 */
-const fixOpen = ref(false)
+/** 「这条有问题」的纠正入口已收进 AnswerCard（沿用 CorrectionFlow），
+   这里只负责答案过期后的提示与重问。 */
 /** 这条答案是用哪条知识算出来的——要改的就是它，而不是用户刚刚问的那句话。
     没有任何知识支撑这个答案时（答案来自模型常识），起点为空，请用户直接写下正确说法。 */
 const correction = computed(() => correctionSeedFor(result.value?.knowledge?.[0]))
@@ -51,8 +49,7 @@ const correction = computed(() => correctionSeedFor(result.value?.knowledge?.[0]
 /** 知识被改过之后，这条答案就不该再装作还成立。 */
 const answerStale = ref(false)
 
-function onCorrected(r: any) {
-  fixOpen.value = false
+function onCorrected(r?: any) {
   answerStale.value = true
   store.toast('知识已更新 · 再问一次会得到新答案', {
     label: '看这条知识', run: () => { if (r?.claim_id) router.push('/knowledge/claim/' + r.claim_id) },
@@ -155,7 +152,7 @@ async function send() {
 
 async function askKnowledge() {
   loading.value = true; result.value = null; agentResult.value = null; validation.value = null
-  answerStale.value = false; fixOpen.value = false
+  answerStale.value = false
   try {
     result.value = await post('/api/ask', { question: question.value.trim(), top_k: 8 })
     await loadMeta()
@@ -274,8 +271,13 @@ const columns = [
           </button>
         </div>
         <div v-if="loading" class="faint" style="font-size:10px;margin-top:10px">正在检索你的知识并整理证据…</div>
-        <MarkdownView v-else-if="result" :content="result.answer" style="margin-top:10px" />
-        <div v-else class="empty">输入问题开始提问</div>
+        <div v-else-if="!result" class="empty">输入问题开始提问</div>
+        <!-- 答案：问题 → 结论 → 依据 → 纠正，统一走 AnswerCard，不与问答页各写一套 -->
+        <AnswerCard v-else
+          :question="question" :answer="result.answer"
+          :evidence="result.evidence" :knowledge="result.knowledge"
+          :correction-existing="correction.existing" :correction-seed="correction.seed"
+          @corrected="onCorrected" @supporting-changed="onSupportingChanged" />
 
         <!-- 拒答不说谎，也不把人晾在原地：这条问题知识库里其实「有东西」，
              只是一条研究提案还没被采纳。说清这一点，并把下一步放在手边——
@@ -290,44 +292,13 @@ const columns = [
           知识库里没有找到支持这个回答的片段。答案可能来自模型的通用知识，请谨慎采信，或先导入相关文档。
         </div>
 
-        <!-- 产品闭环的最后一环：答案不对 → 就地改一句话。
-             用户不会想到「我要去知识纠正」，他只会想「这个回答不对」，
-             所以入口必须长在答案旁边，而不是一个叫 Correction 的页面。 -->
-        <div v-if="result && !loading" class="fixline">
-          <button class="btn sm ghost" @click="fixOpen = !fixOpen">
-            {{ fixOpen ? '收起' : '这条有问题' }}
-          </button>
-          <span v-if="!fixOpen" class="faint" style="font-size:9.5px">答案与事实不符时，直接改掉它</span>
-        </div>
-        <!-- 纠正的起点是"这个答案依据的那条知识"，不是"我刚才问了什么"。
-             没有知识支撑时起点为空，输入框会请用户直接写下正确的说法。 -->
-        <CorrectionFlow v-if="fixOpen" compact :existing="correction.existing" :seed="correction.seed"
-                        style="margin-top:10px" @applied="onCorrected" />
-
         <!-- 改完之后答案就过期了，说出来并把手边的下一步给出来 -->
-        <div v-if="answerStale && !fixOpen" class="notice violet" style="margin-top:12px">
+        <div v-if="answerStale" class="notice violet" style="margin-top:12px">
           这条答案是在修改前的知识上算出来的，可能已经过期。
           <div class="row" style="margin-top:8px;gap:8px">
             <button class="btn sm primary" :disabled="loading" @click="reask">用新的知识重新提问 →</button>
           </div>
         </div>
-
-        <!-- 支持知识：答案下面是「凭什么」，但只给最少的那几条。
-             卡片本身自带 [依据][历史][纠正]，所以每条支持知识都能直接追查或就地纠正
-             —— 而纠正的对象是这条知识，不是那句话。 -->
-        <template v-if="result?.knowledge?.length">
-          <div class="sechead" style="margin-top:16px">
-            <h3>支持知识</h3>
-            <span class="faint" style="font-size:9px;font-weight:400">
-              {{ result?.knowledge?.length }} 条 · 让这个答案站得住的事实
-            </span>
-          </div>
-          <div class="ksupport">
-            <KnowledgeCard v-for="k in (result?.knowledge || [])" :key="k.claim_id"
-                           :claim="toCard(k)" :evidence-count="k.sources" compact
-                           @changed="onSupportingChanged" />
-          </div>
-        </template>
 
         <div v-if="validation" class="sechead" style="margin-top:14px">
           <h3>引用校验</h3>

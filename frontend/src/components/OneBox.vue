@@ -24,16 +24,18 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { post } from '../api/client'
 import { useAppStore } from '../stores/app'
+import AnswerCard from './AnswerCard.vue'
 import CorrectionFlow from './CorrectionFlow.vue'
-import KnowledgeCard from './KnowledgeCard.vue'
-import MarkdownView from './MarkdownView.vue'
-import { toCard } from '../utils/claim'
+import ImportPanel from './ImportPanel.vue'
+import { correctionSeedFor } from '../utils/claim'
 import { INTENT_LABEL, canExecute, overrideOptions, overrideRequest, type IntentPlan } from '../utils/onebox'
 
 const props = withDefaults(defineProps<{
   /** 用户当前正在看的知识——让「这个不对」不必重新说明它在说哪条。 */
   contextClaimId?: string | null
 }>(), { contextClaimId: null })
+
+const emit = defineEmits<{ (e: 'imported', documentId: string): void }>()
 
 const router = useRouter()
 const store = useAppStore()
@@ -47,13 +49,36 @@ const result = ref<{ kind: string; body: any } | null>(null)
 /** 这一次的判断是用户改的，还是系统读的——决定要不要给「恢复系统判断」。 */
 const overridden = ref(false)
 
+/** 统一入口顺带收文件：拖拽 / 纸夹都汇到同一份导入逻辑（ImportPanel）。 */
+const dragOver = ref(false)
+const fileInput = ref<HTMLInputElement | null>(null)
+const importer = ref<InstanceType<typeof ImportPanel> | null>(null)
+
 /** 按钮是否存在、和 run() 是否真的有事可做，是同一个判断。 */
 const executable = computed(() => canExecute(plan.value))
 /** 除当前意图之外的改法：当前意图的按钮出现只会是废话。 */
 const options = computed(() => overrideOptions(plan.value?.intent))
 
-/** 宿主（首页的示例问题）走同一个入口，所以同一句话不会有两套行为。 */
-defineExpose({ ask: (sentence: string) => { text.value = sentence; return route() } })
+/** 宿主（首页示例问题 / 首页“上传资料”）走同一个入口，所以同一句话不会有两套行为。 */
+defineExpose({
+  ask: (sentence: string) => { text.value = sentence; return route() },
+  pick,
+  importFiles,
+})
+
+/** 触发隐藏文件框：首页“上传资料”与 OneBox 纸夹共用。 */
+function pick() { fileInput.value?.click() }
+function onFilePick(ev: Event) {
+  const input = ev.target as HTMLInputElement
+  void importFiles(Array.from(input.files || []))
+  input.value = ''   // allow picking the same file twice
+}
+function importFiles(files: File[]) { if (files.length) importer.value?.importFiles(files) }
+function onDrop(ev: DragEvent) { dragOver.value = false; importFiles(Array.from(ev.dataTransfer?.files || [])) }
+function onImported(id: string) { emit('imported', id) }
+
+/** 答案的纠正起点是「它依据的那条知识」，不是刚问的那句话。 */
+const askCorrection = computed(() => correctionSeedFor(result.value?.body?.knowledge?.[0]))
 
 async function route(opts: { intent?: string } = {}) {
   const sentence = text.value.trim()
@@ -105,17 +130,20 @@ function restoreReading() { void route() }
 function useSuggestion(s: string) { text.value = s; void route() }
 
 const correctionPlan = computed(() => (result.value?.kind === 'correct' ? result.value.body : null))
-const knowledge = computed<any[]>(() => result.value?.body?.knowledge || [])
 </script>
 
 <template>
-  <div class="onebox">
+  <div class="onebox" :class="{ over: dragOver }"
+       @dragover.prevent="dragOver = true" @dragleave.prevent="dragOver = false" @drop.prevent="onDrop">
     <div class="askbox">
-      <input v-model="text" placeholder="问点什么、记点什么、研究点什么…" @keydown.enter="route()" />
+      <!-- 文件入口：纸夹，触发与首页同一份导入逻辑 -->
+      <button class="clip" title="上传文件" @click="pick">📎</button>
+      <input v-model="text" placeholder="问点什么、记点什么、研究点什么，或粘贴网址…" @keydown.enter="route()" />
       <button class="go" :disabled="reading || running" @click="route()">
         {{ reading ? '…' : '↑' }}
       </button>
     </div>
+    <p v-if="!dragOver" class="drophint">拖入文件，或点击 📎 上传 · 一句话也能直接说</p>
 
     <!-- 结果类型透明：用户不需要知道内部意图，但有权知道系统在做什么 -->
     <div v-if="reading || running || (plan && !result)" class="obstatus">
@@ -148,17 +176,13 @@ const knowledge = computed<any[]>(() => result.value?.body?.knowledge || [])
       </template>
     </div>
 
-    <!-- 答案：一句话是主角，卡片是它的依据 -->
+    <!-- 答案：一句话是主角，依据与纠正紧贴其后，全程不跳页 -->
     <template v-if="result?.kind === 'ask'">
       <div class="panel pad" style="margin-top:12px">
-        <MarkdownView :content="result.body.answer || ''" />
-        <template v-if="knowledge.length">
-          <div class="sechead" style="margin:12px 0 8px"><h3>支持知识</h3></div>
-          <div class="obcards">
-            <KnowledgeCard v-for="k in knowledge" :key="k.claim_id" :claim="toCard(k)"
-                           :evidence-count="k.sources" compact />
-          </div>
-        </template>
+        <AnswerCard :question="text" :answer="result.body.answer || ''"
+                    :evidence="result.body.evidence" :knowledge="result.body.knowledge"
+                    :correction-existing="askCorrection.existing" :correction-seed="askCorrection.seed"
+                    @corrected="store.toast('知识已更新，再问一次会得到新答案')" />
       </div>
     </template>
 
@@ -195,15 +219,28 @@ const knowledge = computed<any[]>(() => result.value?.body?.knowledge || [])
                 @click="router.push('/knowledge')">去知识空间 →</button>
       </div>
     </template>
+
+    <!-- 导入队列：只显示处理进度，不再另起一个大拖拽框 -->
+    <ImportPanel ref="importer" :hide-dropzone="true" @imported="onImported" />
+
+    <input ref="fileInput" type="file" multiple accept=".md,.markdown,.txt,.html,.htm"
+           style="display:none" @change="onFilePick" />
   </div>
 </template>
 
 <style scoped>
 .onebox{width:100%}
+/* 拖拽悬停：只给输入框一圈高亮，不另起一个巨大上传框 */
+.onebox.over .askbox{border-color:#8fa8f0;box-shadow:0 18px 50px rgba(70,95,190,.18);background:var(--tint-blue)}
 .obstatus{margin-top:10px;font-size:10px;color:var(--sub)}
 .obplan{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px;
   padding:9px 11px;border:1px solid var(--hair);border-radius:11px;background:var(--surface2)}
 .hint{font-size:9.5px;line-height:1.6}
 .obcards{display:grid;gap:9px}
 .askbox input{flex:1}
+/* 纸夹：输入框左侧的轻入口，和顶部搜索一样是「辅助」而非主角 */
+.clip{border:0;background:transparent;font-size:15px;line-height:1;padding:0 2px;color:var(--sub);flex:none}
+.clip:hover{color:var(--blue)}
+/* 主入口下的辅助说明：一句话点明还能拖文件，但不抢戏 */
+.drophint{margin:9px 2px 0;font-size:9.5px;color:var(--faint);text-align:center}
 </style>

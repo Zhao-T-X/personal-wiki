@@ -12,7 +12,6 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../api/client'
 import type { DocumentRow, Entity } from '../api/types'
-import ImportPanel from '../components/ImportPanel.vue'
 import LoadBoundary from '../components/LoadBoundary.vue'
 import OneBox from '../components/OneBox.vue'
 import StatusTag from '../components/StatusTag.vue'
@@ -184,7 +183,11 @@ const firstUse = computed(() => home.status.value === 'success' && !hasContent.v
 onMounted(loadAll)
 
 /** 首页示例问题走 One Box 的同一个入口：同一句话不该有两种行为。 */
-const onebox = ref<{ ask: (sentence: string) => Promise<void> } | null>(null)
+const onebox = ref<{
+  ask: (sentence: string) => Promise<void>
+  pick: () => void
+  importFiles: (files: File[]) => void
+} | null>(null)
 /** Reading the source stays one click away — but it is not the post-import destination. */
 function openDocument(id: string) {
   router.push({ path: '/knowledge', query: { doc: id } })
@@ -193,22 +196,25 @@ function openDocument(id: string) {
 
 <template>
   <div class="page">
-    <!-- 第一屏只回答一个问题：这东西要我怎么用 -->
-    <div style="max-width:720px;margin:4vh auto 0;text-align:center">
+    <!-- 第一屏只回答一个问题：这东西要我怎么用。OneBox 是唯一主入口，
+         文件/网址/文本/自然语言都从它进；不再单独放一个大拖拽框。 -->
+    <div class="home-hero">
       <div class="eyebrow">{{ greeting }}</div>
-      <h1 style="font-size:30px;margin:10px 0 10px">把知识交给我</h1>
-      <p class="faint" style="font-size:12px;margin:0 0 22px">拖入一篇，自动整理成可问答、可追溯的知识</p>
-
-      <ImportPanel hero title="拖一篇文章、网页或一段文字到这里"
-                   hint="Markdown / TXT / HTML，可一次拖入多个"
-                   @open-document="openDocument"
-                   @imported="loadAll" />
-
-      <div class="orsep"><span>或者直接说一句话</span></div>
+      <h1 class="hero-title">把知识交给我</h1>
+      <p class="faint hero-sub">保存、提问、研究，都可以直接说。</p>
 
       <!-- 一个入口，四条路径：问、记、研究、纠正。判断与执行都在组件里，
            用已经存在的接口——首页不再自己决定一句话该去哪里。 -->
-      <OneBox ref="onebox" />
+      <OneBox ref="onebox" @imported="loadAll" />
+
+      <!-- 主入口下的两个轻动作：上传（复用 OneBox 的导入）与开始研究。
+           都只是辅助，不抢 OneBox 的主角位置。 -->
+      <div class="home-actions">
+        <button class="linkbtn" @click="onebox?.pick()">📎 上传资料</button>
+        <span class="act-sep">·</span>
+        <button class="linkbtn" @click="router.push('/research')">开始研究 →</button>
+      </div>
+
       <!-- 示例问题只在真的读到内容时给；读不到时不冒充"你还没有内容" -->
       <div v-if="loaded && hasContent" class="row" style="justify-content:center;gap:8px;margin-top:14px;flex-wrap:wrap">
         <span v-for="e in examples" :key="e" class="tag" style="cursor:pointer" @click="onebox?.ask(e)">{{ e }}</span>
@@ -307,9 +313,15 @@ function openDocument(id: string) {
 .duerow b{font-size:15px}
 .duerow.warn b{color:var(--amber)}
 .duerow.clickable{cursor:pointer}
-/* 「把知识交给我」与「问一个问题」之间：两个平级动作，不是主次 */
-.orsep{display:flex;align-items:center;gap:12px;margin:22px 0 14px;color:var(--faint);font-size:10px}
-.orsep:before,.orsep:after{content:"";flex:1;height:1px;background:var(--hair)}
+/* 首页 Hero：克制，不像 Landing Page，只把 OneBox 推到视觉中心 */
+.home-hero{max-width:720px;margin:3vh auto 0;text-align:center}
+.hero-title{font-size:29px;font-weight:700;letter-spacing:-.03em;margin:10px 0 9px;color:var(--text)}
+.hero-sub{font-size:12px;margin:0 0 22px}
+/* 主入口下的两个轻动作：上传与开始研究，都是辅助，不抢戏 */
+.home-actions{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:14px}
+.linkbtn{border:0;background:none;color:var(--sub);font-size:11px;cursor:pointer;padding:4px 2px;transition:.15s}
+.linkbtn:hover{color:var(--blue)}
+.act-sep{color:var(--faint)}
 /* 最近知识变化 */
 .chgrow{display:flex;align-items:center;gap:9px;padding:7px 4px;font-size:11.5px;border-bottom:1px solid var(--hair)}
 .chgrow:last-child{border-bottom:none}
