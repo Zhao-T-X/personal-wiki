@@ -70,8 +70,8 @@ function setStage(item: ImportItem, key: string, state: StageState) {
 }
 
 const IMPORT_COUNTS: { key: string; label: string }[] = [
-  { key: 'entities', label: '实体' },
-  { key: 'claims', label: '断言' },
+  { key: 'entities', label: '对象' },
+  { key: 'claims', label: '知识' },
   { key: 'relations', label: '关系' },
   { key: 'events', label: '事件' },
   { key: 'ideas', label: '想法' },

@@ -113,7 +113,7 @@ async function moreEntities() {
     const es = await api<Entity[]>(`/api/entities?limit=60&offset=${entities.value.length}`)
     if (es.length) entityTotal.value = (es[0] as any).total ?? entityTotal.value
     entitiesRes.set([...entities.value, ...es])
-  } catch (e: any) { store.toast('加载更多实体失败：' + e.message) }
+  } catch (e: any) { store.toast('加载更多对象失败：' + e.message) }
 }
 
 /** 时间线同样按页加载：事件可能成千上万，一次读全既慢又淹没真正要看的那几条。 */
@@ -236,7 +236,7 @@ async function actDoc(d: DocumentRow, action: 'index' | 'local' | 'embed' | 'del
       const r = await post('/api/documents/' + d.id + suffix)
       if (action === 'index') {
         store.clearExtraction()
-        store.toast(`《${d.title}》抽取完成`, { label: '去审核', run: () => router.push('/review') })
+        store.toast(`《${d.title}》已理解完成`, { label: '去审核', run: () => router.push('/review') })
       } else {
         store.toast('完成：' + JSON.stringify(r).slice(0, 60))
       }
@@ -270,7 +270,7 @@ async function saveEntity() {
   try {
     await post('/api/entities', { name: entName.value, type: entType.value, description: entDesc.value || null })
     showNewEntity.value = false; entName.value = ''; entDesc.value = ''
-    store.toast('实体已创建（candidate）'); await loadEntities()
+    store.toast('对象已创建（待确认）'); await loadEntities()
   } catch (e: any) { store.toast(e.message) }
 }
 async function saveEvent() {
@@ -326,7 +326,7 @@ const showAllDocs = computed(() => docLimit.value >= docTotal.value)
 <template>
   <div class="page">
     <div class="askbox" style="margin-bottom:16px">
-      <input v-model="searchQ" placeholder="搜索：知识 / 正文 / 实体 / 文档…" />
+      <input v-model="searchQ" placeholder="搜索：知识 / 正文 / 对象 / 文档…" />
       <span v-if="searching" class="tag blue" style="margin-right:6px">搜索中…</span>
       <button class="go" title="转为提问" @click="router.push({ path: '/qa', query: { q: searchQ } })">◎</button>
     </div>
@@ -410,7 +410,7 @@ const showAllDocs = computed(() => docLimit.value >= docTotal.value)
       </LoadBoundary>
 
       <div class="sechead"><h3>知识对象 <span class="faint" style="font-weight:400;font-size:9px">· {{ entities.length }}/{{ entityTotal }}</span></h3>
-        <button class="btn" @click="showNewEntity = true">＋ 新建实体</button>
+        <button class="btn" @click="showNewEntity = true">＋ 新建对象</button>
       </div>
       <LoadBoundary :state="entitiesRes.state.value" loading-text="正在读取知识对象…"
                     error-text="暂时无法加载知识对象——这不代表它们不存在。"
@@ -480,8 +480,8 @@ const showAllDocs = computed(() => docLimit.value >= docTotal.value)
           <span class="tag">{{ drawerDoc.chunk_count }} 片段</span>
         </div>
         <div class="row" style="flex-wrap:wrap;gap:8px;margin-bottom:12px">
-          <button class="btn primary" @click="actDoc(drawerDoc, 'index')">用模型抽取</button>
-          <button class="btn" @click="actDoc(drawerDoc, 'local')">仅分段（不抽取）</button>
+          <button class="btn primary" @click="actDoc(drawerDoc, 'index')">理解这份资料</button>
+          <button class="btn" @click="actDoc(drawerDoc, 'local')">仅分段（不分析）</button>
           <button class="btn" @click="actDoc(drawerDoc, 'embed')">生成语义索引</button>
           <button class="btn danger" @click="actDoc(drawerDoc, 'delete')">删除</button>
         </div>
@@ -522,7 +522,7 @@ const showAllDocs = computed(() => docLimit.value >= docTotal.value)
       </div>
     </AppModal>
 
-    <AppModal :open="showNewEntity" title="新建实体" subtitle="手工创建的实体默认为 candidate，可在「审核」中确认。" @close="showNewEntity = false">
+    <AppModal :open="showNewEntity" title="新建对象" subtitle="手工创建的对象默认为待确认，可在「审核」中确认。" @close="showNewEntity = false">
       <input v-model="entName" class="field" style="width:100%" placeholder="名称（如 Retrieval-Augmented Generation）" />
       <select v-model="entType" class="field" style="width:100%;margin-top:9px">
         <option v-for="t in ['Person','Organization','Product','Software','Technology','Method','Concept','Theory','Dataset','Model','Standard','Protocol','Resource','Location']" :key="t">{{ t }}</option>

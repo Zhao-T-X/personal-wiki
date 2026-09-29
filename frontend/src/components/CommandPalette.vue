@@ -46,7 +46,7 @@ const baseCommands = computed<Cmd[]>(() =>
   store.developerMode ? [...coreCommands, ...devCommands] : coreCommands)
 
 const entityCommands = computed<Cmd[]>(() => entities.value.map(e => ({
-  group: '实体', icon: '✦', cls: 'ib-blue', title: `打开实体：${e.name}（${e.type}）`,
+  group: '对象', icon: '✦', cls: 'ib-blue', title: `打开对象：${e.name}（${e.type}）`,
   run: () => done({ path: '/knowledge/object/' + e.id }),
 })))
 
@@ -120,7 +120,7 @@ function search(text: string) { emit('close'); router.push({ path: '/knowledge',
 <template>
   <div v-if="open" class="cmdk" @click.self="emit('close')">
     <div class="cmdbox">
-      <input ref="inputEl" v-model="q" placeholder="搜索知识、实体，或直接提问…" @keydown="onKey" />
+      <input ref="inputEl" v-model="q" placeholder="搜索知识、对象，或直接提问…" @keydown="onKey" />
       <div class="cmdlist">
         <template v-for="(c, i) in entries" :key="c.title + i">
           <div v-if="i === 0 || entries[i - 1].group !== c.group" class="cmdgroup">{{ c.group }}</div>

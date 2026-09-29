@@ -54,9 +54,9 @@ const applying = ref(false)
 const error = ref('')
 
 const DIM_LABELS: Record<string, string> = {
-  schema: 'Schema', evidence: 'Evidence', quote: 'Quote',
-  entity_resolution: '实体解析', predicate: '谓词合法性',
-  conflict: '冲突', provenance: '溯源',
+  schema: '结构', evidence: '依据', quote: '引用',
+  entity_resolution: '识别对象', predicate: '关系校验',
+  conflict: '冲突', provenance: '来源',
 }
 const VERDICT_LABELS: Record<string, string> = {
   supported: '与现有知识一致',
@@ -170,8 +170,8 @@ defineExpose({ analyze, applyPayload, reset, applyState: applying })
     <div v-if="plan" class="result" style="margin-top:12px">
       <template v-if="plan.blocked">
         <div class="notice red">
-          <b>这句改不了。</b>「{{ plan.intent?.predicate_candidate || text }}」映射不到受控词表，
-          系统不会为了写入而造一个新谓词。请换一种说法。
+          <b>这句改不了。</b>「{{ plan.intent?.predicate_candidate || text }}」没能对应到一个已知的关系，
+          系统不会生造一个。请换一种说法。
         </div>
       </template>
       <template v-else>
@@ -185,12 +185,12 @@ defineExpose({ analyze, applyPayload, reset, applyState: applying })
         <div class="diff">
           <div v-if="affected" class="side old">
             <span class="lbl">已有知识</span>
-            <b>{{ affected.content || affected.object || '（原断言）' }}</b>
+            <b>{{ affected.content || affected.object || '（原有知识）' }}</b>
             <span v-if="affected.status" class="faint small">{{ statusStyle(affected.status).label }}</span>
           </div>
           <div v-else class="side old empty-side">
             <span class="lbl">已有知识</span>
-            <b>没有找到相关断言</b>
+            <b>没有找到相关知识</b>
             <span class="faint small">这条会作为新知识写入</span>
           </div>
           <div class="arrow">→</div>

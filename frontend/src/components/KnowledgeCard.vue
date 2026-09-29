@@ -114,7 +114,7 @@ function onCorrected() {
 <template>
   <div class="kcard" :class="{ compact }">
     <div class="khead">
-      <b class="ktitle">{{ title || '（缺少主语或谓词）' }}</b>
+      <b class="ktitle">{{ title || '（缺少主体或关系）' }}</b>
       <div class="grow"></div>
       <StatusTag :status="claim.status" :label="claim.stateLabel" />
     </div>

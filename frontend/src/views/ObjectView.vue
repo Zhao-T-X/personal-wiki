@@ -68,6 +68,20 @@ async function addQuestion() {
   } catch (e: any) { store.toast(e.message) }
 }
 
+/** 普通界面用语：分页标签与状态一律用产品语言（§11/§32），技术细节收进开发者模式。 */
+const TABS = [
+  { id: 'Overview', label: '概览' },
+  { id: 'Claims', label: '知识' },
+  { id: 'Relations', label: '关系' },
+  { id: 'Graph', label: '关系图' },
+  { id: 'Events', label: '事件' },
+  { id: 'Evidence', label: '依据' },
+  { id: 'Questions', label: '问题' },
+  { id: 'Ideas', label: '想法' },
+]
+const STATUS: Record<string, string> = {
+  open: '待处理', candidate: '待确认', verified: '已确认', rejected: '已否定', archived: '已归档',
+}
 const tab = ref('Overview')
 const entity = ref<Entity | null>(null)
 const counts = ref<Record<string, number>>({})
@@ -239,20 +253,20 @@ watch(tab, t => { if (t === 'Graph') drawLocalGraph() })
     </div>
 
     <div class="seg" style="margin:16px 0 14px">
-      <button v-for="t in ['Overview', 'Claims', 'Relations', 'Graph', 'Events', 'Evidence', 'Questions', 'Ideas']" :key="t"
-              :class="{ active: tab === t }" @click="tab = t">{{ t }}</button>
+      <button v-for="t in TABS" :key="t.id"
+              :class="{ active: tab === t.id }" @click="tab = t.id">{{ t.label }}</button>
     </div>
 
     <!-- Overview -->
     <div v-if="tab === 'Overview'" class="grid g2">
       <div>
-        <div class="sechead"><h3>What is it?</h3></div>
+        <div class="sechead"><h3>这是什么？</h3></div>
         <div class="panel pad" style="font-size:10.5px;line-height:1.8;color:#3c4b66">{{ entity.description || '暂无描述——点右上角「编辑」补充。' }}</div>
-        <div class="sechead"><h3>Type Decision <span class="faint" style="font-size:9px;font-weight:400">· 为什么是这个类型</span></h3></div>
+        <div class="sechead"><h3>类型判定 <span class="faint" style="font-size:9px;font-weight:400">· 为什么是这个类型</span></h3></div>
         <div class="panel" style="padding:6px"><TypeDecision :decisions="typeDecision" /></div>
       </div>
       <div>
-        <div class="sechead"><h3>Key Claims</h3><span class="more" @click="tab = 'Claims'">全部 {{ counts.claims }} →</span></div>
+        <div class="sechead"><h3>核心知识</h3><span class="more" @click="tab = 'Claims'">全部 {{ counts.claims }} →</span></div>
         <!-- 知识在这里也以卡片出现：同一事实在详情页、搜索、问答、研究里是同一个形状，
              带着同样的状态用词和同样的 [依据][历史][纠正]。之前是原始数据行，
              还把谓词标识符直接打在了界面上。 -->
@@ -260,7 +274,7 @@ watch(tab, t => { if (t === 'Graph') drawLocalGraph() })
           <KnowledgeCard v-for="c in claims.slice(0, 6)" :key="c.id"
                          :claim="toCard(c)" compact @changed="load" />
         </div>
-        <EmptyState v-if="!claims.length" text="暂无 Claims" />
+        <EmptyState v-if="!claims.length" text="暂无知识" />
         <div class="sechead"><h3>Relations</h3><span class="more" @click="tab = 'Relations'">全部 →</span></div>
         <div class="panel pad" style="padding:6px">
           <div v-for="r in relations.slice(0, 5)" :key="r.id" class="item" style="cursor:default">
@@ -278,7 +292,7 @@ watch(tab, t => { if (t === 'Graph') drawLocalGraph() })
         <KnowledgeCard v-for="c in claims" :key="c.id"
                        :claim="toCard(c)" @changed="load" />
       </div>
-      <EmptyState v-if="!claims.length" text="暂无 Claims" />
+      <EmptyState v-if="!claims.length" text="暂无知识" />
     </div>
 
     <!-- Relations -->
@@ -286,12 +300,12 @@ watch(tab, t => { if (t === 'Graph') drawLocalGraph() })
       <div class="panel pad" style="padding:6px">
         <div v-for="r in relations" :key="r.id" class="item" style="cursor:default">
           <div class="ico-badge ib-blue">→</div>
-          <div class="grow"><b>{{ r.source_name }} → {{ labelOf(r.predicate) }} → {{ r.target_name }}</b><p>confidence {{ r.confidence ?? '—' }}</p></div>
+          <div class="grow"><b>{{ r.source_name }} → {{ labelOf(r.predicate) }} → {{ r.target_name }}</b><p>置信度 {{ r.confidence != null ? Math.round(r.confidence * 100) + '%' : '—' }}</p></div>
           <StatusTag :status="r.status" />
         </div>
         <EmptyState v-if="!relations.length" text="暂无图谱关系" />
       </div>
-      <div class="notice violet" style="margin-top:12px">为什么有的 Claim 没有变成 Relation？Normalization 规则：modality = possible / probable 的因果 Claim 仅保留为 Claim，需要更高确定性才进入图谱。</div>
+      <div class="notice violet" style="margin-top:12px">为什么有的知识没有进入关系图？系统只会把足够确定的陈述放进关系图，其余先作为知识保留，确认后会再出现。</div>
     </div>
 
     <!-- Graph：局部一跳关系（不是全库力导向图） -->
@@ -310,7 +324,7 @@ watch(tab, t => { if (t === 'Graph') drawLocalGraph() })
           <b>{{ selectedEdge.target }}</b>
         </div>
         <div class="row" style="margin-top:10px;gap:8px;flex-wrap:wrap">
-          <span v-if="selectedEdge.confidence != null" class="tag">confidence {{ selectedEdge.confidence }}</span>
+          <span v-if="selectedEdge.confidence != null" class="tag">置信度 {{ Math.round(selectedEdge.confidence * 100) }}%</span>
           <StatusTag v-if="selectedEdge.status" :status="selectedEdge.status" />
           <button v-if="selectedEdge.documentId" class="btn sm" @click="openEdgeSource">打开原文并定位 →</button>
           <button class="btn sm ghost" @click="selectedEdge = null">关闭</button>
@@ -319,7 +333,7 @@ watch(tab, t => { if (t === 'Graph') drawLocalGraph() })
       <EmptyState
         v-else-if="graphEmpty && !graphLoading"
         title="还没有关系"
-        text="这个对象尚未与其它实体建立关系——关系由高确定性断言派生，确认候选后会出现。"
+        text="这个对象尚未与其它对象建立关系——关系由高确定性陈述派生，确认候选后会出现。"
       />
     </div>
 
@@ -345,7 +359,7 @@ watch(tab, t => { if (t === 'Graph') drawLocalGraph() })
         “{{ c.source_quote }}”
         <div class="src">
           <span>{{ docLabels[c.source_document_id] || '来源文档' }}</span>
-          <span v-if="c.source_start_offset != null">offset [{{ c.source_start_offset }}, {{ c.source_end_offset }})</span>
+          <span v-if="c.source_start_offset != null && store.developerMode">offset [{{ c.source_start_offset }}, {{ c.source_end_offset }})</span>
         </div>
         <button class="btn sm" style="margin-top:9px" @click="openEvidenceSource(c)">打开原文并定位 →</button>
       </div>
@@ -364,7 +378,7 @@ watch(tab, t => { if (t === 'Graph') drawLocalGraph() })
       <div class="panel pad" style="padding:6px">
         <div v-for="q in questions" :key="q.id" class="item" @click="router.push('/research')">
           <div class="ico-badge ib-blue">?</div>
-          <div class="grow"><b>{{ q.content }}</b><p>status: {{ q.status }}</p></div>
+          <div class="grow"><b>{{ q.content }}</b><p>{{ STATUS[q.status] || q.status }}</p></div>
           <StatusTag :status="q.status" />
         </div>
         <EmptyState v-if="!questions.length" text="该对象关联的来源文档中暂无问题" />
@@ -377,7 +391,7 @@ watch(tab, t => { if (t === 'Graph') drawLocalGraph() })
       <div class="panel pad" style="padding:6px">
         <div v-for="i in ideas" :key="i.id" class="item" style="cursor:default">
           <div class="ico-badge ib-violet">✦</div>
-          <div class="grow"><b>{{ i.content }}</b><p>status: {{ i.status }}</p></div>
+          <div class="grow"><b>{{ i.content }}</b><p>{{ STATUS[i.status] || i.status }}</p></div>
           <StatusTag :status="i.status" />
         </div>
         <EmptyState v-if="!ideas.length" text="该对象关联的来源文档中暂无想法" />

@@ -22,7 +22,7 @@ import { fmtDateTime } from '../utils/time'
 const router = useRouter()
 
 const DEFAULT_EXAMPLES = [
-  '我的知识库里有哪些核心概念？',
+  '我的知识里有哪些核心概念？',
   '最近导入的内容讲了什么？',
   '有哪些结论在不同来源里互相冲突？',
 ]
