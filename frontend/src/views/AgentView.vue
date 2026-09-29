@@ -16,7 +16,7 @@ const store = useAppStore()
 
 interface Agent { id: string; name: string; description: string; color: string }
 const AGENT_COLORS: Record<string, string> = {
-  personal: '#5b7cff', knowledge: '#8b67f7', research: '#2fae87',
+  personal: 'var(--accent)', knowledge: 'var(--accent)', research: '#2fae87',
   curator: '#d99338', review: '#e46a85', extractor: '#5ac7e8',
 }
 const agents = ref<Agent[]>([])
@@ -42,7 +42,7 @@ const TOOLS = [
 
 async function load() {
   const roles = await api<{ roles: Agent[] }>('/api/agent/roles')
-  agents.value = roles.roles.map(r => ({ ...r, color: AGENT_COLORS[r.id] || '#8b67f7' }))
+  agents.value = roles.roles.map(r => ({ ...r, color: AGENT_COLORS[r.id] || 'var(--accent)' }))
   skills.value = await api<any[]>('/api/skills')
   runs.value = await api<Run[]>('/api/runs?task_type=agent&limit=100')
   if (!current.value && agents.value.length) pick(agents.value[0])
@@ -351,7 +351,7 @@ watch(ctxWindow, () => { if (tab.value === 'Context') loadContext() })
                   <b>{{ r.agent_name }}</b>
                   <p>{{ fmtDateTime(r.created_at) }} · {{ r.actual_tokens }} / {{ r.budget_tokens }} tokens · 省 {{ r.trimmed_tokens }}</p>
                   <div style="margin-top:4px;height:4px;background:var(--hair);border-radius:99px;overflow:hidden;max-width:260px">
-                    <div :style="{ width: Math.min(100, Math.round(r.actual_tokens / Math.max(1, r.budget_tokens) * 100)) + '%', background: r.over_budget ? '#e46a85' : '#5b7cff', height: '100%' }"></div>
+                    <div :style="{ width: Math.min(100, Math.round(r.actual_tokens / Math.max(1, r.budget_tokens) * 100)) + '%', background: r.over_budget ? '#e46a85' : 'var(--accent)', height: '100%' }"></div>
                   </div>
                 </div>
                 <span class="tag" :class="(r.efficiency || 0) >= 0.5 ? 'green' : 'amber'">eff {{ Math.round((r.efficiency || 0) * 100) }}%</span>

@@ -66,7 +66,7 @@ async function cancel() {
 .rptitle{font-size:11.5px}
 .rpdoc{margin-top:6px;font-size:9.5px;color:var(--sub);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rpbar{margin-top:10px;height:5px;border-radius:99px;background:#eef2f9;overflow:hidden}
-.rpbar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#5b7cff,#8b67f7);transition:width .4s ease}
+.rpbar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--accent));transition:width .4s ease}
 .rpbar i.indet{width:35%;animation:slide 1.3s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
 @keyframes slide{0%{transform:translateX(-100%)}100%{transform:translateX(320%)}}

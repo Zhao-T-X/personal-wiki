@@ -161,7 +161,7 @@ function onCorrected() {
   padding:13px 15px;border:1px solid var(--hair);border-radius:14px;background:#fff;
   transition:.16s;
 }
-.kcard:hover{border-color:#dbe3f2;box-shadow:0 6px 18px rgba(91,124,255,.06)}
+.kcard:hover{border-color:#ddd6cb;box-shadow:0 6px 18px rgba(91,124,255,.06)}
 .kcard.compact{padding:11px 12px;border-radius:12px}
 .khead{display:flex;align-items:center;gap:9px}
 .ktitle{font-size:11px;color:var(--sub);font-weight:650;letter-spacing:.01em}
@@ -169,7 +169,7 @@ function onCorrected() {
 .kvalue{font-size:16px;font-weight:650;letter-spacing:-.02em;margin-top:5px;overflow-wrap:anywhere}
 .compact .kvalue{font-size:13.5px;margin-top:4px}
 .kquote{
-  margin:9px 0 0;padding:8px 11px;border-left:2px solid #dbe3f2;background:var(--surface2);
+  margin:9px 0 0;padding:8px 11px;border-left:2px solid #ddd6cb;background:var(--surface2);
   border-radius:0 9px 9px 0;font-size:11px;color:var(--sub);line-height:1.6;overflow-wrap:anywhere;
 }
 .compact .kquote{font-size:10.5px;margin-top:8px;padding:7px 9px}

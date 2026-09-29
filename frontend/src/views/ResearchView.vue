@@ -430,7 +430,7 @@ async function resolveQuestion(q: QuestionRow) {
 .rphases{display:flex;flex-direction:column;gap:7px}
 .rphase{display:flex;align-items:center;gap:9px;padding:9px 12px;border-radius:11px;background:var(--surface2);font-size:10px;color:var(--sub)}
 .rphase.done{color:#1e8f6b;background:var(--tint-mint)}
-.rphase.active{color:#4a63e8;background:var(--tint-blue)}
+.rphase.active{color:var(--accent);background:var(--tint-blue)}
 .rphase.failed{color:#c8565f;background:#fff0f1}
 .rphase-dot{font-size:10px;line-height:1;flex:none}
 </style>

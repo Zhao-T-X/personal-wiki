@@ -316,8 +316,8 @@ defineExpose({ pick, importFiles, closeQueue })
   color:var(--sub);font-size:10px;cursor:pointer;transition:.16s;
   background:rgba(255,255,255,.5);
 }
-.dropzone:hover{border-color:#c6d3ee;background:#fafcff}
-.dropzone.over{border-color:#8fa8f0;background:var(--tint-blue)}
+.dropzone:hover{border-color:#c6d3ee;background:#fbfaf7}
+.dropzone.over{border-color:#b98d78;background:var(--tint-blue)}
 .dropzone.hero{padding:34px 24px;border-radius:20px}
 .dzicon{font-size:20px;color:#8b9dc4;line-height:1}
 .dztitle{font-size:12.5px;font-weight:650;margin-top:9px}
@@ -329,7 +329,7 @@ defineExpose({ pick, importFiles, closeQueue })
 .ifsteps{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .ifstep{display:flex;align-items:center;gap:6px;padding:6px 11px;border-radius:10px;background:var(--surface2);font-size:9.5px;color:var(--sub)}
 .ifstep.done{color:#1e8f6b;background:var(--tint-mint)}
-.ifstep.active{color:#4a63e8;background:var(--tint-blue)}
+.ifstep.active{color:var(--accent);background:var(--tint-blue)}
 .ifstep.failed{color:#c8565f;background:#fff0f1}
 .ifdot{font-size:10px;line-height:1}
 .ifcounts{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:10px}
@@ -337,15 +337,15 @@ defineExpose({ pick, importFiles, closeQueue })
 .ifcount b{display:block;font-size:20px;letter-spacing:-.03em}
 .ifcount span{font-size:9px;color:var(--sub)}
 /* 「我从这篇整理出了什么」 */
-.learned{margin-top:11px;padding:12px 13px;border:1px solid var(--hair);border-radius:12px;background:#fcfdff}
+.learned{margin-top:11px;padding:12px 13px;border:1px solid var(--hair);border-radius:12px;background:#fbfaf7}
 .lhead{font-size:11.5px;font-weight:650;letter-spacing:-.01em}
 .lnames{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .ltriples{margin-top:11px;display:grid;gap:2px}
 .ltriple{display:flex;align-items:baseline;gap:8px;padding:6px 8px;border-radius:9px;font-size:11.5px;cursor:pointer;transition:.14s;overflow-wrap:anywhere}
 .ltriple:hover{background:var(--tint-blue)}
-.ltriple .lp{flex:none;font-size:9.5px;color:#4a63e8;background:var(--tint-blue);border-radius:7px;padding:2px 7px}
+.ltriple .lp{flex:none;font-size:9.5px;color:var(--accent);background:var(--tint-blue);border-radius:7px;padding:2px 7px}
 .lpending{margin:11px 0 0;font-size:9.5px;color:var(--faint);line-height:1.7}
 .lask{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-top:11px}
 .qchip{font-size:10.5px;color:var(--text);background:#fff;border:1px solid var(--hair);border-radius:99px;padding:5px 11px;cursor:pointer;transition:.14s}
-.qchip:hover{border-color:#c6d3ee;background:#fafcff;color:#4a63e8}
+.qchip:hover{border-color:#c6d3ee;background:#fbfaf7;color:var(--accent)}
 </style>

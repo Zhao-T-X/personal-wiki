@@ -268,14 +268,14 @@ const day = (v: string | null | undefined) => (v || '').slice(0, 10) || '—'
   flex:none;width:9px;height:9px;border-radius:99px;background:#c8d3e6;margin-top:5px;
   position:relative;z-index:1;
 }
-.evonode.current .evodot{background:#4a63e8;box-shadow:0 0 0 3px rgba(91,124,255,.16)}
+.evonode.current .evodot{background:var(--accent);box-shadow:0 0 0 3px rgba(91,124,255,.16)}
 /* Connector stops at the last node, so the chain reads as a path, not a list. */
 .evonode + .evonode:before{
   content:"";position:absolute;left:10px;top:-9px;height:18px;width:1.5px;background:var(--line);
 }
 .evobody{min-width:0}
 .evovalue{font-size:13.5px;letter-spacing:-.01em}
-.evocur{font-size:8.5px;font-weight:700;color:#4a63e8;letter-spacing:.06em}
+.evocur{font-size:8.5px;font-weight:700;color:var(--accent);letter-spacing:.06em}
 .evometa{margin:3px 0 0;font-size:10px;color:var(--faint)}
 .tech{margin-top:18px;border-top:1px solid var(--hair);padding-top:12px}
 .tech summary{cursor:pointer;font-size:10px;color:var(--sub);font-weight:600}
@@ -284,8 +284,8 @@ const day = (v: string | null | undefined) => (v || '').slice(0, 10) || '—'
 .grade{font-size:13px;width:22px;height:22px;border-radius:7px;display:grid;place-items:center;color:#fff}
 .qbar{display:grid;grid-template-columns:96px 1fr 28px;align-items:center;gap:9px;font-size:10px;color:var(--sub);margin:4px 0}
 .qk{font-size:9.5px;text-transform:capitalize}
-.qt{height:7px;background:#eef1f7;border-radius:99px;overflow:hidden}
-.qt i{display:block;height:100%;background:linear-gradient(90deg,#5b7cff,#8b67f7)}
+.qt{height:7px;background:#ece8e0;border-radius:99px;overflow:hidden}
+.qt i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent))}
 .qt i.low{background:#d9695a}
 .qv{text-align:right;color:var(--faint)}
 .qflags{margin-top:9px;display:flex;flex-wrap:wrap;gap:5px}

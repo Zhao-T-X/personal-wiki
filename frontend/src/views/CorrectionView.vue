@@ -119,8 +119,8 @@ onMounted(loadHistory)
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
 .grid3 input{border:1px solid var(--hair);border-radius:9px;padding:8px 10px;font:inherit;font-size:11.5px;background:#fff;color:var(--text)}
 .out{display:grid;gap:6px;font-size:12px;margin-top:8px}
-.out code,.cid{font-size:10px;background:#f2f5fc;border-radius:6px;padding:1px 6px;color:var(--sub)}
-.link{color:#4a63e8;cursor:pointer;text-decoration:underline}
+.out code,.cid{font-size:10px;background:#f7f5f0;border-radius:6px;padding:1px 6px;color:var(--sub)}
+.link{color:var(--accent);cursor:pointer;text-decoration:underline}
 .item{display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--hair)}
 .item:last-child{border-bottom:none}
 .item p{margin:2px 0 0}

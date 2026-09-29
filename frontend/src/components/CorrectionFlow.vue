@@ -241,12 +241,12 @@ defineExpose({ analyze, applyPayload, reset, applyState: applying })
 <style scoped>
 .ta{width:100%;border:1px solid var(--hair);border-radius:11px;padding:10px 12px;font:inherit;font-size:12.5px;resize:vertical;background:#fff;color:var(--text)}
 /* 「当前知识」是背景信息，不是输入内容——所以它长得像说明，不像输入框 */
-.existing{margin:0 0 8px;padding:8px 11px;border-left:2px solid #dbe3f2;background:var(--surface2);
+.existing{margin:0 0 8px;padding:8px 11px;border-left:2px solid #ddd6cb;background:var(--surface2);
   border-radius:0 9px 9px 0;font-size:10.5px;color:var(--sub);line-height:1.6;overflow-wrap:anywhere}
 .existing b{color:var(--text);font-weight:650}
 .cflow.compact .ta{font-size:11.5px;border-radius:10px}
 .small{font-size:10px}
-.result{padding:12px;border:1px solid var(--hair);border-radius:12px;background:#fcfdff}
+.result{padding:12px;border:1px solid var(--hair);border-radius:12px;background:#fbfaf7}
 .cflow.compact .result{padding:11px}
 .diff{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:10px}
 .cflow.compact .diff{grid-template-columns:1fr;gap:8px}
@@ -272,8 +272,8 @@ defineExpose({ analyze, applyPayload, reset, applyState: applying })
 .g-A{background:#3aa76d}.g-B{background:#5b9bd5}.g-C{background:#e0a93b}.g-D{background:#d9695a}
 .bars{margin-top:9px;display:grid;gap:5px}
 .bar{display:grid;grid-template-columns:84px 1fr 30px;align-items:center;gap:8px;font-size:10px;color:var(--sub)}
-.bt{height:7px;background:#eef1f7;border-radius:99px;overflow:hidden}
-.bt i{display:block;height:100%;background:linear-gradient(90deg,#5b7cff,#8b67f7)}
+.bt{height:7px;background:#ece8e0;border-radius:99px;overflow:hidden}
+.bt i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent))}
 .bt i.low{background:#d9695a}
 .bv{text-align:right;color:var(--faint)}
 </style>

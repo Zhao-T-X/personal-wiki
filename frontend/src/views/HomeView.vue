@@ -200,20 +200,12 @@ function openDocument(id: string) {
          文件/网址/文本/自然语言都从它进；不再单独放一个大拖拽框。 -->
     <div class="home-hero">
       <div class="eyebrow">{{ greeting }}</div>
-      <h1 class="hero-title">把知识交给我</h1>
-      <p class="faint hero-sub">保存、提问、研究，都可以直接说。</p>
+      <h1 class="hero-title">把正在看的东西，变成你的知识</h1>
+      <p class="hero-sub">整理、理解、研究，并让每一条知识都能被追溯和纠正。</p>
 
       <!-- 一个入口，四条路径：问、记、研究、纠正。判断与执行都在组件里，
            用已经存在的接口——首页不再自己决定一句话该去哪里。 -->
       <OneBox ref="onebox" @imported="loadAll" />
-
-      <!-- 主入口下的两个轻动作：上传（复用 OneBox 的导入）与开始研究。
-           都只是辅助，不抢 OneBox 的主角位置。 -->
-      <div class="home-actions">
-        <button class="linkbtn" @click="onebox?.pick()">📎 上传资料</button>
-        <span class="act-sep">·</span>
-        <button class="linkbtn" @click="router.push('/research')">开始研究 →</button>
-      </div>
 
       <!-- 示例问题只在真的读到内容时给；读不到时不冒充"你还没有内容" -->
       <div v-if="loaded && hasContent" class="row" style="justify-content:center;gap:8px;margin-top:14px;flex-wrap:wrap">
@@ -304,6 +296,20 @@ function openDocument(id: string) {
       </div>
     </div>
     </template>
+
+    <!-- v3 双卡：问答 / 研究的轻导航，不是新功能，只是两条既有路径的入口 -->
+    <div v-if="loaded && hasContent" class="grid g2 minigrid">
+      <div class="panel pad mini">
+        <h3>问答</h3>
+        <p>直接询问你的知识库。答案同时展示相关知识与依据。</p>
+        <button class="minilink" @click="router.push('/qa')">开始提问 →</button>
+      </div>
+      <div class="panel pad mini">
+        <h3>研究</h3>
+        <p>围绕一个主题收集资料，形成可追溯的候选知识，再决定是否采纳。</p>
+        <button class="minilink" @click="router.push('/research')">开始研究 →</button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -317,18 +323,19 @@ function openDocument(id: string) {
 .home-hero{max-width:720px;margin:3vh auto 0;text-align:center}
 .hero-title{font-size:29px;font-weight:700;letter-spacing:-.03em;margin:10px 0 9px;color:var(--text)}
 .hero-sub{font-size:12px;margin:0 0 22px}
-/* 主入口下的两个轻动作：上传与开始研究，都是辅助，不抢戏 */
-.home-actions{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:14px}
-.linkbtn{border:0;background:none;color:var(--sub);font-size:11px;cursor:pointer;padding:4px 2px;transition:.15s}
-.linkbtn:hover{color:var(--blue)}
-.act-sep{color:var(--faint)}
+/* 主入口下的两个轻动作已并入 OneBox 的 chips，不再单独成行 */
+.minigrid{max-width:920px;margin:14px auto 0}
+.mini h3{font-size:14px;margin:0 0 7px}
+.mini p{font-size:12px;line-height:1.65;color:var(--sub);margin:0}
+.minilink{border:0;background:none;color:var(--accent);font-weight:650;font-size:11px;margin-top:14px;padding:0;cursor:pointer}
+.minilink:hover{text-decoration:underline}
 /* 最近知识变化 */
 .chgrow{display:flex;align-items:center;gap:9px;padding:7px 4px;font-size:11.5px;border-bottom:1px solid var(--hair)}
 .chgrow:last-child{border-bottom:none}
 .chgrow.clickable{cursor:pointer}
-.chgrow.clickable:hover{color:#4a63e8}
+.chgrow.clickable:hover{color:var(--accent)}
 .ci{width:15px;text-align:center;font-size:12px;flex:none}
-.chgrow.upd .ci{color:#4a63e8}
+.chgrow.upd .ci{color:var(--accent)}
 .chgrow.add .ci{color:#3aa76d}
 .chgrow.ok .ci{color:#3aa76d}
 .chgrow.wrn .ci{color:var(--amber)}

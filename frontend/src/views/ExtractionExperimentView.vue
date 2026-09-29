@@ -205,6 +205,6 @@ onMounted(() => {
 .err { color: #b42318; padding: 8px; }
 .snaps label { margin-right: 12px; font-size: 13px; }
 .compare { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 10px; }
-.tag { display: inline-block; background: #eef2ff; color: #2f6feb; border-radius: 4px; padding: 2px 6px; margin: 2px; font-size: 12px; }
+.tag { display: inline-block; background: var(--accent-soft); color: #2f6feb; border-radius: 4px; padding: 2px 6px; margin: 2px; font-size: 12px; }
 .tag.bad { background: #fde8e8; color: #b42318; }
 </style>

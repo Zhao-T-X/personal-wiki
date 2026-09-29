@@ -304,7 +304,7 @@ onMounted(async () => {
 <style scoped>
 .metrics{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:12px}
 .metric{background:rgba(255,255,255,.96);border:1px solid var(--line);border-radius:14px;padding:13px 14px;box-shadow:var(--shadow);position:relative;overflow:hidden}
-.metric:after{content:"";position:absolute;width:70px;height:70px;right:-22px;top:-26px;border-radius:50%;background:radial-gradient(circle,rgba(91,124,255,.12),transparent 67%)}
+.metric:after{content:"";position:absolute;width:70px;height:70px;right:-22px;top:-26px;border-radius:50%;background:radial-gradient(circle,rgba(156,90,67,.10),transparent 67%)}
 .mlabel{font-size:9.5px;color:var(--sub);font-weight:600}
 .mval{font-size:21px;font-weight:800;margin-top:5px;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
 .mbase{display:flex;align-items:center;gap:6px;margin-top:7px;font-size:10px}
@@ -318,7 +318,7 @@ onMounted(async () => {
 .item.sel{background:linear-gradient(90deg,var(--tint-blue),var(--tint-violet));box-shadow:inset 0 0 0 1px #dfe6fb}
 .case{border-bottom:1px solid var(--hair)}
 .case:last-child{border-bottom:0}
-.cbody{padding:4px 14px 12px;background:#fbfcff}
+.cbody{padding:4px 14px 12px;background:#fbfaf7}
 .crow{display:grid;grid-template-columns:128px 1fr;gap:10px;font-size:10.5px;padding:5px 0;border-bottom:1px dashed var(--hair)}
 .crow:last-child{border-bottom:0}
 .ck{color:var(--sub)}

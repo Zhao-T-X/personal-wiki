@@ -214,15 +214,10 @@ const columns = [
 
 <template>
   <div class="page">
-    <div style="text-align:center;margin:2vh 0 18px">
-      <h1 style="font-size:24px">问你的知识库</h1>
-      <p class="muted" style="font-size:10.5px;margin-top:7px">
-        <template v-if="store.developerMode">
-          <template v-if="mode === 'knowledge'">知识库问答：Hybrid 检索 + Grounded 回答 + 证据与知识边界</template>
-          <template v-else>Agent 问答：AgentScope ReAct Agent 可自主检索知识库、查看实体图谱后作答</template>
-        </template>
-        <template v-else>把问题交给你的知识库，得到带依据的回答——不对就直接改。</template>
-      </p>
+    <div class="qahead">
+      <div class="eyebrow">ASK</div>
+      <h1 class="qatitle">问答</h1>
+      <p class="qasub">答案来自你的知识，并且告诉你为什么这样回答。</p>
     </div>
 
     <!-- mode switch: only offered in Developer Mode. Normal users never choose an engine. -->
@@ -238,9 +233,16 @@ const columns = [
       <span v-if="mode === 'agent' && rolesError" class="faint" style="font-size:9.5px">{{ rolesError }}</span>
     </div>
 
-    <div class="askbox" style="max-width:760px;margin:0 auto">
-      <input v-model="question" placeholder="问你的知识库任何问题…" @keydown.enter="send()" />
-      <button class="go" @click="send()">↑</button>
+    <div class="askwrap">
+      <div class="askcard">
+        <input v-model="question" placeholder="问你的知识库任何问题…" @keydown.enter="send()" />
+        <div class="askbottom">
+          <span>基于你的知识库回答</span>
+          <button class="btn primary" :disabled="loading || agentLoading" @click="send()">
+            {{ loading || agentLoading ? '询问中…' : '询问' }}
+          </button>
+        </div>
+      </div>
     </div>
 
     <div id="qaResult" ref="resultBox" style="max-width:860px;margin:24px auto 0">
@@ -406,14 +408,23 @@ const columns = [
 </template>
 
 <style scoped>
+/* v3 页头 + 问答盒 */
+.qahead{margin:2vh 0 6px}
+.qatitle{font-size:26px;letter-spacing:-.03em;margin:8px 0 6px;font-weight:690}
+.qasub{margin:0;color:var(--sub);font-size:12px;line-height:1.7}
+.askwrap{max-width:820px;margin:20px auto 0}
+.askcard{background:#fff;border:1px solid var(--line);border-radius:17px;padding:16px;box-shadow:var(--shadow)}
+.askcard input{width:100%;border:0;outline:none;font-size:14px;padding:6px 2px 14px;background:none;color:var(--text)}
+.askbottom{display:flex;justify-content:space-between;align-items:center}
+.askbottom span{font-size:10px;color:var(--muted)}
 .cval{margin:10px 0 4px;padding:11px;border:1px solid var(--hair);border-radius:11px;background:#fff}
 .cbar{display:grid;grid-template-columns:104px 1fr 28px;align-items:center;gap:9px;font-size:10px;color:var(--sub);margin:4px 0}
 .ck{font-size:9.5px}
-.ct{height:7px;background:#eef1f7;border-radius:99px;overflow:hidden}
-.ct i{display:block;height:100%;background:linear-gradient(90deg,#5b7cff,#8b67f7)}
+.ct{height:7px;background:#ece8e0;border-radius:99px;overflow:hidden}
+.ct i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent))}
 .ct i.low{background:#d9695a}
 .cv{text-align:right;color:var(--faint)}
-.gbox{margin-top:10px;padding:9px;border:1px solid var(--hair);border-radius:10px;background:#fcfdff}
+.gbox{margin-top:10px;padding:9px;border:1px solid var(--hair);border-radius:10px;background:#fbfaf7}
 .gbox b.ok{color:#3aa76d}.gbox b.bad{color:#d9695a}
 .glist{margin:8px 0 0;padding-left:16px;display:grid;gap:4px}
 .glist li{font-size:11px;color:var(--text)}

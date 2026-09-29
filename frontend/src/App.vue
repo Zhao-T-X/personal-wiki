@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { loadPredicateLabels } from './utils/claim'
 import { useAppStore } from './stores/app'
@@ -23,9 +23,9 @@ const cmdOpen = ref(false)
  */
 const items = [
   { id: '/', icon: '⌂', text: '首页' },
-  { id: '/knowledge', icon: '✦', text: '知识' },
-  { id: '/qa', icon: '◎', text: '问答' },
-  { id: '/research', icon: '◇', text: '研究' },
+  { id: '/knowledge', icon: '◫', text: '知识' },
+  { id: '/qa', icon: '⌕', text: '问答' },
+  { id: '/research', icon: '✦', text: '研究' },
   { id: '/settings', icon: '⚙', text: '设置' },
 ]
 
@@ -38,19 +38,6 @@ const devItems = [
   { id: '/review', icon: '✓', text: '审核' },
   { id: '/correction', icon: '✎', text: '纠正' },
 ]
-
-const CRUMBS: Record<string, string> = {
-  '/': '首页', '/knowledge': '知识', '/qa': '问答', '/research': '研究',
-  '/review': '审核', '/correction': '纠正',
-  '/agent': 'Agent 工作台', '/settings': '设置', '/settings/database': '设置 / Database',
-  '/eval': '评测',
-}
-const crumb = computed(() => {
-  const path = route.path
-  if (path.startsWith('/knowledge/object/')) return ['知识', '对象详情']
-  if (path.startsWith('/knowledge/claim/')) return ['知识', '知识详情']
-  return (CRUMBS[path] || '首页').split(' / ')
-})
 
 function onKey(e: KeyboardEvent) {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); cmdOpen.value = !cmdOpen.value }
@@ -72,8 +59,8 @@ const MOBILE_ITEMS = items
   <div class="app">
     <aside class="side">
       <div class="brand">
-        <div class="brandmark">✦</div>
-        <div><b>LLM-Wiki</b><small>PERSONAL KNOWLEDGE OS</small></div>
+        <div class="brandmark">W</div>
+        <div><b>LLM-Wiki</b><small>Personal Knowledge</small></div>
       </div>
       <div v-for="it in items" :key="it.id" class="nav" :class="{ active: route.path === it.id || (it.id !== '/' && route.path.startsWith(it.id)) }" @click="router.push(it.id)">
         <span class="nico">{{ it.icon }}</span><span>{{ it.text }}</span>
@@ -103,14 +90,13 @@ const MOBILE_ITEMS = items
 
     <main class="main">
       <header class="topbar">
-        <div class="crumb">
-          <span>{{ crumb[0] }}</span>
-          <span v-if="crumb[1]" class="sep">/</span>
-          <b v-if="crumb[1]">{{ crumb[1] }}</b>
+        <div class="omni" @click="cmdOpen = true">
+          <span>⌕</span><span>搜索 / 打开</span><kbd>⌘K</kbd>
         </div>
         <div class="grow"></div>
-        <div class="omni" @click="cmdOpen = true">
-          <span>⌕</span><span>搜索知识</span><kbd>⌘K</kbd>
+        <div class="top-actions">
+          <button class="iconbtn" title="命令面板" @click="cmdOpen = true">⌘</button>
+          <button class="iconbtn" title="设置" @click="router.push('/settings')">⚙</button>
         </div>
       </header>
       <div class="content">
@@ -132,18 +118,20 @@ const MOBILE_ITEMS = items
 
 <style scoped>
 .mobilebar{display:none}
-.side{background:#fff;border-right:1px solid var(--hair);padding:20px 13px 14px;display:flex;flex-direction:column;min-height:0;overflow:auto}
+.side{background:rgba(250,249,246,.75);border-right:1px solid rgba(0,0,0,.045);padding:20px 13px 14px;display:flex;flex-direction:column;min-height:0;overflow:auto}
 .brand{display:flex;align-items:center;gap:11px;padding:4px 8px 22px}
-.brandmark{width:34px;height:34px;border-radius:11px;background:var(--blue);color:#fff;display:grid;place-items:center;font-size:15px;box-shadow:0 8px 20px rgba(74,99,232,.22)}
+.brandmark{width:30px;height:30px;border-radius:9px;background:var(--text);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:700}
 .brand b{font-size:15.5px;display:block;letter-spacing:-.02em}
 .brand small{display:block;font-size:8.5px;color:var(--faint);margin-top:2px;letter-spacing:.06em}
 .navlbl{padding:10px 10px 5px;color:var(--faint);font-size:8.5px;letter-spacing:.14em;font-weight:700}
 .nav{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:11px;margin:2px 0;color:var(--sub);font-size:11.5px;transition:.16s;position:relative;cursor:pointer}
-.nav:hover{background:#f2f5fc;color:var(--text)}
-.nav.active{background:var(--blue2);color:var(--blue);font-weight:650}
-.nav.active:before{content:"";position:absolute;left:0;top:9px;bottom:9px;width:3px;border-radius:99px;background:var(--blue)}
+.nav:hover{background:#efede8;color:var(--text)}
+.nav.active{background:#ebe8e2;color:var(--text);font-weight:650}
 .nico{width:19px;text-align:center;font-size:13px}
-.topbar{height:62px;display:flex;align-items:center;gap:12px;padding:0 26px;border-bottom:1px solid var(--hair);background:#fff}
+.topbar{height:64px;display:flex;align-items:center;gap:12px;padding:0 26px;border-bottom:1px solid rgba(0,0,0,.04);background:transparent}
+.top-actions{display:flex;gap:7px}
+.iconbtn{border:1px solid var(--line);background:#fff;border-radius:8px;width:34px;height:34px;color:var(--muted);font-size:13px;display:grid;place-items:center;transition:.15s}
+.iconbtn:hover{color:var(--text);border-color:#d5cec3}
 .content{flex:1;min-height:0;overflow:auto;padding:26px 30px 40px}
 /* §10：主内容不铺满，限制阅读宽度，营造工作台留白感 */
 .content > *{max-width:1120px;width:100%;margin-inline:auto}

@@ -322,28 +322,64 @@ async function drawGraph() {
 }
 
 const showAllDocs = computed(() => docLimit.value >= docTotal.value)
+
+/* ---------- v3 文档列表：过滤 + 分组 + 相对时间 ----------
+ * 过滤是客户端的（数据已在本页），分组只回答一个问题：最近动过的在哪。 */
+const DAY = 86400e3
+const DOC_FILTERS = ['全部', '最近', '已确认', '待处理']
+const docFilter = ref('全部')
+function docTime(d: DocumentRow): number {
+  const t = new Date(String(d.updated_at || '').replace(' ', 'T')).getTime()
+  return isNaN(t) ? 0 : t
+}
+function isRecentDoc(d: DocumentRow) { return docTime(d) > Date.now() - 7 * DAY }
+const filteredDocs = computed(() => {
+  if (docFilter.value === '待处理') return docs.value.filter(d => !d.last_run_status)
+  if (docFilter.value === '已确认') return docs.value.filter(d => !!d.last_run_status)
+  if (docFilter.value === '最近') return docs.value.filter(isRecentDoc)
+  return docs.value
+})
+const recentDocs = computed(() => filteredDocs.value.filter(isRecentDoc))
+const olderDocs = computed(() => filteredDocs.value.filter(d => !isRecentDoc(d)))
+function relTime(ts?: string): string {
+  if (!ts) return ''
+  const t = docTime({ updated_at: ts } as DocumentRow)
+  if (!t) return String(ts).slice(0, 10)
+  const days = Math.floor((Date.now() - t) / DAY)
+  if (days <= 0) return '今天'
+  if (days === 1) return '昨天'
+  if (days < 7) return `${days} 天前`
+  if (days < 30) return `${Math.floor(days / 7)} 周前`
+  return String(ts).slice(0, 10)
+}
+function docIcon(d: DocumentRow): { label: string; cls: string } {
+  const t = (d.source_type || '').toLowerCase()
+  if (t.includes('pdf')) return { label: 'PDF', cls: 'pdf' }
+  if (t.includes('url') || t.includes('web') || t.includes('link')) return { label: 'URL', cls: 'url' }
+  if (t.includes('md') || t.includes('html')) return { label: 'MD', cls: 'md' }
+  return { label: 'TXT', cls: '' }
+}
 </script>
 
 <template>
   <div class="page">
-    <div class="askbox" style="margin-bottom:16px">
-      <input v-model="searchQ" placeholder="搜索：知识 / 正文 / 对象 / 文档…" />
-      <span v-if="searching" class="tag blue" style="margin-right:6px">搜索中…</span>
-      <button class="go" title="转为提问" @click="router.push({ path: '/qa', query: { q: searchQ } })">◎</button>
+    <!-- v3 页头：标题 + 轻导入入口。导入不再是一张大拖拽框 -->
+    <div class="khead">
+      <div>
+        <div class="eyebrow">KNOWLEDGE</div>
+        <h1 class="ktitle">你的知识</h1>
+        <p class="ksub">找到你已经保存的内容，继续阅读、提问或修正。</p>
+      </div>
+      <div class="row" style="gap:8px">
+        <button class="btn" @click="importer?.pick()">＋ 导入资料</button>
+      </div>
     </div>
 
-    <!-- 审核不再是侧栏的一项，但它必须找得到：有事就在知识页说一句，没事就不出现 -->
-    <div v-if="store.pendingReview" class="panel pad dueline" @click="router.push('/review')">
-      <span class="dico">⚠</span>
-      <b>{{ store.pendingReview }} 条候选知识等你确认</b>
-      <span class="faint" style="font-size:10px">确认之后它们才会被当作可信知识</span>
-      <div class="grow"></div>
-      <span class="faint" style="font-size:10px">开始确认 →</span>
+    <!-- 全页只有一个搜索框：找知识、找正文、找对象、找文档都从它进 -->
+    <div class="ksearch">
+      <input v-model="searchQ" placeholder="搜索知识、正文、对象或文档……" />
+      <span v-if="searching" class="tag">搜索中…</span>
     </div>
-
-    <!-- 知识体检：发现 → 影响 → 确认 → 结果。合并后立即重跑搜索，
-         因为「后台修好了但搜索还显示旧状态」和没修一样糟。 -->
-    <IntegrityPanel @changed="runSearch" />
 
     <!-- 搜索结果：知识是第一层，原文是它的依据 -->
     <div v-if="searchQ.trim()" class="panel pad" style="margin-bottom:16px">
@@ -383,28 +419,39 @@ const showAllDocs = computed(() => docLimit.value >= docTotal.value)
 
     <!-- 文档 -->
     <div v-if="tab === '文档'">
-      <!-- 导入口与首页是同一个组件、同一份实现 -->
-      <ImportPanel ref="importer" @imported="onImported" @open-document="openDocById" />
+      <!-- 导入口与首页是同一个组件、同一份实现；这里只保留进度队列，入口在页头 -->
+      <ImportPanel ref="importer" hide-dropzone @imported="onImported" @open-document="openDocById" />
 
-      <div class="sechead"><h3>文档 <span class="faint" style="font-weight:400;font-size:9px">· {{ docs.length }}/{{ docTotal }}</span></h3>
-        <span class="row" style="gap:8px">
-          <button class="btn" :disabled="embedding" @click="backfillEmbeddings">{{ embedding ? '生成中…' : '⚡ 重新生成语义索引' }}</button>
-          <button class="btn" @click="importer?.pick()">＋ 导入</button>
-          <button class="btn primary" @click="showNew = true">＋ 新建文档</button>
-        </span>
+      <div class="filter-tabs">
+        <button v-for="f in DOC_FILTERS" :key="f" class="ftab" :class="{ active: docFilter === f }" @click="docFilter = f">{{ f }}</button>
+        <div class="grow"></div>
+        <button class="btn sm" :disabled="embedding" @click="backfillEmbeddings">{{ embedding ? '生成中…' : '⚡ 重新生成语义索引' }}</button>
+        <button class="btn sm primary" @click="showNew = true">＋ 新建文档</button>
       </div>
       <!-- 读不到文档时说"读不到"，而不是"还没有文档" -->
       <LoadBoundary :state="docsRes.state.value" loading-text="正在读取文档…"
                     error-text="暂时无法加载文档——这不代表你的文档不见了。"
                     :reload="loadDocs">
-        <div class="panel pad" style="padding:6px">
-          <div v-for="d in docs" :key="d.id" class="item" @click="openDoc(d)">
-            <div class="ico-badge ib-blue">▤</div>
-            <div class="grow"><b>{{ d.title }}</b><p>{{ d.source_type }} · {{ d.chunk_count }} 片段 · {{ fmtDateTime(d.updated_at) }}</p></div>
-            <StatusTag v-if="d.last_run_status" :status="d.last_run_status" /><span v-else class="tag amber">未索引</span>
+        <template v-for="(group, gi) in [{ title: '最近', meta: '按更新时间排序', items: recentDocs },
+                                        { title: '全部资料', meta: `${docTotal} 篇`, items: olderDocs }]" :key="gi">
+          <div v-if="group.items.length" class="docgroup">
+            <div class="dghead"><b>{{ group.title }}</b><span class="faint">{{ group.meta }}</span></div>
+            <div class="doclist">
+              <div v-for="d in group.items" :key="d.id" class="docrow" @click="openDoc(d)">
+                <div class="docicon" :class="docIcon(d).cls">{{ docIcon(d).label }}</div>
+                <div class="docmain">
+                  <b class="docname">{{ d.title }}</b>
+                  <div class="docmeta">
+                    {{ d.chunk_count ?? 0 }} 片段 · {{ d.source_type }}
+                    <span v-if="!d.last_run_status" class="docattn">· 未索引</span>
+                  </div>
+                </div>
+                <div class="docright"><span class="doctime">{{ relTime(d.updated_at) }}</span></div>
+              </div>
+            </div>
           </div>
-          <EmptyState v-if="!docs.length" text="还没有文档——导入或新建一篇" />
-        </div>
+        </template>
+        <EmptyState v-if="!filteredDocs.length" text="还没有文档——导入或新建一篇" />
         <div v-if="!showAllDocs" style="text-align:center;margin-top:10px">
           <button class="btn" @click="docLimit += 50; loadDocs()">加载更多（{{ docTotal - docs.length }} 条）</button>
         </div>
@@ -429,6 +476,19 @@ const showAllDocs = computed(() => docLimit.value >= docTotal.value)
           <button class="btn" @click="moreEntities">加载更多（{{ entityTotal - entities.length }} 个）</button>
         </div>
       </LoadBoundary>
+
+      <!-- v3 摘要条：状态收在页尾一行里，不再用首屏横幅提醒 -->
+      <div class="ksummary">
+        <div class="ksitems">
+          <span class="ksi"><i class="ksdot"></i>{{ docTotal }} 篇资料</span>
+          <span v-if="store.pendingReview" class="ksi attn"><i class="ksdot attn"></i>{{ store.pendingReview }} 条候选知识待确认</span>
+        </div>
+        <button v-if="store.pendingReview" class="kslink" @click="router.push('/review')">查看待处理 →</button>
+      </div>
+
+      <!-- 知识体检：发现 → 影响 → 确认 → 结果。合并后立即重跑搜索，
+           因为「后台修好了但搜索还显示旧状态」和没修一样糟。 -->
+      <IntegrityPanel @changed="runSearch" />
     </div>
 
     <!-- 图谱 -->
@@ -552,11 +612,48 @@ const showAllDocs = computed(() => docLimit.value >= docTotal.value)
 <style scoped>
 /* 知识层：搜索结果的第二层（原文）是它的依据，所以两张卡之间留出呼吸感 */
 .khits{display:grid;gap:10px}
-.dueline{display:flex;align-items:center;gap:10px;margin-bottom:16px;cursor:pointer}
-.dueline:hover{background:var(--surface2)}
-.dico{color:var(--amber)}
+/* v3 页头 */
+.khead{display:flex;align-items:flex-end;justify-content:space-between;gap:20px}
+.ktitle{font-size:26px;letter-spacing:-.03em;margin:8px 0 6px;font-weight:690}
+.ksub{margin:0;color:var(--sub);font-size:12px;line-height:1.7}
+/* 全页唯一的搜索框 */
+.ksearch{position:relative;display:flex;margin:22px 0 14px}
+.ksearch input{width:100%;height:44px;border:1px solid var(--line);background:#fff;border-radius:10px;padding:0 15px;font-size:13px;color:var(--text);outline:none;box-shadow:0 2px 10px rgba(36,31,25,.02)}
+.ksearch input:focus{border-color:#c9a08e}
+.ksearch .tag{position:absolute;right:12px;top:50%;transform:translateY(-50%)}
+/* 过滤行 */
+.filter-tabs{display:flex;gap:4px;align-items:center;margin:0 0 20px;flex-wrap:wrap}
+.filter-tabs button.ftab{border:0;background:transparent;color:var(--muted);padding:7px 10px;border-radius:7px;font-size:11px;cursor:pointer}
+.filter-tabs button.ftab.active{background:#ebe8e2;color:var(--text);font-weight:650}
+/* 文档分组 */
+.docgroup{margin-bottom:22px}
+.dghead{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
+.dghead b{font-size:12px}
+.dghead .faint{font-size:10px}
+.doclist{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.docrow{display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:13px;align-items:center;padding:15px 18px;border-bottom:1px solid var(--hair);cursor:pointer;transition:.15s}
+.docrow:last-child{border-bottom:0}
+.docrow:hover{background:#fdfcf9}
+.docicon{width:32px;height:32px;border:1px solid var(--line);background:var(--surface2);border-radius:8px;display:grid;place-items:center;color:var(--sub);font-size:9px;font-weight:750}
+.docicon.pdf{color:var(--accent)}
+.docicon.url{color:var(--mint)}
+.docicon.md{color:#6b6670}
+.docmain{min-width:0}
+.docname{font-size:13px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.docmeta{font-size:10px;color:var(--muted);margin-top:5px}
+.docattn{color:var(--accent)}
+.docright{display:flex;align-items:center;gap:13px}
+.doctime{font-size:10px;color:var(--muted);white-space:nowrap}
+/* 摘要条 */
+.ksummary{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:18px;padding:12px 14px;border:1px solid var(--hair);background:var(--surface2);border-radius:10px;color:var(--sub);font-size:10px}
+.ksitems{display:flex;gap:18px;flex-wrap:wrap}
+.ksi{display:inline-flex;gap:6px;align-items:center}
+.ksdot{width:6px;height:6px;border-radius:50%;background:var(--muted)}
+.ksdot.attn{background:var(--accent)}
+.kslink{border:0;background:none;color:var(--sub);font-size:10px;cursor:pointer}
+.kslink:hover{color:var(--accent)}
 /* Chunk that a question/answer pointed at via ?doc=&chunk= */
-.chunk.hl{border-color:#bcd0ff;background:var(--tint-blue);box-shadow:0 0 0 3px rgba(91,124,255,.12)}
+.chunk.hl{border-color:#d9c4b8;background:var(--tint-blue);box-shadow:0 0 0 3px rgba(156,90,67,.10)}
 /* 抽屉里的知识卡：竖排、留白收紧，一屏能扫过多条 */
 .dkl{display:grid;gap:8px}
 /* 导入管道相关的样式随组件一起搬到了 ImportPanel.vue（一份实现，一份样式） */

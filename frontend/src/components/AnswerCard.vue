@@ -124,8 +124,8 @@ function onCorrected() { fixOpen.value = false; emit('corrected') }
   padding:9px 11px;border:1px solid var(--hair);border-radius:11px;background:var(--surface2);
   transition:.15s}
 .src:not(:disabled){cursor:pointer}
-.src:not(:disabled):hover{border-color:#dbe3f2;background:#f3f6fd}
-.num{flex:none;width:18px;height:18px;border-radius:99px;background:var(--tint-blue);color:#4a63e8;
+.src:not(:disabled):hover{border-color:#ddd6cb;background:#faf8f4}
+.num{flex:none;width:18px;height:18px;border-radius:99px;background:var(--tint-blue);color:var(--accent);
   display:grid;place-items:center;font-size:9.5px;font-weight:700;margin-top:1px}
 .src .grow{display:flex;flex-direction:column;gap:3px;min-width:0}
 .src b{font-size:11px;color:var(--text)}

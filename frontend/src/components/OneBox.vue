@@ -66,6 +66,9 @@ defineExpose({
   importFiles,
 })
 
+const inputEl = ref<HTMLInputElement | null>(null)
+function focusInput() { inputEl.value?.focus() }
+
 /** 触发隐藏文件框：首页“上传资料”与 OneBox 纸夹共用。 */
 function pick() { fileInput.value?.click() }
 function onFilePick(ev: Event) {
@@ -135,15 +138,26 @@ const correctionPlan = computed(() => (result.value?.kind === 'correct' ? result
 <template>
   <div class="onebox" :class="{ over: dragOver }"
        @dragover.prevent="dragOver = true" @dragleave.prevent="dragOver = false" @drop.prevent="onDrop">
-    <div class="askbox">
+    <!-- v3 capture 头：先告诉用户「可以交给我什么」 -->
+    <div class="obhead">
+      <div class="obmark">＋</div>
+      <div class="obht"><b>把内容交给我</b><span>拖入文件、粘贴链接，或者直接写下一段内容。</span></div>
+    </div>
+    <div class="obinput">
       <!-- 文件入口：纸夹，触发与首页同一份导入逻辑 -->
       <button class="clip" title="上传文件" @click="pick">📎</button>
-      <input v-model="text" placeholder="问点什么、记点什么、研究点什么，或粘贴网址…" @keydown.enter="route()" />
-      <button class="go" :disabled="reading || running" @click="route()">
-        {{ reading ? '…' : '↑' }}
+      <input ref="inputEl" v-model="text" placeholder="粘贴链接或输入你想整理的内容……" @keydown.enter="route()" />
+    </div>
+    <div class="obactions">
+      <div class="obchips">
+        <button class="chip" @click="pick">上传文件</button>
+        <button class="chip" @click="router.push('/research')">开始研究</button>
+        <button class="chip" @click="focusInput">问一个问题</button>
+      </div>
+      <button class="btn primary" :disabled="reading || running" @click="route()">
+        {{ reading ? '理解中…' : running ? '执行中…' : '整理内容' }}
       </button>
     </div>
-    <p v-if="!dragOver" class="drophint">拖入文件，或点击 📎 上传 · 一句话也能直接说</p>
 
     <!-- 结果类型透明：用户不需要知道内部意图，但有权知道系统在做什么 -->
     <div v-if="reading || running || (plan && !result)" class="obstatus">
@@ -229,18 +243,27 @@ const correctionPlan = computed(() => (result.value?.kind === 'correct' ? result
 </template>
 
 <style scoped>
-.onebox{width:100%}
-/* 拖拽悬停：只给输入框一圈高亮，不另起一个巨大上传框 */
-.onebox.over .askbox{border-color:#8fa8f0;box-shadow:0 18px 50px rgba(70,95,190,.18);background:var(--tint-blue)}
+/* v3 capture：一张白卡承载主入口，层级靠头图 + 输入 + 动作行，不再套两层卡 */
+.onebox{width:100%;background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:18px;text-align:left;transition:.16s}
+/* 拖拽悬停：整卡一圈高亮 */
+.onebox.over{border-color:#b98d78;background:var(--accent-soft)}
+.obhead{display:flex;gap:12px;align-items:center;padding:2px 2px 12px;text-align:left}
+.obmark{width:36px;height:36px;border-radius:10px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-size:15px;flex:none}
+.obht b{display:block;font-size:13px}
+.obht span{display:block;color:var(--muted);font-size:11px;margin-top:3px}
+.obinput{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--surface2);border-radius:10px;padding:13px 14px}
+.obinput input{flex:1;border:0;background:none;outline:none;font-size:13px;color:var(--text)}
+.obinput input::placeholder{color:var(--muted)}
+.obactions{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:11px;flex-wrap:wrap}
+.obchips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:#fff;border-radius:7px;padding:7px 10px;color:var(--sub);font-size:11px;transition:.14s}
+.chip:hover{color:var(--accent);border-color:#d5cec3}
 .obstatus{margin-top:10px;font-size:10px;color:var(--sub)}
 .obplan{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px;
   padding:9px 11px;border:1px solid var(--hair);border-radius:11px;background:var(--surface2)}
 .hint{font-size:9.5px;line-height:1.6}
 .obcards{display:grid;gap:9px}
-.askbox input{flex:1}
 /* 纸夹：输入框左侧的轻入口，和顶部搜索一样是「辅助」而非主角 */
 .clip{border:0;background:transparent;font-size:15px;line-height:1;padding:0 2px;color:var(--sub);flex:none}
-.clip:hover{color:var(--blue)}
-/* 主入口下的辅助说明：一句话点明还能拖文件，但不抢戏 */
-.drophint{margin:9px 2px 0;font-size:9.5px;color:var(--faint);text-align:center}
+.clip:hover{color:var(--accent)}
 </style>
