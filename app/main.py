@@ -29,6 +29,16 @@ from .repositories import (CatalogRepository, ClaimRepository, DocumentRepositor
                            RelationRepository, ResearchRepository, RunRepository)
 from .evaluation.runners import run_evaluation
 from .experiments import (load_corpus, run_summary_view, diff_summaries)
+# Application layer: the routes below are an HTTP adapter only. They validate, call an
+# application function, and translate errors to status codes — they never read or write
+# knowledge state through the repositories, nor run multi-step orchestration themselves.
+#
+# The application modules are imported lazily inside each handler (not at module top) on
+# purpose: importing ``app.application.operation`` pulls in ``app.domain.operations``, and
+# ``app.domain`` has a latent import cycle with ``app.resolution``. Importing it at module
+# load would surface that cycle. Lazy import keeps ``main.py``'s load order identical to the
+# pre-convergence code, where every business import lived inside the handler it served.
+from .application import (BadRequestError, ConflictError, NotFoundError, ValidationError)
 # Aliased to avoid shadowing the existing /api/runs handlers `list_runs`/`get_run`.
 from .evaluation.store import list_runs as list_eval_runs, get_run as get_eval_run
 from .evaluation import baseline as _evaluation_baseline
@@ -195,9 +205,9 @@ def database_integrity():
 
 @app.get('/api/claims/{claim_id}')
 def get_claim(claim_id:str):
-    item=ClaimRepository().get(claim_id)
-    if not item: raise HTTPException(404,'Claim not found')
-    return item
+    from .application import knowledge as knowledge_app
+    try: return knowledge_app.get_claim(claim_id)
+    except NotFoundError as exc: raise HTTPException(404,str(exc)) from exc
 
 @app.get('/api/claims/{claim_id}/relations')
 def claim_relations_for(claim_id:str):
@@ -206,7 +216,8 @@ def claim_relations_for(claim_id:str):
     Claims are never overwritten, so this is the only place knowledge evolution is
     expressed — including whether a newer claim supersedes this one.
     """
-    return {'claim_id':claim_id,'relations':ClaimRepository().relations_for_claim(claim_id)}
+    from .application import knowledge as knowledge_app
+    return knowledge_app.claim_relations_for(claim_id)
 
 
 @app.get('/api/claims/{claim_id}/history')
@@ -220,41 +231,9 @@ def claim_history(claim_id:str):
     the row (ADR-005). The seed may be any member of the chain, since a caller
     arriving from search has no idea where in the timeline it landed.
     """
-    claims = ClaimRepository()
-    claim = claims.get(claim_id)
-    if not claim: raise HTTPException(404,'Claim not found')
-    edges = claims.supersede_edges(claim['subject_id'], claim['predicate'])
-    chain = order_chain(edges, claim_id)
-    superseded_at = {e['target_claim_id']: e['created_at'] for e in edges}
-    superseded_by = {e['target_claim_id']: e['source_claim_id'] for e in edges}
-    corroboration = claims.corroboration_counts(chain.ordered_ids)
-
-    nodes = []
-    for cid in chain.ordered_ids:
-        row = claims.get(cid) or {}
-        nodes.append({
-            'id': cid,
-            'subject': row.get('subject_name') or '',
-            'predicate': row.get('predicate') or '',
-            'predicate_label': _predicate_label(row.get('predicate')),
-            'object': row.get('object_name') or row.get('object_text') or '',
-            'status': row.get('status'),
-            # 生效期间: from when the statement was written until the moment a later
-            # one was accepted. The newest member has no end yet.
-            'effective_from': row.get('created_at'),
-            'effective_to': superseded_at.get(cid),
-            'superseded_by': superseded_by.get(cid),
-            'source_quote': row.get('source_quote'),
-            'source_document_id': row.get('source_document_id'),
-            'source_chunk_id': row.get('source_chunk_id'),
-            # 依据: its own quote, plus every accepted duplicate — the same statement
-            # asserted by another source.
-            'sources': (1 if row.get('source_quote') else 0) + corroboration.get(cid, 0),
-            'corroborating': corroboration.get(cid, 0),
-            'is_current': cid == chain.current_id,
-        })
-    return {'claim_id': claim_id, 'current_id': chain.current_id, 'cycles': chain.cycles,
-            'superseded_count': chain.superseded_count, 'chain': nodes}
+    from .application import knowledge as knowledge_app
+    try: return knowledge_app.claim_history(claim_id)
+    except NotFoundError as exc: raise HTTPException(404,str(exc)) from exc
 
 @app.get('/api/claim-relations')
 def claim_relations_queue(status:str|None=None,limit:int=200):
@@ -289,29 +268,16 @@ def update_claim_relation(relation_id:str,payload:dict):
     older claim stop being current. It moves that claim's *lifecycle status* — its
     text, object, evidence and provenance are never rewritten — and records the
     previous status so the decision can be undone exactly rather than guessed at.
+
+    The write lives in ``operation_app``; this handler only validates and translates.
     """
-    from .claim_relations import RELATIONSHIPS
-    body=payload or {}
-    new_status=body.get('status')
-    if new_status not in ('accepted','rejected','candidate'):
-        raise HTTPException(422,'status must be accepted, rejected or candidate')
-    relationship=body.get('relationship')
-    if relationship is not None and relationship not in RELATIONSHIPS:
-        raise HTTPException(422,f'Unknown relationship: {relationship}')
-    with transaction() as conn:
-        claims=ClaimRepository(conn)
-        rel=claims.relation(relation_id)
-        if not rel:
-            raise HTTPException(404,'Claim relation not found')
-        claims.update_relation(relation_id,status=new_status,relationship=relationship)
-        if relationship=='supersedes' and new_status=='accepted':
-            older=claims.status_of(rel['target_claim_id'])
-            claims.set_relation_previous_status(relation_id,older)
-            claims.set_status(rel['target_claim_id'],'superseded')
-        elif rel.get('target_previous_status'):
-            # Any retreat from a confirmed supersession restores the older claim.
-            claims.restore_status(rel['target_claim_id'],rel['target_previous_status'],only_if='superseded')
-    return {'id':relation_id,'status':new_status,'relationship':relationship}
+    from .application import operation as operation_app
+    try:
+        return operation_app.resolve_claim_relation(relation_id, payload or {})
+    except NotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValidationError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 @app.post('/api/knowledge/corrections')
 async def correction_plan(payload: CorrectionRequest):
@@ -387,76 +353,31 @@ def knowledge_operation(payload: dict):
     """Execute a knowledge operation (CREATE / SUPERSEDE / MERGE / ARCHIVE / ...).
 
     The only sanctioned way to change knowledge: it validates, mutates lifecycle
-    and relationships (never content), and is recorded in the audit trail.
+    and relationships (never content), and is recorded in the audit trail. The route
+    only validates the envelope and translates errors; the work is ``operation_app``.
     """
-    from .domain.operations import OperationError, OperationRequest, run
-    body = payload or {}
-    kind = body.get('kind')
-    if not kind: raise HTTPException(422, 'kind is required')
+    from .application import operation as operation_app
+    from .domain.operations import OperationError
     try:
-        with transaction() as conn:
-            result = run(OperationRequest(kind=kind, payload=body.get('payload') or {},
-                                          actor=body.get('actor', 'user'),
-                                          reason=body.get('reason', '')), conn)
-    except OperationError as exc:
+        return operation_app.apply_operation(payload)
+    except (OperationError, ValidationError) as exc:
         raise HTTPException(422, str(exc)) from exc
-    # Post-operation integrity check, reported with the thing that caused it. An
-    # operation that produced or moved knowledge is exactly when a new disagreement can
-    # appear, and telling the user at that moment is the difference between a fix and a
-    # silent break. Only the claims the operation touched are examined — the same
-    # bounded recheck a merge performs, not a workspace scan.
-    from .review import issues_for_claims
-    touched = [str(v) for k, v in (result.affected or {}).items()
-               if v and 'claim' in str(k)]
-    return {'operation_id': result.operation_id, 'kind': result.kind,
-            'affected': result.affected, 'issues': issues_for_claims(touched)}
 
 @app.get('/api/entities/{entity_id}/object')
 def entity_object(entity_id:str):
-    entities=EntityRepository()
-    e=entities.get_full(entity_id)
-    if not e: raise HTTPException(404,'Entity not found')
-    claims=ClaimRepository().for_entity(entity_id)
-    relations=RelationRepository().for_entity(entity_id)
-    docs=list({c['source_document_id'] for c in claims})
-    events=EventRepository().for_documents(docs,50) if docs else []
-    ideas=IdeaRepository().for_documents(docs,50) if docs else []
-    questions=QuestionRepository().for_documents(docs,50) if docs else []
-    evidence=[c for c in claims if c['source_quote']]
-    type_decision=[]
-    for c in claims:
-        if c['subject_id']==entity_id and c['predicate']=='defined_as' and c['object_text']:
-            type_decision.append({'type':c['object_text'][:60],'reason':f"来源明确定义：{(c['source_quote'] or '')[:90]}",'ok':c['polarity']=='positive'})
-    counts={'claims':len(claims),'relations':len(relations),'events':len(events),'ideas':len(ideas),
-            'questions':len(questions),'evidence':len(evidence),'documents':len(docs)}
-    return {'entity':e,'counts':counts,'claims':claims,'relations':relations,'evidence':evidence,
-            'events':events,'ideas':ideas,'questions':questions,'type_decision':type_decision}
+    from .application import knowledge as knowledge_app
+    try: return knowledge_app.entity_object(entity_id)
+    except NotFoundError as exc: raise HTTPException(404,str(exc)) from exc
 
 @app.get('/api/conflicts')
 def conflicts_list(limit:int=50):
-    rows=ClaimRepository().conflicts_rows()
-    groups={}
-    for r in rows:
-        groups.setdefault((r['subject_name'],r['predicate']),[]).append(dict(r))
-    out=[]
-    for (subj,pred),cs in groups.items():
-        if len(cs)>=2 and len({c['polarity'] for c in cs})>1:
-            out.append({'subject_name':subj,'predicate':pred,'claims':cs})
-            if len(out)>=max(1,min(limit,200)): break
-    return out
+    from .application import knowledge as knowledge_app
+    return knowledge_app.conflicts(limit)
 
 @app.get('/api/knowledge/health')
 def knowledge_health():
-    entities=EntityRepository().health_counts()
-    claims=ClaimRepository().health_counts()
-    relations=RelationRepository().count()
-    open_q=QuestionRepository().open_count()
-    return {'total_claims':claims['total'],'verified_claims':claims['verified'],
-            'verified_claim_ratio':round(claims['verified']/max(1,claims['total'])*100,1),
-            'total_entities':entities['total'],'verified_entities':entities['verified'],
-            'verified_entity_ratio':round(entities['verified']/max(1,entities['total'])*100,1),
-            'object_text_claims':claims['object_text'],'relations':relations,
-            'open_questions':open_q,'stale_candidates':entities['stale']}
+    from .application import knowledge as knowledge_app
+    return knowledge_app.knowledge_health()
 
 @app.get('/api/skills')
 def skills_list():
@@ -573,11 +494,13 @@ def embeddings_backfill():
 
 @app.get('/api/search')
 def api_search(q:str,limit:int=10,semantic:bool=True):
-    if not q.strip(): return []
-    return search(q,max(1,min(limit,50)),semantic=semantic)
+    from .application import search as search_app
+    return search_app.search(q,limit,semantic)
 
 @app.post('/api/search')
-def post_search(req:SearchRequest): return search(req.query,req.limit,req.semantic)
+def post_search(req:SearchRequest):
+    from .application import search as search_app
+    return search_app.search(req.query,req.limit,req.semantic)
 
 
 @app.get('/api/search/knowledge')
@@ -590,8 +513,8 @@ def api_search_knowledge(q:str,limit:int=8,semantic:bool=True):
     it came from second. Two shapes, two addresses, so no caller has to special-case
     the other's format.
     """
-    if not q.strip(): return {'knowledge':[],'results':[]}
-    return search_knowledge(q,max(1,min(limit,50)),semantic=semantic)
+    from .application import search as search_app
+    return search_app.search_knowledge(q,limit,semantic)
 
 @app.post('/api/onebox/intent')
 def onebox_intent(req:IntentRequest):
@@ -653,9 +576,11 @@ def integrity_merge(req:MergeRequest):
     evidence, and no winner is chosen between conflicting facts. The response carries
     the post-merge recheck, because the conflicts this creates are a result of the
     operation rather than a separate thing to remember.
+
+    The write lives in ``operation_app``; this handler only translates errors.
     """
-    from .integrity import merge_entities
-    try: return merge_entities(keep_id=req.keep_id,drop_id=req.drop_id)
+    from .application import operation as operation_app
+    try: return operation_app.merge_entities(keep_id=req.keep_id, drop_id=req.drop_id)
     except ValueError as exc: raise HTTPException(422,str(exc)) from exc
 
 
@@ -747,17 +672,6 @@ def document_chunks(doc_id: str):
     return rows
 
 
-def _predicate_label(predicate: str | None) -> str | None:
-    """The registry's label for a predicate, or ``None`` when it declares none.
-
-    ``has_ceo`` renders as 首席执行官 instead of the raw identifier. Predicates
-    without a label stay raw on purpose: inventing a translation in the API layer
-    would be a second vocabulary, and the registry is its only home (ADR-011).
-    """
-    spec = claim_predicate_spec(predicate or '')
-    return spec.label if spec else None
-
-
 @app.get('/api/ontology/predicates')
 def ontology_predicates():
     """The registry's *display layer*: what each predicate is called in words.
@@ -783,38 +697,12 @@ def document_knowledge(doc_id: str):
 
     Composed from existing reads only: nothing is inferred, and the names are taken
     from the claims themselves, so this view can never disagree with the knowledge
-    base — it *is* the knowledge base, filtered to one document.
-
-    ``predicate_label`` is the registry's own label (``None`` when the registry
-    declares none). It travels from the registry so no surface has to keep a
-    second vocabulary of predicate names.
+    base — it *is* the knowledge base, filtered to one document. Owned by
+    ``knowledge_app``; the route only translates a missing document to 404.
     """
-    if not DocumentRepository().exists(doc_id):
-        raise HTTPException(404,'Document not found')
-    claims = ClaimRepository().for_document(doc_id, limit=200)
-    names: list[str] = []
-    seen: set[str] = set()
-    for c in claims:
-        for n in (c.get('subject_name'), c.get('object_name')):
-            if n and n not in seen:
-                seen.add(n); names.append(n)
-    return {
-        'document_id': doc_id,
-        'names': names,
-        'claims': [{
-            'id': c.get('id'), 'subject': c.get('subject_name') or '',
-            'predicate': c.get('predicate'),
-            'predicate_label': _predicate_label(c.get('predicate')),
-            'object': c.get('object_name') or c.get('object_text') or '',
-            'status': c.get('status'), 'confidence': c.get('confidence'),
-            'quote': c.get('source_quote'),
-        } for c in claims],
-        'counts': {
-            'claims': len(claims),
-            'names': len(names),
-            'pending': sum(1 for c in claims if c.get('status') == 'candidate'),
-        },
-    }
+    from .application import knowledge as knowledge_app
+    try: return knowledge_app.document_knowledge(doc_id)
+    except NotFoundError as exc: raise HTTPException(404,str(exc)) from exc
 
 @app.get('/api/entities')
 def entities(limit:int=100,offset:int=0,status:str|None=None,type:str|None=None,q:str|None=None):
@@ -832,62 +720,33 @@ def entity(entity_id:str):
 
 @app.patch('/api/entities/{entity_id}')
 def update_entity(entity_id:str,payload:EntityUpdate):
-    changes={}
-    if payload.description is not None: changes['description']=payload.description
-    if payload.name is not None:
-        changes['name']=payload.name.strip()
-        changes['aliases_json']=dumps(sorted({payload.name.strip(), *(payload.aliases or [])}))
-    elif payload.aliases is not None:
-        changes['aliases_json']=dumps(payload.aliases)
-    if payload.type is not None:
-        try: et=canonical_entity_type(payload.type)
-        except ValueError as exc: raise HTTPException(422,str(exc)) from exc
-        changes['type']=et
-        changes['types_json']=dumps([et])
-    if payload.properties: changes['properties_json']=dumps(payload.properties)
-    entities=EntityRepository()
-    if not changes:
-        if not entities.exists(entity_id): raise HTTPException(404,'Entity not found')
-        return {'id':entity_id,'updated':False}
-    aliases=loads(changes['aliases_json'],[]) if 'aliases_json' in changes else None
-    try:
-        rowcount=entities.update(entity_id,changes,aliases=aliases,normalize=normalize_name)
-    except sqlite3.IntegrityError as exc:
-        raise HTTPException(409,'Another entity already uses this name') from exc
-    if not rowcount: raise HTTPException(404,'Entity not found')
-    return {'id':entity_id,'updated':True}
+    from .application import knowledge as knowledge_app
+    try: return knowledge_app.update_entity(entity_id, payload)
+    except ValidationError as exc: raise HTTPException(422,str(exc)) from exc
+    except ConflictError as exc: raise HTTPException(409,str(exc)) from exc
+    except NotFoundError as exc: raise HTTPException(404,str(exc)) from exc
 
 @app.post('/api/entities')
 def create_entity(payload:EntityCreate):
-    import uuid
-    try: et=canonical_entity_type(payload.type)
-    except ValueError as exc: raise HTTPException(422,str(exc)) from exc
-    eid=str(uuid.uuid4()); name=payload.name.strip()
-    aliases=sorted({name, *[a.strip() for a in payload.aliases if a.strip()]})
-    try:
-        EntityRepository().insert(eid,type=et,types=[et],name=name,aliases=aliases,
-                                  description=payload.description,properties=payload.properties,
-                                  normalize=normalize_name)
-    except sqlite3.IntegrityError as exc:
-        raise HTTPException(409,'An entity with this name already exists') from exc
-    return {'id':eid,'name':name,'status':'candidate'}
+    from .application import knowledge as knowledge_app
+    try: return knowledge_app.create_entity(payload)
+    except ValidationError as exc: raise HTTPException(422,str(exc)) from exc
+    except ConflictError as exc: raise HTTPException(409,str(exc)) from exc
 
 @app.post('/api/ideas')
 def create_idea(payload:IdeaCreate):
-    iid=IdeaRepository().insert(content=payload.content,status=payload.status,source_document_id=payload.source_document_id)
-    return {'id':iid,'status':payload.status}
+    from .application import knowledge as knowledge_app
+    return knowledge_app.create_idea(payload)
 
 @app.post('/api/questions')
 def create_question(payload:QuestionCreate):
-    qid=QuestionRepository().insert(content=payload.content,status=payload.status,source_document_id=payload.source_document_id)
-    return {'id':qid,'status':payload.status}
+    from .application import knowledge as knowledge_app
+    return knowledge_app.create_question(payload)
 
 @app.post('/api/events')
 def create_event(payload:EventCreate):
-    eid=EventRepository().insert(event_type=payload.event_type,description=payload.description,
-                                 participants=payload.participants,time=payload.time,location=payload.location,
-                                 status=payload.status,source_document_id=payload.source_document_id)
-    return {'id':eid,'status':payload.status}
+    from .application import knowledge as knowledge_app
+    return knowledge_app.create_event(payload)
 
 @app.get('/api/research')
 def research_list(limit:int=50):
@@ -929,23 +788,15 @@ async def research_propose_candidates(task_id:str):
 
 @app.post('/api/research')
 def research_create(payload:ResearchCreate):
-    rid=ResearchRepository().create(question_id=payload.question_id,question_text=payload.question_text)
-    return {'id':rid,'status':'open'}
+    from .application import workflow as workflow_app
+    return workflow_app.create_research(payload)
 
 @app.post('/api/research/{task_id}/run')
 async def research_run(task_id:str):
-    research=ResearchRepository()
-    task=research.get(task_id)
-    if not task: raise HTTPException(404,'Research task not found')
-    research.set_status(task_id,'running')
-    try:
-        from .workflows.agent_workflow import run_research_pipeline
-        result=await run_research_pipeline(task['question_text'])
-        research.set_status(task_id,'completed',result['answer'])
-        return {'id':task_id,'status':'completed','findings':result['answer'],'agent':result['agent'],
-                'packet_id':result.get('packet_id')}
+    from .application import workflow as workflow_app
+    try: return await workflow_app.run_research(task_id)
+    except NotFoundError as exc: raise HTTPException(404,str(exc)) from exc
     except Exception as exc:
-        research.set_status(task_id,'failed',f'{type(exc).__name__}: {exc}')
         raise HTTPException(502,f'Research failed: {exc}') from exc
 
 @app.post('/api/runs/{run_id}/cancel')
@@ -992,41 +843,40 @@ def review_inbox():
     person can still act on: a sidebar count and the page it opens must not disagree,
     and a queue that can never be emptied is one nobody reads.
     """
-    from .review import inbox
-    return inbox()
+    from .readmodels.review import review_inbox
+    return review_inbox()
 
 
 @app.get('/api/review')
 def review(limit:int=200):
     """Raw unreviewed rows, one list per table — what the Review page renders.
 
-    The default is the window the Review Inbox counts (app/review.py): a badge and the
-    list it opens must describe the same set, so the page calls this without a limit
-    and both read the same number from the same place.
+    The detailed rows are presentation; the pending *count* is not recomputed here.
+    It is read from the single Review owner (``review_inbox``) so the badge and this
+    page can never show different numbers for the same question.
     """
+    from .readmodels.review import review_inbox
+    inbox=review_inbox()
     limit=max(1,min(limit,500))
     return {'entities':EntityRepository().candidates(limit),
             'claims':ClaimRepository().candidates(limit),
-            'relations':RelationRepository().candidates(limit)}
+            'relations':RelationRepository().candidates(limit),
+            'total':inbox['total'], 'groups':inbox['groups'],
+            'maintenance':inbox['maintenance']}
 
 @app.patch('/api/knowledge/{kind}/{item_id}/status')
 def update_status(kind:str,item_id:str,payload:StatusUpdate):
-    allowed=KNOWLEDGE_STATUSES if kind in {'entity','claim','relation'} else IDEA_STATUSES if kind=='idea' else QUESTION_STATUSES if kind=='question' else set()
-    if payload.status not in allowed: raise HTTPException(422,'Invalid status')
-    if kind=='entity':
-        rowcount=EntityRepository().update(item_id,{'status':payload.status})
-    elif kind=='claim':
-        rowcount=ClaimRepository().set_status(item_id,payload.status)
-    elif kind=='relation':
-        rowcount=RelationRepository().set_status(item_id,payload.status)
-    elif kind=='idea':
-        rowcount=IdeaRepository().set_status(item_id,payload.status)
-    elif kind=='question':
-        rowcount=QuestionRepository().set_status(item_id,payload.status)
-    else:
-        raise HTTPException(400,'Unsupported knowledge kind')
-    if not rowcount: raise HTTPException(404,'Knowledge object not found')
-    return {'id':item_id,'status':payload.status}
+    """Change a knowledge object's lifecycle status.
+
+    The write lives in ``operation_app`` (Phase 3 will express it as an ARCHIVE / RESTORE
+    / ACCEPT Operation); the route only validates and translates errors.
+    """
+    from .application import operation as operation_app
+    try:
+        return operation_app.update_knowledge_status(kind, item_id, payload.status)
+    except ValidationError as exc: raise HTTPException(422,str(exc)) from exc
+    except BadRequestError as exc: raise HTTPException(400,str(exc)) from exc
+    except NotFoundError as exc: raise HTTPException(404,str(exc)) from exc
 
 @app.get('/api/runs')
 def list_runs(limit:int=50, task_type:str|None=None, status:str|None=None):
@@ -1204,15 +1054,11 @@ def qa_validate(req: CitationValidateRequest):
 
 @app.put('/api/documents/{doc_id}')
 def update_doc(doc_id: str, data: DocumentCreate):
+    from .application import knowledge as knowledge_app
     try:
-        rowcount=DocumentRepository().update(doc_id,title=data.title,content=data.content,
-                                             source_type=data.source_type,source_uri=data.source_uri,
-                                             metadata=data.metadata)
-    except sqlite3.IntegrityError as exc:
-        raise HTTPException(409, 'Another document already has the same content') from exc
-    if not rowcount:
-        raise HTTPException(404, 'Document not found')
-    return {'id': doc_id, 'updated': True}
+        return knowledge_app.update_document(doc_id, data)
+    except ConflictError as exc: raise HTTPException(409,str(exc)) from exc
+    except NotFoundError as exc: raise HTTPException(404,str(exc)) from exc
 
 @app.delete('/api/documents/{doc_id}')
 def delete_doc(doc_id: str):

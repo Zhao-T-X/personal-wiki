@@ -195,6 +195,10 @@ async function applyVerdict(c: ClaimChange, verdict: { relationship: string }) {
       <button v-if="selectedCount" class="btn ghost" :disabled="busy === 'batch'" @click="clearSelection">清除选择</button>
     </div>
 
+    <p v-if="changes.length >= 200" class="muted" style="font-size:9px;margin:0 0 12px">
+      关系候选较多，本页仅加载前 200 条；处理完当前批次后再刷新可查看其余待确认关系。
+    </p>
+
     <div v-for="c in pending" :key="c.id" class="panel pad changecard" :class="{ picked: isSelected(c.id) }">
       <div class="row" style="gap:8px;flex-wrap:wrap">
         <input type="checkbox" :checked="isSelected(c.id)" @change="toggleSelect(c.id)"

@@ -14,7 +14,7 @@ const cmdOpen = ref(false)
 
 /* 五个空间，对应五种「我要做什么」：
  *
- *   首页（看状态）· 知识（读与改）· 问答（问）· 研究（查未知）· 设置（配置）
+ *   首页（看状态）· 我的知识库（读与改）· 问答（问）· 研究（查未知）· 设置（配置）
  *
  * 纠正 / 审核 / 评测 / Agent 工作台不在其中，因为它们不是*目的地*：纠正长在答案、
  * 卡片和搜索结果旁边（你是在读到错的东西时才想改它）；审核是一次待办，只在真的
@@ -23,7 +23,7 @@ const cmdOpen = ref(false)
  */
 const items = [
   { id: '/', icon: '⌂', text: '首页' },
-  { id: '/knowledge', icon: '✦', text: '知识' },
+  { id: '/knowledge', icon: '✦', text: '我的知识库' },
   { id: '/qa', icon: '◎', text: '问答' },
   { id: '/research', icon: '◇', text: '研究' },
   { id: '/settings', icon: '⚙', text: '设置' },
@@ -38,15 +38,15 @@ const devItems = [
 ]
 
 const CRUMBS: Record<string, string> = {
-  '/': '首页', '/knowledge': '知识', '/qa': '问答', '/research': '研究',
+  '/': '首页', '/knowledge': '我的知识库', '/qa': '问答', '/research': '研究',
   '/review': '审核', '/correction': '纠正',
   '/agent': 'Agent 工作台', '/settings': '设置', '/settings/database': '设置 / Database',
   '/eval': '评测',
 }
 const crumb = computed(() => {
   const path = route.path
-  if (path.startsWith('/knowledge/object/')) return ['知识', 'Knowledge Object']
-  if (path.startsWith('/knowledge/claim/')) return ['知识', 'Claim']
+  if (path.startsWith('/knowledge/object/')) return ['我的知识库', 'Knowledge Object']
+  if (path.startsWith('/knowledge/claim/')) return ['我的知识库', 'Claim']
   return (CRUMBS[path] || '首页').split(' / ')
 })
 
@@ -109,7 +109,7 @@ const MOBILE_ITEMS = items
         </div>
         <div class="grow"></div>
         <div class="omni" @click="cmdOpen = true">
-          <span>⌕</span><span>搜索知识，或直接提问…</span><kbd>⌘K</kbd>
+          <span>⌕</span><span>搜索我的知识库，或直接提问…</span><kbd>⌘K</kbd>
         </div>
       </header>
       <div class="content">

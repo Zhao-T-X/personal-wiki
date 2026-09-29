@@ -45,7 +45,16 @@ _CORRECT_MARKS = ('不对', '错了', '记错', '纠正', '应该是', '已更�
 _KNOWLEDGE_MARKS = ('记住', '记一下', '帮我记', '记进', '记入', '收录', '存进', '存入知识库',
                     '我的偏好是')
 _RESEARCH_MARKS = ('研究', '调研', '分析一下', '比较一下', '探究', '来龙去脉', '为什么', '有什么变化', '梳理')
-_QUESTION_MARKS = ('？', '?', '是谁', '是什么', '什么是', '多少', '哪些', '几点', '怎么样', '如何', '吗')
+# A question is read from its *shape*, not from a domain vocabulary. The list below
+# intentionally covers bare particles ("什么" / "谁") so natural回访 phrasings like
+# "最近我记录了什么" / "这篇文章讲了什么" are recognised as questions instead of being
+# dropped to UNKNOWN. It never names a predicate or a type — those stay in the registry.
+_QUESTION_MARKS = ('？', '?', '是谁', '是什么', '什么是', '多少', '哪些', '几点', '怎么样',
+                   '如何', '吗', '什么', '谁', '怎么', '为什么', '哪一个', '哪几个')
+# Bare particles are also common inside statements that are *not* questions: "没什么" /
+# "没啥" mean "nothing", not "what". Without this guard, "这里没什么要记的" would be
+# misread as a question the moment bare particles were added.
+_QUESTION_NEGATIONS = ('没什么', '没啥', '无所谓')
 
 # What to offer when the sentence could mean several things. Shortcuts, never a guess.
 _SUGGESTIONS = ('问一个事实问题', '研究这个主题', '把一段内容存成知识')
@@ -81,6 +90,11 @@ class Intent:
 
 def _marked(text: str, marks: tuple[str, ...]) -> str | None:
     return next((m for m in marks if m in text), None)
+
+
+def _question_negated(text: str) -> bool:
+    """A bare particle was found, but the sentence is not actually asking."""
+    return any(neg in text for neg in _QUESTION_NEGATIONS)
 
 
 def classify(text: str, *, context_claim_id: str | None = None,
@@ -122,7 +136,7 @@ def classify(text: str, *, context_claim_id: str | None = None,
     if (mark := _marked(sentence, _RESEARCH_MARKS)):
         return _planned(RESEARCH, 0.8, f'研究表述（「{mark}」）', sentence)
 
-    if (mark := _marked(sentence, _QUESTION_MARKS)):
+    if (mark := _marked(sentence, _QUESTION_MARKS)) and not _question_negated(sentence):
         return _planned(ASK, 0.85, f'问句（「{mark}」）', sentence)
 
     # A declarative naming a known subject and a registered predicate is a statement

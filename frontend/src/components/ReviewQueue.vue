@@ -41,6 +41,9 @@ const review = useAsyncState(
 )
 const data = review.data
 
+/** 后端对每类候选默认上限 200、且不支持 offset：列表触顶时不许假装这就是全部。 */
+const listCapped = computed(() => (data.value[kind.value]?.length || 0) >= 200)
+
 async function load() {
   expanded.value = new Set()
   await review.reload()
@@ -247,6 +250,10 @@ function rejectAll() {
         接受高置信（{{ highConfidence.length }}）
       </button>
       <button class="btn danger" :disabled="busy" @click="rejectAll">全部拒绝…</button>
+    </div>
+
+    <div v-if="listCapped" class="notice violet" style="margin:0 0 12px">
+      该类别候选较多，本页仅展示前 200 条。处理完当前批次后刷新，系统会再放出下一批待确认内容。
     </div>
 
     <div class="panel pad" style="padding:6px">

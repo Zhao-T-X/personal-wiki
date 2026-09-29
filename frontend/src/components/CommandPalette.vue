@@ -15,9 +15,10 @@ const inputEl = ref<HTMLInputElement | null>(null)
 
 interface Cmd { group: string; icon: string; cls: string; title: string; sub?: string; run: () => void }
 
+/** 普通用户只看到「问 / 搜 / 看知识 / 纠正 / 研究 / 审核 / 设置」——不再被迫理解 Agent，
+    也不指向开发者才看得懂的 Tab（冲突中心 / 知识健康在普通模式被隐藏）。 */
 const coreCommands: Cmd[] = [
-  { group: '提问与搜索', icon: '◎', cls: 'ib-violet', title: '提问知识库（知识库问答）', run: () => done({ path: '/qa' }) },
-  { group: '提问与搜索', icon: '◌', cls: 'ib-violet', title: '提问 Agent（ReAct Agent）', run: () => done({ path: '/qa', query: { mode: 'agent' } }) },
+  { group: '提问与搜索', icon: '◎', cls: 'ib-violet', title: '提问知识库', run: () => done({ path: '/qa' }) },
   { group: '提问与搜索', icon: '⌕', cls: 'ib-blue', title: '搜索知识（正文检索）', run: () => done({ path: '/knowledge' }) },
   { group: '知识', icon: '✦', cls: 'ib-blue', title: '打开知识库', run: () => done({ path: '/knowledge' }) },
   { group: '知识', icon: '⌘', cls: 'ib-blue', title: '关系图谱', run: () => done({ path: '/knowledge', query: { tab: 'graph' } }) },
@@ -26,18 +27,19 @@ const coreCommands: Cmd[] = [
   { group: '知识', icon: '✎', cls: 'ib-violet', title: '纠正一条知识（描述哪里不对）', run: () => done({ path: '/correction' }) },
   { group: '研究', icon: '◇', cls: 'ib-amber', title: '研究空间', run: () => done({ path: '/research' }) },
   { group: '研究', icon: '✓', cls: 'ib-mint', title: '审核候选知识', run: () => done({ path: '/review' }) },
-  { group: '研究', icon: '⚠', cls: 'ib-amber', title: '冲突中心', run: () => done({ path: '/research', query: { tab: 'conflicts' } }) },
-  { group: '研究', icon: '♥', cls: 'ib-mint', title: '知识健康', run: () => done({ path: '/research', query: { tab: 'health' } }) },
   { group: '系统', icon: '⚙', cls: 'ib-blue', title: '设置', run: () => done({ path: '/settings' }) },
-  { group: '系统', icon: '◉', cls: 'ib-violet', title: 'Database', run: () => done({ path: '/settings/database' }) },
 ]
 
 /** 维护系统本身用得到的入口。跟着 Developer Mode 走，但仍直达可用——
     关掉的只是"顺手看得见"，不是"够不着"。 */
 const devCommands: Cmd[] = [
+  { group: '提问与搜索', icon: '◌', cls: 'ib-violet', title: '提问 Agent（ReAct Agent）', run: () => done({ path: '/qa', query: { mode: 'agent' } }) },
   { group: '开发者', icon: '◌', cls: 'ib-violet', title: 'Agent 工作台', run: () => done({ path: '/agent' }) },
   { group: '开发者', icon: '✎', cls: 'ib-violet', title: '编辑 Prompt', run: () => done({ path: '/agent', query: { tab: 'prompt' } }) },
   { group: '开发者', icon: '◈', cls: 'ib-violet', title: '评测面板', run: () => done({ path: '/eval' }) },
+  { group: '开发者', icon: '◉', cls: 'ib-violet', title: 'Database', run: () => done({ path: '/settings/database' }) },
+  { group: '研究', icon: '⚠', cls: 'ib-amber', title: '冲突中心', run: () => done({ path: '/research', query: { tab: 'conflicts' } }) },
+  { group: '研究', icon: '♥', cls: 'ib-mint', title: '知识健康', run: () => done({ path: '/research', query: { tab: 'health' } }) },
 ]
 
 const baseCommands = computed<Cmd[]>(() =>

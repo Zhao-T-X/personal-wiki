@@ -96,8 +96,9 @@ const entitiesRes = useAsyncState(async () => {
   if (es.length) entityTotal.value = (es[0] as any).total ?? es.length
   return es
 }, [] as Entity[])
+const eventLimit = ref(100)
 const eventsRes = useAsyncState(
-  () => api<EventRow[]>('/api/events?limit=100'), [] as EventRow[])
+  () => api<EventRow[]>('/api/events?limit=' + eventLimit.value), [] as EventRow[])
 
 const docs = docsRes.data
 const entities = entitiesRes.data
@@ -113,6 +114,14 @@ async function moreEntities() {
     if (es.length) entityTotal.value = (es[0] as any).total ?? entityTotal.value
     entitiesRes.set([...entities.value, ...es])
   } catch (e: any) { store.toast('加载更多实体失败：' + e.message) }
+}
+
+/** 时间线同样按页加载：事件可能成千上万，一次读全既慢又淹没真正要看的那几条。 */
+async function moreEvents() {
+  try {
+    const es = await api<EventRow[]>(`/api/events?limit=${eventLimit.value}&offset=${events.value.length}`)
+    eventsRes.set([...events.value, ...es])
+  } catch (e: any) { store.toast('加载更多事件失败：' + (e.message || '请稍后重试')) }
 }
 
 const drawerDoc = ref<DocumentRow | null>(null)
@@ -244,7 +253,7 @@ async function backfillEmbeddings() {
   embedding.value = true
   try {
     const r = await post<any>('/api/embeddings/backfill')
-    store.toast(`已嵌入 ${r.embedded_documents} 篇文档 · ${r.chunks} chunks · ${r.model}`)
+    store.toast(`已嵌入 ${r.embedded_documents} 篇文档 · ${r.chunks} 片段 · ${r.model}`)
     await loadAll()
   } catch (e: any) { store.toast(e.message) } finally { embedding.value = false }
 }
@@ -286,10 +295,13 @@ function openDocById(documentId: string) {
 
 /* ---------- graph ---------- */
 const graphBox = ref<HTMLElement | null>(null)
+/** 图谱只采样部分关系网络——把"显示了多少"说出来，否则用户以为看到的就全是关系。 */
+const graphInfo = ref<{ nodes: number; edges: number }>({ nodes: 0, edges: 0 })
 let cy: cytoscape.Core | null = null
 async function drawGraph() {
   if (!graphBox.value) return
-  const g = await api<any>('/api/graph?limit=120')
+  const g = await api<any>('/api/graph?limit=200')
+  graphInfo.value = { nodes: g.nodes?.length || 0, edges: g.edges?.length || 0 }
   const elements = [
     ...g.nodes.map((n: any) => ({ data: { id: n.id, label: n.name, color: TYPE_COLORS[n.type] || DEFAULT_NODE_COLOR, verified: n.status === 'verified' } })),
     ...g.edges.map((e: any) => ({ data: { id: e.id, source: e.source_id, target: e.target_id, label: e.predicate } })),
@@ -356,7 +368,7 @@ const showAllDocs = computed(() => docLimit.value >= docTotal.value)
           <p>{{ (r.content || '').slice(0, 140) }}</p>
           <div style="margin-top:4px">
             <span v-for="m in (r.matched_in || [])" :key="m" class="tag blue">{{ MATCH_LABEL[m] || m }}</span>
-            <span class="tag">chunk #{{ r.chunk_index ?? '—' }}</span>
+            <span class="tag">片段 #{{ r.chunk_index ?? '—' }}</span>
             <span class="tag">打开来源 →</span>
           </div>
         </div>
@@ -373,9 +385,9 @@ const showAllDocs = computed(() => docLimit.value >= docTotal.value)
       <!-- 导入口与首页是同一个组件、同一份实现 -->
       <ImportPanel ref="importer" @imported="onImported" @open-document="openDocById" />
 
-      <div class="sechead"><h3>Documents <span class="faint" style="font-weight:400;font-size:9px">· {{ docs.length }}/{{ docTotal }}</span></h3>
+      <div class="sechead"><h3>文档 <span class="faint" style="font-weight:400;font-size:9px">· {{ docs.length }}/{{ docTotal }}</span></h3>
         <span class="row" style="gap:8px">
-          <button class="btn" :disabled="embedding" @click="backfillEmbeddings">{{ embedding ? '嵌入中…' : '⚡ 生成全部嵌入' }}</button>
+          <button class="btn" :disabled="embedding" @click="backfillEmbeddings">{{ embedding ? '生成中…' : '⚡ 重新生成语义索引' }}</button>
           <button class="btn" @click="importer?.pick()">＋ 导入</button>
           <button class="btn primary" @click="showNew = true">＋ 新建文档</button>
         </span>
@@ -387,7 +399,7 @@ const showAllDocs = computed(() => docLimit.value >= docTotal.value)
         <div class="panel pad" style="padding:6px">
           <div v-for="d in docs" :key="d.id" class="item" @click="openDoc(d)">
             <div class="ico-badge ib-blue">▤</div>
-            <div class="grow"><b>{{ d.title }}</b><p>{{ d.source_type }} · {{ d.chunk_count }} chunks · {{ fmtDateTime(d.updated_at) }}</p></div>
+            <div class="grow"><b>{{ d.title }}</b><p>{{ d.source_type }} · {{ d.chunk_count }} 片段 · {{ fmtDateTime(d.updated_at) }}</p></div>
             <StatusTag v-if="d.last_run_status" :status="d.last_run_status" /><span v-else class="tag amber">未索引</span>
           </div>
           <EmptyState v-if="!docs.length" text="还没有文档——导入或新建一篇" />
@@ -397,7 +409,7 @@ const showAllDocs = computed(() => docLimit.value >= docTotal.value)
         </div>
       </LoadBoundary>
 
-      <div class="sechead"><h3>Knowledge Objects <span class="faint" style="font-weight:400;font-size:9px">· {{ entities.length }}/{{ entityTotal }}</span></h3>
+      <div class="sechead"><h3>知识对象 <span class="faint" style="font-weight:400;font-size:9px">· {{ entities.length }}/{{ entityTotal }}</span></h3>
         <button class="btn" @click="showNewEntity = true">＋ 新建实体</button>
       </div>
       <LoadBoundary :state="entitiesRes.state.value" loading-text="正在读取知识对象…"
@@ -421,7 +433,10 @@ const showAllDocs = computed(() => docLimit.value >= docTotal.value)
     <!-- 图谱 -->
     <div v-show="tab === '图谱'">
       <div class="row" style="margin-bottom:12px">
-        <span class="faint" style="font-size:9px">点击节点进入对象详情 · 深色描边为已验证实体 · 拖拽/滚轮缩放</span>
+        <span class="faint" style="font-size:9px">
+          <template v-if="graphInfo.nodes">已显示 {{ graphInfo.nodes }} 个对象 · {{ graphInfo.edges }} 条关系（仅展示部分网络，点击对象查看其完整关系）</template>
+          <template v-else>点击节点进入对象详情 · 深色描边为已验证实体 · 拖拽/滚轮缩放</template>
+        </span>
         <div class="grow"></div>
         <button class="btn sm" @click="drawGraph">重新布局</button>
       </div>
@@ -452,6 +467,9 @@ const showAllDocs = computed(() => docLimit.value >= docTotal.value)
           </div>
         </div>
       </LoadBoundary>
+      <div v-if="events.length > 0 && events.length % eventLimit === 0" style="text-align:center;margin-top:10px">
+        <button class="btn" @click="moreEvents">加载更多事件</button>
+      </div>
     </div>
 
     <AppDrawer :open="!!drawerDoc" :title="drawerDoc?.title || ''" @close="drawerDoc = null">
@@ -459,12 +477,12 @@ const showAllDocs = computed(() => docLimit.value >= docTotal.value)
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
           <StatusTag v-if="drawerDoc.last_run_status" :status="drawerDoc.last_run_status" />
           <span class="tag blue">{{ drawerDoc.source_type }}</span>
-          <span class="tag">{{ drawerDoc.chunk_count }} chunks</span>
+          <span class="tag">{{ drawerDoc.chunk_count }} 片段</span>
         </div>
         <div class="row" style="flex-wrap:wrap;gap:8px;margin-bottom:12px">
-          <button class="btn primary" @click="actDoc(drawerDoc, 'index')">Index with LLM</button>
-          <button class="btn" @click="actDoc(drawerDoc, 'local')">Chunks only</button>
-          <button class="btn" @click="actDoc(drawerDoc, 'embed')">Embeddings</button>
+          <button class="btn primary" @click="actDoc(drawerDoc, 'index')">用模型抽取</button>
+          <button class="btn" @click="actDoc(drawerDoc, 'local')">仅分段（不抽取）</button>
+          <button class="btn" @click="actDoc(drawerDoc, 'embed')">生成语义索引</button>
           <button class="btn danger" @click="actDoc(drawerDoc, 'delete')">删除</button>
         </div>
         <!-- 这篇产生的知识。文档抽屉 = 该文档作用域的视图，不是"知识库首页"。
@@ -473,7 +491,7 @@ const showAllDocs = computed(() => docLimit.value >= docTotal.value)
         <div v-else-if="drawerKnowledge?.claims?.length" style="margin:14px 0 4px">
           <div class="sechead" style="margin-top:0">
             <h3>这篇产生的知识</h3>
-            <span class="tag" style="margin:0">{{ drawerKnowledge.counts.claims }}</span>
+            <span class="tag" style="margin:0">{{ drawerKnowledge.counts.claims }} 条事实</span>
           </div>
           <div class="dkl">
             <KnowledgeCard v-for="c in drawerCards" :key="c.id" :claim="c" compact
@@ -485,7 +503,7 @@ const showAllDocs = computed(() => docLimit.value >= docTotal.value)
         </div>
 
         <details ref="chunksBox" style="margin:10px 0">
-          <summary style="cursor:pointer;font-size:10px;color:var(--sub)">Chunks ({{ drawerChunks.length }})</summary>
+          <summary style="cursor:pointer;font-size:10px;color:var(--sub)">原文片段 ({{ drawerChunks.length }})</summary>
           <div v-for="c in drawerChunks" :key="c.id" class="listitem chunk" :class="{ hl: c.id === highlightChunk }" style="margin-top:6px">
             <b>#{{ c.chunk_index }}</b><span v-if="c.id === highlightChunk" class="tag blue" style="margin-left:6px">来源片段</span><p>{{ c.content.slice(0, 160) }}…</p>
           </div>

@@ -12,7 +12,7 @@ import AppModal from '../components/AppModal.vue'
 import KnowledgeCard from '../components/KnowledgeCard.vue'
 import { useAppStore } from '../stores/app'
 import { fmtDateTime } from '../utils/time'
-import { toCard } from '../utils/claim'
+import { toCard, labelOf } from '../utils/claim'
 import { TYPE_COLORS, DEFAULT_NODE_COLOR, edgeEndpoints } from '../utils/graph'
 
 const route = useRoute()
@@ -164,7 +164,7 @@ async function drawLocalGraph() {
       })),
       ...edges.map((e: any) => {
         const { source, target } = edgeEndpoints(e)
-        return { data: { id: e.id, source, target, label: e.predicate } }
+        return { data: { id: e.id, source, target, label: labelOf(e.predicate) } }
       }),
     ]
     cy?.destroy()
@@ -265,7 +265,7 @@ watch(tab, t => { if (t === 'Graph') drawLocalGraph() })
         <div class="panel pad" style="padding:6px">
           <div v-for="r in relations.slice(0, 5)" :key="r.id" class="item" style="cursor:default">
             <div class="ico-badge ib-blue">→</div>
-            <div class="grow"><b>{{ r.source_name }} → {{ r.predicate }} → {{ r.target_name }}</b><p>{{ r.status }}</p></div>
+            <div class="grow"><b>{{ r.source_name }} → {{ labelOf(r.predicate) }} → {{ r.target_name }}</b><p>{{ r.status }}</p></div>
           </div>
           <EmptyState v-if="!relations.length" text="暂无图谱关系" />
         </div>
@@ -286,7 +286,7 @@ watch(tab, t => { if (t === 'Graph') drawLocalGraph() })
       <div class="panel pad" style="padding:6px">
         <div v-for="r in relations" :key="r.id" class="item" style="cursor:default">
           <div class="ico-badge ib-blue">→</div>
-          <div class="grow"><b>{{ r.source_name }} → {{ r.predicate }} → {{ r.target_name }}</b><p>confidence {{ r.confidence ?? '—' }}</p></div>
+          <div class="grow"><b>{{ r.source_name }} → {{ labelOf(r.predicate) }} → {{ r.target_name }}</b><p>confidence {{ r.confidence ?? '—' }}</p></div>
           <StatusTag :status="r.status" />
         </div>
         <EmptyState v-if="!relations.length" text="暂无图谱关系" />
@@ -306,7 +306,7 @@ watch(tab, t => { if (t === 'Graph') drawLocalGraph() })
       <div v-if="selectedEdge" class="panel pad" style="margin-top:12px">
         <div style="font-size:12.5px">
           <b>{{ selectedEdge.source }}</b>
-          <span class="tag blue" style="margin:0 6px">{{ selectedEdge.predicate }}</span>
+          <span class="tag blue" style="margin:0 6px">{{ labelOf(selectedEdge.predicate) }}</span>
           <b>{{ selectedEdge.target }}</b>
         </div>
         <div class="row" style="margin-top:10px;gap:8px;flex-wrap:wrap">
@@ -384,7 +384,8 @@ watch(tab, t => { if (t === 'Graph') drawLocalGraph() })
       </div>
     </div>
 
-    <AppModal :open="showEdit" title="编辑实体" subtitle="类型受 Ontology 注册表约束；改名会同步别名并做去重。" @close="showEdit = false">
+    <AppModal :open="showEdit" title="编辑实体"
+               :subtitle="store.developerMode ? '类型受 Ontology 注册表约束；改名会同步别名并做去重。' : '选择这个对象的类别。改名会同步别名并做去重。'" @close="showEdit = false">
       <input v-model="editName" class="field" style="width:100%" placeholder="名称" />
       <select v-model="editType" class="field" style="width:100%;margin-top:9px">
         <option v-for="t in ENTITY_TYPES" :key="t">{{ t }}</option>

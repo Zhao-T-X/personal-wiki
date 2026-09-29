@@ -133,6 +133,10 @@ const home = useAsyncState<HomeData>(async () => {
   examples: [...DEFAULT_EXAMPLES], changes: null, window7: null,
 })
 
+/** True once the home data has loaded successfully — gates example chips and the
+    "needs your judgement" panel so they never appear over a loading/error state. */
+const loaded = computed(() => home.status.value === 'success')
+
 const entities = computed(() => home.data.value.entities)
 const docs = computed(() => home.data.value.docs)
 const openQuestions = computed(() => home.data.value.openQuestions)
@@ -191,7 +195,8 @@ function openDocument(id: string) {
     <!-- 第一屏只回答一个问题：这东西要我怎么用 -->
     <div style="max-width:720px;margin:4vh auto 0;text-align:center">
       <div class="eyebrow">{{ greeting }}</div>
-      <h1 style="font-size:30px;margin:10px 0 22px">把知识交给我</h1>
+      <h1 style="font-size:30px;margin:10px 0 10px">把知识交给我</h1>
+      <p class="faint" style="font-size:12px;margin:0 0 22px">拖入一篇，自动整理成可问答、可追溯的知识</p>
 
       <ImportPanel hero title="拖一篇文章、网页或一段文字到这里"
                    hint="Markdown / TXT / HTML，可一次拖入多个"

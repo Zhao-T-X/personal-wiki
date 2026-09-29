@@ -447,23 +447,26 @@ def revoke_dismissal(suppression_id: str) -> dict:
     return {'revoked': removed, 'suppression_id': suppression_id}
 
 
-def merge_impact(*, keep_id: str, drop_id: str) -> dict:
+def merge_impact(*, keep_id: str, drop_id: str, conn=None) -> dict:
     """What a merge would touch, before it touches anything — the dry run.
 
     The number that matters is ``new_conflicts``. Merging reconciles nothing: two
     entities that each held one value of a single-valued relation become one subject
     holding two. Promising that up front is the difference between a repair the user
     trusts and one that quietly breaks a fact.
+
+    ``conn`` is optional: when supplied (an Operation running inside the caller's
+    transaction) every read goes through it so the dry run and the live merge agree.
     """
-    entities = EntityRepository()
+    entities = EntityRepository(conn)
     keep, drop = entities.get(keep_id), entities.get(drop_id)
     if not keep or not drop:
         raise ValueError('Entity not found')
     if keep_id == drop_id:
         raise ValueError('An entity cannot be merged with itself')
 
-    claims = ClaimRepository().claims_touching([keep_id, drop_id])
-    relations = RelationRepository().incident([keep_id, drop_id], 200)
+    claims = ClaimRepository(conn).claims_touching([keep_id, drop_id])
+    relations = RelationRepository(conn).incident([keep_id, drop_id], 200)
     existing = potential_conflicts(claims)
     existing_keys = {_conflict_key(c) for c in existing}
     new = [c for c in potential_conflicts(
@@ -495,7 +498,7 @@ def _tombstone(name: str, keep_name: str) -> str:
     return f'{name}（已并入 {keep_name}）'
 
 
-def merge_entities(*, keep_id: str, drop_id: str) -> dict:
+def merge_entities(*, keep_id: str, drop_id: str, conn=None) -> dict:
     """Perform a confirmed merge, then report what it disturbed.
 
     A merge is only allowed to change *which subject* a statement is filed under. It
@@ -503,24 +506,35 @@ def merge_entities(*, keep_id: str, drop_id: str) -> dict:
     a winner — so the worst it can do is make an existing disagreement visible. That is
     why the recheck is part of the response rather than a follow-up job the user has to
     remember to run.
+
+    When ``conn`` is supplied (an Operation running inside the caller's transaction)
+    the merge and its recheck share that transaction, so the repoint and the audit
+    record are atomic and the recheck sees the merged state. When omitted, a private
+    transaction is opened to preserve the standalone behaviour.
     """
-    impact = merge_impact(keep_id=keep_id, drop_id=drop_id)
-    entities = EntityRepository()
+    if conn is None:
+        with transaction() as conn:
+            return _merge_entities_core(conn, keep_id=keep_id, drop_id=drop_id)
+    return _merge_entities_core(conn, keep_id=keep_id, drop_id=drop_id)
+
+
+def _merge_entities_core(conn, *, keep_id: str, drop_id: str) -> dict:
+    impact = merge_impact(keep_id=keep_id, drop_id=drop_id, conn=conn)
+    entities = EntityRepository(conn)
     keep, drop = entities.get(keep_id), entities.get(drop_id)
     aliases = sorted({*(keep.get('aliases') or []), *(drop.get('aliases') or []),
                       str(keep['name']), str(drop['name'])})
 
-    with transaction() as conn:
-        moved_claims = ClaimRepository(conn).repoint_entity(drop_id, keep_id)
-        moved_relations = RelationRepository(conn).repoint_entity(drop_id, keep_id)
-        # The dropped name becomes an alias of the survivor. Without this the next
-        # extraction that mentions it would recreate the very duplicate being fixed.
-        EntityRepository(conn).update(keep_id, {}, aliases=aliases, normalize=normalize_name)
-        EntityRepository(conn).update(drop_id, {'name': _tombstone(str(drop['name']), str(keep['name'])),
-                                                'status': 'archived'})
-        EntityRepository(conn).replace_aliases(drop_id, [], normalize_name)
+    moved_claims = ClaimRepository(conn).repoint_entity(drop_id, keep_id)
+    moved_relations = RelationRepository(conn).repoint_entity(drop_id, keep_id)
+    # The dropped name becomes an alias of the survivor. Without this the next
+    # extraction that mentions it would recreate the very duplicate being fixed.
+    EntityRepository(conn).update(keep_id, {}, aliases=aliases, normalize=normalize_name)
+    EntityRepository(conn).update(drop_id, {'name': _tombstone(str(drop['name']), str(keep['name'])),
+                                            'status': 'archived'})
+    EntityRepository(conn).replace_aliases(drop_id, [], normalize_name)
 
-    recheck = recheck_after_merge([keep_id])
+    recheck = recheck_after_merge([keep_id], conn=conn)
     return {
         'merged': {'keep_id': keep_id, 'drop_id': drop_id, 'keep_name': keep['name'],
                    'drop_name': drop['name'], 'moved_claims': moved_claims,
@@ -536,15 +550,19 @@ def merge_entities(*, keep_id: str, drop_id: str) -> dict:
     }
 
 
-def recheck_after_merge(entity_ids: list[str]) -> dict:
+def recheck_after_merge(entity_ids: list[str], conn=None) -> dict:
     """Re-examine the claims a merge moved and record what it disturbed.
 
     This is the core of the operation rather than an afterthought: the merge resolves
     nothing on purpose, so the point here is to say out loud which factual conflicts
     now exist and hand them to the Conflict Center — as a *candidate* relation, which
     changes no fact and is exactly how an import would have recorded the same finding.
+
+    ``conn`` is optional; when supplied the recheck reads the *post-merge* state
+    inside the same transaction that performed the merge, so the conflicts it reports
+    are exactly what the merge produced.
     """
-    claims_repo = ClaimRepository()
+    claims_repo = ClaimRepository(conn)
     touched = claims_repo.claims_touching(entity_ids)
     conflicts, recorded = [], 0
     for first, second, verdict in _conflict_pairs(touched):

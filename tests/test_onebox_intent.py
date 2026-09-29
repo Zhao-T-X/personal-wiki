@@ -92,7 +92,7 @@ def test_routing_names_endpoints_that_already_exist():
         ('苹果 CEO 是谁？', '/api/ask'),
         ('帮我记住：我采用 SQLite', '/api/documents'),
         ('帮我研究苹果 CEO 交接', '/api/research'),
-        ('苹果 CEO 记错了，现在应该是 John Ternus', '/api/correction/plan'),
+        ('苹果 CEO 记错了，现在应该是 John Ternus', '/api/knowledge/corrections'),
     ]:
         result = classify(sentence)
         assert [step['endpoint'] for step in result.steps] == [expected], sentence

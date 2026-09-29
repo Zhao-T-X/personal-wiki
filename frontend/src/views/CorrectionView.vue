@@ -62,7 +62,7 @@ onMounted(loadHistory)
 <template>
   <div class="page">
     <PageHead title="纠正知识"
-              subtitle="把一句新的事实变成一次真正的知识更新：分析 → 确认 → 新断言 + 演化关系 + 审计">
+              subtitle="把一句新的事实变成一次真正的知识更新：分析 → 确认 → 新的事实 + 演化关系 + 记录">
       <template #actions>
         <button class="btn ghost" :class="{ primary: manual }" @click="manual = !manual">
           {{ manual ? '用句子分析' : '手动填写（无需模型）' }}
@@ -75,14 +75,14 @@ onMounted(loadHistory)
 
       <div v-if="manual">
         <hr class="hairline" style="margin:16px 0" />
-        <div class="sechead"><h3>手动填写（直接调用 CORRECT 操作，不依赖模型）</h3></div>
+        <div class="sechead"><h3>手动填写（直接填写事实，无需模型）</h3></div>
         <div class="grid3">
           <input v-model="m.text" placeholder="原句（可选）" />
-          <input v-model="m.subject" placeholder="subject（实体名）" />
-          <input v-model="m.predicate" placeholder="predicate（如 has_ceo）" />
-          <input v-model="m.object" placeholder="object（可选）" />
-          <input v-model="m.relationship" placeholder="relationship（supersedes 等，可选）" />
-          <input v-model="m.related_claim_id" placeholder="受影响断言 ID（可选）" />
+          <input v-model="m.subject" placeholder="主体（实体名）" />
+          <input v-model="m.predicate" placeholder="关系（如 has_ceo）" />
+          <input v-model="m.object" placeholder="客体（可选）" />
+          <input v-model="m.relationship" placeholder="关系类型（supersedes 等，可选）" />
+          <input v-model="m.related_claim_id" placeholder="受影响事实 ID（可选）" />
         </div>
         <button class="btn primary" style="margin-top:10px" :disabled="applyingManual" @click="applyManual">
           {{ applyingManual ? '执行中…' : '直接应用' }}
@@ -91,24 +91,24 @@ onMounted(loadHistory)
     </div>
 
     <div v-if="result" class="panel pad" style="margin-top:16px">
-      <div class="sechead"><h3>已生成</h3><span class="tag green" style="margin:0">CORRECT</span></div>
+      <div class="sechead"><h3>已生成</h3><span v-if="store.developerMode" class="tag green" style="margin:0">CORRECT</span></div>
       <div class="out">
-        <span>新断言：<b class="link" @click="openClaim(result.claim_id)">{{ result.claim_id }}</b></span>
-        <span v-if="result.superseded_claim_id">旧断言已转为历史：<b class="link" @click="openClaim(result.superseded_claim_id)">{{ result.superseded_claim_id }}</b></span>
-        <span>操作 ID：<code>{{ result.operation_id }}</code></span>
+        <span>新的事实：<b class="link" @click="openClaim(result.claim_id)">查看 →</b></span>
+        <span v-if="result.superseded_claim_id">旧的内容已转为历史：<b class="link" @click="openClaim(result.superseded_claim_id)">查看 →</b></span>
+        <span v-if="store.developerMode">操作 ID：<code>{{ result.operation_id }}</code></span>
       </div>
     </div>
 
     <div class="panel pad" style="margin-top:16px">
-      <div class="sechead"><h3>纠正审计（最近 CORRECT 操作）</h3><span class="tag" style="margin:0">{{ history.length }}</span></div>
+      <div class="sechead"><h3>修改记录</h3><span class="tag" style="margin:0">{{ history.length }}</span></div>
       <div v-if="!history.length" class="empty">暂无纠正记录。</div>
       <div v-for="op in history" :key="op.id" class="item">
-        <span class="tag blue">CORRECT</span>
+        <span v-if="store.developerMode" class="tag blue">CORRECT</span>
         <div class="grow">
           <b>{{ op.reason || op.actor || 'user' }}</b>
           <p class="faint small">{{ op.created_at }}</p>
         </div>
-        <code class="cid">{{ op.id.slice(0, 8) }}</code>
+        <code v-if="store.developerMode" class="cid">{{ op.id.slice(0, 8) }}</code>
       </div>
     </div>
   </div>

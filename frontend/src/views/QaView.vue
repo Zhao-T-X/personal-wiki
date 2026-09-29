@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api, post } from '../api/client'
 import type { Run } from '../api/types'
@@ -22,7 +22,12 @@ const router = useRouter()
 const store = useAppStore()
 
 type Mode = 'knowledge' | 'agent'
-const mode = ref<Mode>((route.query.mode as Mode) === 'agent' ? 'agent' : 'knowledge')
+/** Normal users never pick an engine — the system answers from the knowledge base and
+    escalates to research when needed. The Agent engine is preserved, but only exposed in
+    Developer Mode; turning that off always drops the user back to knowledge QA. */
+const mode = ref<Mode>('knowledge')
+if (store.developerMode && (route.query.mode as Mode) === 'agent') mode.value = 'agent'
+watch(() => store.developerMode, on => { if (!on) mode.value = 'knowledge' })
 const question = ref((route.query.q as string) || '')
 
 /* knowledge mode */
@@ -213,15 +218,18 @@ const columns = [
 <template>
   <div class="page">
     <div style="text-align:center;margin:2vh 0 18px">
-      <h1 style="font-size:24px">Ask your knowledge</h1>
+      <h1 style="font-size:24px">问你的知识库</h1>
       <p class="muted" style="font-size:10.5px;margin-top:7px">
-        <template v-if="mode === 'knowledge'">知识库问答：Hybrid 检索 + Grounded 回答 + 证据与知识边界</template>
-        <template v-else>Agent 问答：AgentScope ReAct Agent 可自主检索知识库、查看实体图谱后作答</template>
+        <template v-if="store.developerMode">
+          <template v-if="mode === 'knowledge'">知识库问答：Hybrid 检索 + Grounded 回答 + 证据与知识边界</template>
+          <template v-else>Agent 问答：AgentScope ReAct Agent 可自主检索知识库、查看实体图谱后作答</template>
+        </template>
+        <template v-else>把问题交给你的知识库，得到带依据的回答——不对就直接改。</template>
       </p>
     </div>
 
-    <!-- mode switch -->
-    <div class="row" style="justify-content:center;margin-bottom:16px;gap:10px">
+    <!-- mode switch: only offered in Developer Mode. Normal users never choose an engine. -->
+    <div v-if="store.developerMode" class="row" style="justify-content:center;margin-bottom:16px;gap:10px">
       <div class="seg" style="padding:3px">
         <button :class="{ active: mode === 'knowledge' }" @click="switchMode('knowledge')">知识库问答</button>
         <button :class="{ active: mode === 'agent' }" @click="switchMode('agent')">Agent 问答</button>
@@ -234,7 +242,7 @@ const columns = [
     </div>
 
     <div class="askbox" style="max-width:760px;margin:0 auto">
-      <input v-model="question" :placeholder="mode === 'knowledge' ? 'Ask anything about your knowledge…' : '让 Agent 去检索、对比或研究你的知识库…'" @keydown.enter="send()" />
+      <input v-model="question" placeholder="问你的知识库任何问题…" @keydown.enter="send()" />
       <button class="go" @click="send()">↑</button>
     </div>
 
@@ -384,7 +392,7 @@ const columns = [
           </div>
           <div class="sechead"><h3>下一步</h3></div>
           <button class="btn" style="width:100%" @click="router.push({ path: '/research', query: { q: question } })">◇ 就此问题继续研究</button>
-          <button class="btn" style="width:100%;margin-top:8px" @click="switchMode('agent');send()">◌ 换用 Agent 深入回答</button>
+          <button v-if="store.developerMode" class="btn" style="width:100%;margin-top:8px" @click="switchMode('agent');send()">◌ 换用 Agent 深入回答</button>
         </div>
       </div>
 
@@ -411,7 +419,8 @@ const columns = [
         <div class="panel pad" style="padding:6px">
           <DataTable :columns="columns" :rows="recent" clickable @row-click="(r: Run) => (runDrawerId = r.id)">
             <template #cell-task_type="{ row }">
-              <span class="tag" :class="row.task_type === 'agent' ? 'violet' : 'blue'">{{ row.task_type === 'agent' ? 'Agent · ' + (row.agent_role || '') : '知识库' }}</span>
+              <span v-if="store.developerMode" class="tag" :class="row.task_type === 'agent' ? 'violet' : 'blue'">{{ row.task_type === 'agent' ? 'Agent · ' + (row.agent_role || '') : '知识库' }}</span>
+              <span v-else class="tag blue">问答</span>
             </template>
             <template #cell-question="{ row }"><b>{{ row.summary?.question || (row.task_type === 'agent' ? '(Agent 对话)' : '(历史记录)') }}</b></template>
             <template #cell-status="{ row }"><StatusTag :status="row.status" /></template>

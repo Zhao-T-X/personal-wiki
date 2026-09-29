@@ -18,13 +18,22 @@ const route = useRoute()
 const router = useRouter()
 const store = useAppStore()
 
-const TABS = ['Questions', '研究任务', 'Conflicts', 'Health']
+const dev = computed(() => store.developerMode)
+/** Normal users meet a problem space, not the console. "研究任务" (task objects) and
+    "Health" (claim accounting) expose internal execution detail, so they are
+    Developer-Mode only; research itself stays fully usable from the Questions tab. */
+const TABS = computed(() => dev.value
+  ? ['Questions', '研究任务', 'Conflicts', 'Health']
+  : ['Questions', 'Conflicts'])
 const TAB_LABELS: Record<string, string> = { Questions: '问题', Conflicts: '冲突', Health: '知识健康' }
 /* 审核 is its own page now — keep old ?tab=review deep links working. */
 if (route.query.tab === 'review') router.replace('/review')
-const initialTab = route.query.tab === 'conflicts' ? 'Conflicts'
-  : route.query.tab === 'health' ? 'Health'
-  : route.query.tab === 'tasks' ? '研究任务' : 'Questions'
+const _req = route.query.tab as string | undefined
+const initialTab = _req && ['conflicts', 'health', 'tasks'].includes(_req) && !dev.value
+  ? 'Questions'
+  : _req === 'conflicts' ? 'Conflicts'
+  : _req === 'health' ? 'Health'
+  : _req === 'tasks' ? '研究任务' : 'Questions'
 const tab = ref(initialTab as string)
 const questions = ref<QuestionRow[]>([])
 const conflicts = ref<any[]>([])
@@ -49,6 +58,14 @@ async function load() {
   health.value = await api('/api/knowledge/health')
 }
 onMounted(load)
+
+/** 问题列表按页加载：问题会累积成百上千条，一次读全既慢又让"待处理"被冲淡。 */
+async function moreQuestions() {
+  try {
+    const qs = await api<QuestionRow[]>(`/api/questions?limit=200&offset=${questions.value.length}`)
+    questions.value = [...questions.value, ...qs]
+  } catch (e: any) { store.toast('加载更多问题失败：' + (e.message || '请稍后重试')) }
+}
 
 /** 研究任务 → 它的候选知识。
  *
@@ -113,6 +130,20 @@ async function runResearchTask(t: any) {
 const open = computed(() => questions.value.filter(q => q.status === 'open'))
 const partial = computed(() => questions.value.filter(q => q.status === 'partially_answered'))
 const resolved = computed(() => questions.value.filter(q => ['resolved', 'answered'].includes(q.status)))
+
+/** The headline strip speaks the user's language; the internal "Total Claims" count is
+    a Developer-Mode diagnostic, not something a returning user should read as a metric. */
+const kpiCells = computed(() => {
+  const cells: { label: string; value: any; small?: string; warn?: boolean }[] = [
+    { label: '待处理问题', value: open.value.length, small: `${partial.value.length} 部分回答` },
+    { label: '冲突', value: conflicts.value.length, warn: conflicts.value.length > 0 },
+    { label: '已解决', value: resolved.value.length },
+  ]
+  if (dev.value && health.value) {
+    cells.push({ label: '知识条目', value: health.value.total_claims ?? '—' })
+  }
+  return cells
+})
 
 const activeTaskId = ref<string | null>(null)
 
@@ -217,16 +248,11 @@ async function resolveQuestion(q: QuestionRow) {
 
 <template>
   <div class="page">
-    <PageHead title="研究" subtitle="Question → Evidence → Claims → Review → Knowledge，一个闭环。">
+    <PageHead title="研究" subtitle="把一个问题，变成可以信任的知识。">
       <template #actions><button class="btn" @click="load">刷新</button></template>
     </PageHead>
 
-    <KpiStrip :cells="[
-      { label: 'Open Questions', value: open.length, small: `${partial.length} 部分回答` },
-      { label: 'Conflicts', value: conflicts.length, warn: conflicts.length > 0 },
-      { label: 'Resolved', value: resolved.length },
-      { label: 'Total Claims', value: health?.total_claims ?? '—' },
-    ]" />
+    <KpiStrip :cells="kpiCells" />
 
     <div class="seg" style="margin:16px 0 14px">
       <button v-for="t in TABS" :key="t" :class="{ active: tab === t }" @click="tab = t">
@@ -282,7 +308,7 @@ async function resolveQuestion(q: QuestionRow) {
     <!-- Questions + flow -->
     <div v-if="tab === 'Questions'" class="grid g2">
       <div>
-        <div class="sechead"><h3>Open Questions</h3></div>
+        <div class="sechead"><h3>待处理问题</h3></div>
         <div class="panel pad" style="padding:6px">
           <div v-for="q in open" :key="q.id" class="item" style="cursor:default">
             <div class="ico-badge ib-blue">?</div>
@@ -291,10 +317,13 @@ async function resolveQuestion(q: QuestionRow) {
           </div>
           <div v-for="q in partial" :key="q.id" class="item" style="cursor:default">
             <div class="ico-badge ib-amber">?</div>
-            <div class="grow"><b>{{ q.content }}</b><p>partially answered</p></div>
+            <div class="grow"><b>{{ q.content }}</b><p>部分回答</p></div>
             <button class="btn sm" @click="resolveQuestion(q)">标记已解决</button>
           </div>
           <EmptyState v-if="!open.length && !partial.length" text="没有开放问题——知识库状态良好" />
+          <div v-if="questions.length > 0 && questions.length % 200 === 0" style="text-align:center;margin-top:10px">
+            <button class="btn" @click="moreQuestions">加载更多问题</button>
+          </div>
         </div>
       </div>
       <div>
@@ -304,10 +333,10 @@ async function resolveQuestion(q: QuestionRow) {
             <b style="font-size:12px">{{ flowQuestion.content }}</b>
             <hr class="hairline" />
             <FlowSteps :steps="[
-              { title: 'Question', sub: flowQuestion.status },
-              { title: 'Known', sub: `${knownClaims.length} 条相关断言` },
-              { title: 'Findings', sub: researching ? '进行中' : findings ? '已返回' : '待执行' },
-              { title: 'Review', sub: '人工' },
+              { title: '你的问题', sub: flowQuestion.status },
+              { title: '已知事实', sub: `${knownClaims.length} 条相关${store.developerMode ? '断言' : '事实'}` },
+              { title: '研究发现', sub: researching ? '进行中' : findings ? '已返回' : '待执行' },
+              { title: '审核', sub: '人工确认' },
             ]" />
 
             <div class="sechead" style="margin:14px 0 10px"><h3>执行过程</h3></div>
@@ -315,17 +344,23 @@ async function resolveQuestion(q: QuestionRow) {
               <div v-for="p in PHASES" :key="p.role" class="rphase" :class="phaseState(p.role)">
                 <span class="rphase-dot">{{ phaseState(p.role) === 'done' ? '✓' : phaseState(p.role) === 'failed' ? '×' : phaseState(p.role) === 'active' ? '◌' : '·' }}</span>
                 <span class="grow">{{ p.label }}</span>
-                <span class="tag">{{ p.role }}</span>
+                <span v-if="store.developerMode" class="tag">{{ p.role }}</span>
               </div>
               <p v-if="!researchRuns.length" class="muted" style="font-size:9px;margin:6px 0 0">
-                点「继续研究」后，这里会显示两个 Agent 的真实执行顺序与结果。
+                <template v-if="store.developerMode">点「继续研究」后，这里会显示两个 Agent 的真实执行顺序与结果。</template>
+                <template v-else>点「继续研究」后，这里会显示研究进度。</template>
               </p>
             </div>
-            <div class="sechead" style="margin:10px 0 10px"><h3>Known · 相关证据</h3></div>
+            <div class="sechead" style="margin:10px 0 10px"><h3>已知事实</h3></div>
             <div v-for="c in knownClaims" :key="c.id" class="item" style="cursor:default">
-              <div class="grow"><b>{{ c.subject_name }} → {{ c.predicate }} → {{ c.object_name || c.object_text || '—' }}</b><p>{{ (c.source_quote || c.content || '').slice(0, 70) }}</p></div>
+              <div class="grow">
+                <b>{{ store.developerMode
+                  ? `${c.subject_name} → ${c.predicate} → ${c.object_name || c.object_text || '—'}`
+                  : (c.content || c.object_text || c.subject_name) }}</b>
+                <p>{{ (c.source_quote || c.content || '').slice(0, 70) }}</p>
+              </div>
             </div>
-            <div v-if="!knownClaims.length" class="empty" style="margin-top:8px">没有直接相关的 Claims——这正是需要研究的空白</div>
+            <div v-if="!knownClaims.length" class="empty" style="margin-top:8px">没有直接相关的已知事实——这正是需要研究的空白</div>
             <div v-if="findings" class="sechead"><h3>Findings</h3></div>
             <div v-if="findings" class="evidence">{{ findings }}</div>
             <div class="row" style="margin-top:14px">
@@ -337,10 +372,10 @@ async function resolveQuestion(q: QuestionRow) {
         <template v-else>
           <div class="sechead"><h3>研究如何运作</h3></div>
           <div class="panel pad">
-            <FlowSteps :steps="[{ title: 'Question' }, { title: 'Known / Unknown' }, { title: 'Plan' }, { title: 'Evidence' }]" />
-            <FlowSteps :steps="[{ title: 'Findings' }, { title: 'Candidate Claims' }, { title: 'Review' }, { title: 'Knowledge' }]" />
+            <FlowSteps :steps="[{ title: '问题' }, { title: '已知 / 未知' }, { title: '方案' }, { title: '证据' }]" />
+            <FlowSteps :steps="[{ title: '研究发现' }, { title: '候选知识' }, { title: '审核' }, { title: '知识' }]" />
             <hr class="hairline" />
-            <p class="muted" style="font-size:10px;line-height:1.7;margin:0">点击左侧任一开放问题的<b style="color:var(--text)">「继续研究」</b>，查看完整闭环：整理已知与未知，由 ResearchAgent 收集证据、产出候选知识，交给你审核。</p>
+            <p class="muted" style="font-size:10px;line-height:1.7;margin:0">点击左侧任一开放问题的<b style="color:var(--text)">「继续研究」</b>，查看完整闭环：整理已知与未知，由系统收集证据、产出候选知识，交给你审核。</p>
           </div>
         </template>
       </div>
@@ -349,24 +384,25 @@ async function resolveQuestion(q: QuestionRow) {
     <!-- Conflicts -->
     <div v-if="tab === 'Conflicts'">
       <div v-for="(cf, i) in conflicts" :key="i" class="panel pad" style="margin-bottom:16px">
-        <div class="row" style="gap:10px"><span class="tag amber">Conflict #{{ i + 1 }}</span><span class="faint" style="font-size:9px">{{ cf.subject_name }} · {{ cf.predicate }}</span></div>
+        <div class="row" style="gap:10px"><span class="tag amber">冲突 #{{ i + 1 }}</span><span class="faint" style="font-size:9px">{{ store.developerMode ? cf.subject_name + ' · ' + cf.predicate : cf.subject_name }}</span></div>
         <div class="grid g2" style="margin-top:14px">
           <div v-for="c in cf.claims" :key="c.id" class="panel pad" style="background:var(--surface2)">
-            <span class="tag" :class="c.polarity === 'positive' ? 'green' : 'amber'">{{ c.polarity }}</span>
+            <span class="tag" :class="c.polarity === 'positive' ? 'green' : 'amber'">{{ c.polarity === 'positive' ? '正向' : '条件' }}</span>
             <div style="font-size:11px;margin-top:9px;line-height:1.7"><b>{{ c.content || c.object_text || '—' }}</b>
-              <p class="muted" style="font-size:9.5px;margin-top:5px">来源：{{ c.source_document_id?.slice(0, 8) }} · {{ c.modality }} · <StatusTag :status="c.status" /></p></div>
+              <p class="muted" style="font-size:9.5px;margin-top:5px">
+                <template v-if="store.developerMode">来源：{{ c.source_document_id?.slice(0, 8) }} · {{ c.modality }} · </template><StatusTag :status="c.status" /></p></div>
           </div>
         </div>
-        <div class="sechead"><h3>Difference</h3><span class="faint" style="font-size:9px">为什么两个来源结论不同</span></div>
-        <div class="notice violet">两个结论可能都成立，只是适用条件不同。请查看各自 Evidence 与来源，决定保留两者（互相标注条件）、创建研究，或提交审核。</div>
+        <div class="sechead"><h3>差异说明</h3><span class="faint" style="font-size:9px">为什么两个来源结论不同</span></div>
+        <div class="notice violet">两个结论可能都成立，只是适用条件不同。请查看各自证据与来源，决定保留两者（互相标注条件）、创建研究，或提交审核。</div>
         <div class="row" style="margin-top:12px;gap:8px;flex-wrap:wrap">
-          <button class="btn" @click="router.push('/knowledge/claim/' + cf.claims[0].id)">查看 Evidence</button>
+          <button class="btn" @click="router.push('/knowledge/claim/' + cf.claims[0].id)">查看证据</button>
           <button class="btn" @click="keepBoth(cf)">保留两者</button>
           <button class="btn primary" @click="createResearchFromConflict(cf)">创建研究</button>
           <button class="btn ghost" @click="router.push('/review')">去审核</button>
         </div>
       </div>
-      <EmptyState v-if="!conflicts.length" text="没有检测到冲突——同一主题下的 Claims 极性一致" />
+      <EmptyState v-if="!conflicts.length" text="没有检测到冲突——同一主题下的事实极性一致" />
     </div>
 
     <!-- Health -->

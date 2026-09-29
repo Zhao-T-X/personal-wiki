@@ -181,6 +181,165 @@ def test_claim_normalization_has_single_owner(tmp_path):
         assert claim == reference, f'{name} produced a different canonical claim'
 
 
+# --------------------------------------------------------------------------- #
+# Phase 1 (Application Layer) — the HTTP adapter must not be the business layer.
+# --------------------------------------------------------------------------- #
+
+def _route_functions(src: str):
+    """Yield (name, body) for every ``@app.*`` handler defined in ``src``."""
+    lines = src.splitlines()
+    funcs = []
+    # Match ``@app.get`` / ``@app.post`` / ... anywhere a route is declared.
+    route_re = re.compile(r'^@app\.(get|post|put|patch|delete)\(')
+    def_re = re.compile(r'^def (\w+)\(')
+    i = 0
+    n = len(lines)
+    while i < n:
+        if route_re.match(lines[i]):
+            # Find the def that follows (skip the decorator line).
+            j = i + 1
+            while j < n and not def_re.match(lines[j]):
+                j += 1
+            if j >= n:
+                break
+            name = def_re.match(lines[j]).group(1)
+            # Collect the body until the next top-level def or decorator.
+            body_start = j
+            k = j + 1
+            while k < n and not (lines[k].startswith('def ') or lines[k].startswith('@app.')):
+                k += 1
+            funcs.append((name, '\n'.join(lines[body_start:k])))
+            i = k
+        else:
+            i += 1
+    return funcs
+
+
+# Repository write methods the HTTP adapter must never call directly. Reads
+# (``get`` / ``list`` / ``exists`` / ``for_entity`` / ``candidates`` / ...) are not
+# in this set, so a read-only handler is still allowed to touch a repository.
+_REPO_WRITE_METHODS = {
+    'set_status', 'set_relation_previous_status', 'restore_status',
+    'update_relation', 'update', 'insert', 'repoint_entity', 'delete', 'create', 'merge',
+}
+_REPO_WRITE_RE = re.compile(r'\w*Repository\(\)\.(\w+)\(')
+
+
+def test_api_does_not_write_repository_directly():
+    """The route layer may read, but it may never mutate knowledge itself.
+
+    Every knowledge mutation must go through ``app/application`` — either an Operation
+    (``domain.operations.run``) or a repository write *behind that boundary*. If a route
+    handler calls ``ClaimRepository().set_status(...)`` directly, the write authority has
+    leaked back into the adapter and Phase 1 has regressed.
+    """
+    src = _source('app/main.py')
+    offenders = []
+    for name, body in _route_functions(src):
+        for m in _REPO_WRITE_RE.finditer(body):
+            if m.group(1) in _REPO_WRITE_METHODS:
+                offenders.append(f'{name}: {m.group(0)}')
+    assert offenders == [], f'routes write the repository directly: {offenders}'
+
+
+def test_api_uses_application_layer():
+    """The three priority facades (Knowledge / Search / Operation) have an owner, and
+    the routes actually delegate to it rather than re-implementing the work.
+
+    This is a guard against the adapter growing its own orchestration again: if a route
+    starts calling ``retrieval.search`` or ``domain.operations.run`` straight from
+    ``main.py``, these references disappear and the test fails.
+    """
+    src = _source('app/main.py')
+    assert 'from .application import' in src, 'main.py does not import the application layer'
+    for facade in ('knowledge_app', 'search_app', 'operation_app'):
+        assert f'{facade}.' in src, f'{facade} is not used by any route'
+
+
+def test_application_layer_is_framework_free():
+    """The Application layer owns orchestration, not infrastructure.
+
+    It may use the domain, repositories and workflows, but it must not import the web
+    framework or the SQLite driver directly (those belong to the adapter and the
+    persistence layer respectively). ``db.transaction`` is allowed — it is the caller's
+    transaction boundary, not a driver import.
+    """
+    banned = ('fastapi', 'sqlite3', 'agentscope')
+    for path in (ROOT / 'app' / 'application').rglob('*.py'):
+        src = path.read_text(encoding='utf-8')
+        for token in banned:
+            assert f'import {token}' not in src and f'from {token}' not in src, \
+                f'{path.name} must not import {token}'
+
+
+def test_operation_application_writers_go_through_run():
+    """Phase 3 — the three write entry points may not bypass the Operation framework.
+
+    ``update_knowledge_status``, ``resolve_claim_relation`` and ``merge_entities`` used
+    to call the repositories directly from the application layer. Now they must submit
+    an ``OperationRequest`` to ``domain.operations.run``; the only knowledge write for
+    any of them lives inside ``run``. Assert the three writers route through ``run`` and
+    that the module performs no direct repository write (no ``Repository(`` call).
+    """
+    src = _source('app/application/operation.py')
+    writers = ('update_knowledge_status', 'resolve_claim_relation', 'merge_entities')
+    for fn in writers:
+        start = src.index(f'def {fn}')
+        end = src.find('\ndef ', start + 1)
+        end = len(src) if end == -1 else end
+        body = src[start:end]
+        assert 'run(' in body, f'{fn} must delegate to run()'
+        assert 'OperationRequest(' in body, f'{fn} must build an OperationRequest'
+    # The application writer layer must not instantiate repositories itself.
+    assert 'Repository(' not in src, \
+        'application/operation.py must not instantiate repositories directly'
+
+
+# --------------------------------------------------------------------------- #
+# Phase 2 (Read Model) — one business fact, one Read Model owner.
+# --------------------------------------------------------------------------- #
+
+def test_review_count_has_single_owner():
+    """The Review pending count has exactly one source.
+
+    The sidebar badge and the Review page must never disagree. Both review endpoints
+    read ``review_inbox()`` (the Read Model owner); neither derives the total from the
+    raw queues itself. If a route starts summing ``EntityRepository().candidates(...)``
+    into a ``total`` again, the page and the badge can silently diverge.
+    """
+    review_src = _source('app/readmodels/review.py')
+    assert 'def review_inbox' in review_src, 'review_inbox must be the Read Model owner'
+
+    main_src = _source('app/main.py')
+    route_bodies = dict(_route_functions(main_src))
+    assert 'review_inbox' in route_bodies, '/api/review/inbox must read review_inbox()'
+    assert 'review' in route_bodies, '/api/review must read review_inbox()'
+    for name in ('review', 'review_inbox'):
+        body = route_bodies[name]
+        assert 'review_inbox()' in body, f'{name} must read the single Review owner'
+        # A route that computes its own total from raw queues has re-forked the source.
+        recomputed = bool(re.search(r'(sum\(|\blen\()', body)) and 'total' in body \
+            and 'review_inbox()' not in body
+        assert not recomputed, f'{name} recomputes the Review count from raw queues'
+
+
+def test_knowledge_view_has_single_builder():
+    """``KnowledgeView`` — the product's knowledge projection — has one builder.
+
+    Search, QA and Research all render knowledge through the same shape so a claim can
+    never look different in two places. The builder (``best_per_statement``) must exist
+    in exactly one backend module, and the HTTP adapter must not re-implement it inline.
+    """
+    builders = []
+    for path in (ROOT / 'app').rglob('*.py'):
+        if 'def best_per_statement' in _source(str(path)):
+            builders.append(str(path))
+    expected = str(ROOT / 'app' / 'readmodels' / 'knowledge_view.py')
+    assert builders == [expected], f'KnowledgeView must have exactly one builder: {builders}'
+    assert 'def best_per_statement' not in _source('app/main.py'), \
+        'main.py must not re-implement the knowledge projection'
+
+
 def test_new_ceo_reaches_the_stored_claim_through_every_entry(tmp_path):
     """The "苹果的新任 CEO" case as a global ontology contract, not a Correction bug.
 

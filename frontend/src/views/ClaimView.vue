@@ -38,6 +38,11 @@ const RELATION_LABEL: Record<string, string> = {
   duplicate: '重复', coexists: '并存', supersedes: '取代', contradicts: '矛盾', unclear: '待定',
 }
 
+/** Status words surfaced in toasts — keep them in the user's language, never the raw enum. */
+const STATUS_LABEL: Record<string, string> = {
+  verified: '已确认', rejected: '已否定', candidate: '待确认', archived: '已归档',
+}
+
 const card = computed(() => (c.value ? toCard(c.value) : null))
 /** 依据数 comes from the chain node: its own quote plus accepted duplicates. */
 const sources = computed(() =>
@@ -98,7 +103,7 @@ async function setStatus(status: string) {
   if (!c.value) return
   try {
     await patchJson(`/api/knowledge/claim/${c.value.id}/status`, { status })
-    store.toast(status === 'verified' ? '已提交审核：verified' : '已标记 ' + status)
+    store.toast(status === 'verified' ? '已提交审核，等待确认' : '已标记为「' + (STATUS_LABEL[status] || status) + '」')
     c.value = { ...c.value, status }
   } catch (e: any) { store.toast(e.message) }
 }
@@ -209,8 +214,8 @@ const day = (v: string | null | undefined) => (v || '').slice(0, 10) || '—'
     </div>
 
     <!-- 技术细节：判断可信度时用不到，所以不占第一屏 -->
-    <details class="tech">
-      <summary>技术细节</summary>
+    <details v-if="store.developerMode" class="tech">
+      <summary>技术细节（仅开发者模式）</summary>
       <div class="propgrid">
         <div class="prop"><span>Claim Type</span><b>{{ c.claim_type }}</b></div>
         <div class="prop"><span>Polarity</span><b>{{ c.polarity }}</b></div>
@@ -240,9 +245,10 @@ const day = (v: string | null | undefined) => (v || '').slice(0, 10) || '—'
         <template v-else>没有进入关系图谱：modality = {{ c.modality }}，Normalize 规则要求因果类断言具备 asserted 以上确定性才会派生为 Relation。</template>
       </p>
     </details>
-  </div>
+    <p v-else class="faint" style="font-size:9.5px;margin-top:14px">更详细的技术信息（类型、置信度、来源上下文）可在「开发者模式」中查看。</p>
+    </div>
 
-  <div class="page" v-else-if="loadError">
+    <div class="page" v-else-if="loadError">
     <PageHead title="知识不存在" :subtitle="loadError">
       <template #actions>
         <button class="btn" @click="router.back()">← 返回</button>
