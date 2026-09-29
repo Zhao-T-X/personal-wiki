@@ -3,6 +3,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../api/client'
 import { useAppStore } from '../stores/app'
+import { entityTypeLabel } from '../utils/entityType'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ (e: 'close'): void }>()
@@ -46,7 +47,7 @@ const baseCommands = computed<Cmd[]>(() =>
   store.developerMode ? [...coreCommands, ...devCommands] : coreCommands)
 
 const entityCommands = computed<Cmd[]>(() => entities.value.map(e => ({
-  group: '对象', icon: '✦', cls: 'ib-blue', title: `打开对象：${e.name}（${e.type}）`,
+  group: '对象', icon: '✦', cls: 'ib-blue', title: `打开对象：${e.name}（${entityTypeLabel(e.type)}）`,
   run: () => done({ path: '/knowledge/object/' + e.id }),
 })))
 

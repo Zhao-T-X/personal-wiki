@@ -13,13 +13,13 @@ import KnowledgeCard from '../components/KnowledgeCard.vue'
 import { useAppStore } from '../stores/app'
 import { fmtDateTime } from '../utils/time'
 import { toCard, labelOf } from '../utils/claim'
+import { ENTITY_TYPES, entityTypeLabel } from '../utils/entityType'
 import { TYPE_COLORS, DEFAULT_NODE_COLOR, edgeEndpoints } from '../utils/graph'
 
 const route = useRoute()
 const router = useRouter()
 const store = useAppStore()
 
-const ENTITY_TYPES = ['Person','Organization','Product','Software','Technology','Method','Concept','Theory','Dataset','Model','Standard','Protocol','Resource','Location']
 const showEdit = ref(false)
 const editName = ref(''); const editType = ref('Concept'); const editAliases = ref(''); const editDesc = ref('')
 const showIdea = ref(false); const ideaText = ref('')
@@ -238,7 +238,7 @@ watch(tab, t => { if (t === 'Graph') drawLocalGraph() })
       </template>
     </PageHead>
     <div class="row" style="gap:8px;flex-wrap:wrap;margin:-12px 0 16px">
-      <span class="tag blue">{{ entity.type }}</span>
+      <span class="tag blue">{{ entityTypeLabel(entity.type) }}</span>
       <StatusTag :status="entity.status" />
       <span v-for="a in entity.aliases" :key="a" class="tag">{{ a }}</span>
     </div>
@@ -366,7 +366,7 @@ watch(tab, t => { if (t === 'Graph') drawLocalGraph() })
       <EmptyState
         v-if="!evidence.length"
         title="还没有可展示的证据"
-        text="证据来自抽取时定位到的原文片段——先为这个对象关联的文档运行抽取。"
+        text="证据来自整理资料时定位到的原文片段——先为这个对象关联的文档做一次整理。"
       >
         <template #action><button class="btn" @click="router.push('/knowledge')">去知识库</button></template>
       </EmptyState>
@@ -398,11 +398,11 @@ watch(tab, t => { if (t === 'Graph') drawLocalGraph() })
       </div>
     </div>
 
-    <AppModal :open="showEdit" title="编辑实体"
+    <AppModal :open="showEdit" title="编辑对象"
                :subtitle="store.developerMode ? '类型受 Ontology 注册表约束；改名会同步别名并做去重。' : '选择这个对象的类别。改名会同步别名并做去重。'" @close="showEdit = false">
       <input v-model="editName" class="field" style="width:100%" placeholder="名称" />
       <select v-model="editType" class="field" style="width:100%;margin-top:9px">
-        <option v-for="t in ENTITY_TYPES" :key="t">{{ t }}</option>
+        <option v-for="t in ENTITY_TYPES" :key="t.id" :value="t.id">{{ t.label }}</option>
       </select>
       <input v-model="editAliases" class="field" style="width:100%;margin-top:9px" placeholder="别名（逗号分隔）" />
       <textarea v-model="editDesc" class="field" style="width:100%;height:80px;margin-top:9px" placeholder="描述"></textarea>

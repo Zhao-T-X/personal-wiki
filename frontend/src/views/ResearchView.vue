@@ -100,7 +100,7 @@ async function proposeCandidates(t: any) {
     const body = await post<any>(`/api/research/${t.id}/candidates`)
     store.toast(body.knowledge?.length
       ? `已整理出 ${body.knowledge.length} 条研究候选`
-      : '结论里没有可落成知识的断言')
+      : '结论里没有可落成知识的陈述')
     await reloadTaskKnowledge(t)
   } catch (e: any) { store.toast(e.message) } finally { proposing.value = null }
 }
@@ -289,7 +289,7 @@ async function resolveQuestion(q: QuestionRow) {
               </template>
               <div v-else-if="taskKnowledge[t.id]" style="margin-top:10px">
                 <p class="faint" style="font-size:9.5px;margin:0 0 8px">
-                  这份结论还没有落成候选知识。结论里能被引文支撑的断言才会变成候选。
+                  这份结论还没有落成候选知识。结论里能被引文支撑的陈述才会变成候选。
                 </p>
                 <button class="btn sm" :disabled="proposing === t.id" @click="proposeCandidates(t)">
                   {{ proposing === t.id ? '整理中…' : '把结论整理成研究候选' }}
@@ -416,7 +416,7 @@ async function resolveQuestion(q: QuestionRow) {
         <span>图谱关系</span><b>{{ health.relations }} 条（由 verified/高确定性 Claims 派生）</b>
         <span>文本对象 Claims</span><b>{{ health.object_text_claims }} <span class="tag" style="margin-left:6px">object 是文本而非实体，设计内行为</span></b>
         <span>开放问题</span><b>{{ health.open_questions }}</b>
-        <span>陈旧候选</span><b>{{ health.stale_candidates }} <span class="tag" style="margin-left:6px">候选实体 > 90 天未动</span></b>
+        <span>陈旧候选</span><b>{{ health.stale_candidates }} <span class="tag" style="margin-left:6px">候选对象 > 90 天未动</span></b>
       </div>
       <div class="notice violet" style="margin-top:12px">指标口径：<b>已验证比例</b>反映人工审核进度（真实可信度信号）；文本对象 Claims 与图谱关系数仅作规模参考，不再伪装成「覆盖率」。</div>
     </div>

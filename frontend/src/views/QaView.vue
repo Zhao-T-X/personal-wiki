@@ -341,7 +341,7 @@ const columns = [
           </div>
           <div v-if="validation.grounding" class="gbox">
             <b :class="validation.grounding.grounded ? 'ok' : 'bad'">
-              {{ validation.grounding.grounded ? '语义上可由引用支撑' : '存在无法由引用支撑的断言' }}
+              {{ validation.grounding.grounded ? '语义上可由引用支撑' : '存在无法由引用支撑的说法' }}
             </b>
             <p v-if="validation.grounding.rationale" class="faint small">{{ validation.grounding.rationale }}</p>
             <ul v-if="validation.grounding.assertions?.length" class="glist">

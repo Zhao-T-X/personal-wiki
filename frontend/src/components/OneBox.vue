@@ -176,7 +176,7 @@ const knowledge = computed<any[]>(() => result.value?.body?.knowledge || [])
 
     <template v-else-if="result?.kind === 'research'">
       <div class="panel pad" style="margin-top:12px">
-        <b style="font-size:12px">已创建工作研究任务</b>
+        <b style="font-size:12px">已创建研究任务</b>
         <p class="faint" style="font-size:10px;margin:4px 0 0">
           研究完成后，结论会在研究页整理成「研究候选」，采纳后才成为知识。
         </p>
@@ -189,7 +189,7 @@ const knowledge = computed<any[]>(() => result.value?.body?.knowledge || [])
       <div class="panel pad" style="margin-top:12px">
         <b style="font-size:12px">已整理为知识</b>
         <p class="faint" style="font-size:10px;margin:4px 0 0">
-          抽取到 {{ result.body.index?.counts?.claims ?? 0 }} 条断言，仍待你确认。
+          整理了 {{ result.body.index?.counts?.claims ?? 0 }} 条知识，仍待你确认。
         </p>
         <button class="btn sm" style="margin-top:9px"
                 @click="router.push('/knowledge')">去知识空间 →</button>

@@ -177,16 +177,16 @@ const day = (v: string | null | undefined) => (v || '').slice(0, 10) || '—'
         <div class="src"><span>{{ docTitle || '来源文档' }}</span></div>
         <button class="btn sm" style="margin-top:9px" @click="openSource">打开原文并定位 →</button>
       </div>
-      <div v-else class="empty">这条知识缺少可定位的引文——可能来自没有引用信息的抽取批次。</div>
+      <div v-else class="empty">这条知识缺少可定位的引文——可能来自没有引用信息的整理批次。</div>
       <p v-if="(sources ?? 0) > 1" class="faint" style="font-size:9.5px;margin:10px 0 0">
         其中 {{ sources - 1 }} 个来自另一个来源对同一事实的重复陈述——它让这条知识更有说服力。
       </p>
     </div>
 
-    <!-- 与其他断言的关系（取代已在「历史」中呈现） -->
+    <!-- 与其他陈述的关系（取代已在「历史」中呈现） -->
     <template v-if="otherRelations.length">
       <div class="sechead">
-        <h3>相关断言</h3>
+        <h3>相关陈述</h3>
         <span class="tag" style="margin:0">{{ otherRelations.length }} 条</span>
       </div>
       <div class="panel pad" style="padding:6px">

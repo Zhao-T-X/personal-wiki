@@ -20,6 +20,7 @@ import { toCard } from '../utils/claim'
 import { safeErrorText } from '../utils/dataState'
 import { useAsyncState } from '../utils/useAsyncState'
 import { fmtDateTime } from '../utils/time'
+import { ENTITY_TYPES, entityTypeLabel } from '../utils/entityType'
 
 const route = useRoute()
 const router = useRouter()
@@ -418,7 +419,7 @@ const showAllDocs = computed(() => docLimit.value >= docTotal.value)
         <div class="grid g3">
           <div v-for="e in entities" :key="e.id" class="panel pad item" style="display:block" @click="router.push('/knowledge/object/' + e.id)">
             <div class="row"><div class="ico-badge" :class="e.status === 'verified' ? 'ib-mint' : 'ib-blue'">✦</div>
-              <div><b>{{ e.name }}</b><div class="faint" style="font-size:8.5px">{{ e.type }}</div></div></div>
+              <div><b>{{ e.name }}</b><div class="faint" style="font-size:8.5px">{{ entityTypeLabel(e.type) }}</div></div></div>
             <hr class="hairline" />
             <p style="margin:0">{{ e.description?.slice(0, 60) || '—' }}</p>
             <div style="margin-top:9px"><StatusTag :status="e.status" /></div>
@@ -525,7 +526,7 @@ const showAllDocs = computed(() => docLimit.value >= docTotal.value)
     <AppModal :open="showNewEntity" title="新建对象" subtitle="手工创建的对象默认为待确认，可在「审核」中确认。" @close="showNewEntity = false">
       <input v-model="entName" class="field" style="width:100%" placeholder="名称（如 Retrieval-Augmented Generation）" />
       <select v-model="entType" class="field" style="width:100%;margin-top:9px">
-        <option v-for="t in ['Person','Organization','Product','Software','Technology','Method','Concept','Theory','Dataset','Model','Standard','Protocol','Resource','Location']" :key="t">{{ t }}</option>
+        <option v-for="t in ENTITY_TYPES" :key="t.id" :value="t.id">{{ t.label }}</option>
       </select>
       <textarea v-model="entDesc" class="field" style="width:100%;height:80px;margin-top:9px" placeholder="描述…"></textarea>
       <div style="display:flex;justify-content:flex-end;gap:7px;margin-top:12px">

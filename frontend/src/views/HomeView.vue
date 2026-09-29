@@ -18,6 +18,7 @@ import OneBox from '../components/OneBox.vue'
 import StatusTag from '../components/StatusTag.vue'
 import { useAsyncState } from '../utils/useAsyncState'
 import { fmtDateTime } from '../utils/time'
+import { entityTypeLabel } from '../utils/entityType'
 
 const router = useRouter()
 
@@ -233,8 +234,8 @@ function openDocument(id: string) {
         <button class="btn primary" @click="router.push('/review')">开始确认 →</button>
       </div>
       <div class="duerows">
-        <div class="duerow"><span>候选实体</span><b>{{ review.entities }}</b></div>
-        <div class="duerow"><span>待确认断言</span><b>{{ review.claims }}</b></div>
+        <div class="duerow"><span>候选对象</span><b>{{ review.entities }}</b></div>
+        <div class="duerow"><span>待确认知识</span><b>{{ review.claims }}</b></div>
         <div class="duerow"><span>待确认关系</span><b>{{ review.relations }}</b></div>
         <div class="duerow clickable" :class="{ warn: conflicts > 0 }" @click="router.push({ path: '/research', query: { tab: 'conflicts' } })">
           <span>知识冲突</span><b>{{ conflicts }}</b>
@@ -249,7 +250,7 @@ function openDocument(id: string) {
         <div class="panel pad" style="padding:6px">
           <div v-for="e in entities" :key="e.id" class="item" @click="router.push('/knowledge/object/' + e.id)">
             <div class="ico-badge ib-blue">✦</div>
-            <div class="grow"><b>{{ e.name }}</b><p>{{ e.type }} · {{ e.description?.slice(0, 40) || '—' }}</p></div>
+            <div class="grow"><b>{{ e.name }}</b><p>{{ entityTypeLabel(e.type) }} · {{ e.description?.slice(0, 40) || '—' }}</p></div>
             <StatusTag :status="e.status" />
           </div>
           <div v-if="!entities.length" class="empty">还没有知识对象</div>
@@ -282,7 +283,7 @@ function openDocument(id: string) {
           <div class="item" @click="router.push('/research')">
             <div class="ico-badge ib-blue">◇</div>
             <div class="grow"><b>{{ openQuestions }} 个开放问题</b><p>在研究空间查看与继续研究</p></div>
-            <span class="tag blue">open</span>
+            <span class="tag blue">开放中</span>
           </div>
         </div>
 
@@ -291,7 +292,7 @@ function openDocument(id: string) {
           <div v-for="d in docs.slice(0, 4)" :key="d.id" class="item" @click="openDocument(d.id)">
             <div class="ico-badge ib-blue">▤</div>
             <div class="grow"><b>{{ d.title }}</b><p>{{ d.chunk_count }} 片段 · {{ fmtDateTime(d.updated_at) }}</p></div>
-            <StatusTag v-if="d.last_run_status" :status="d.last_run_status" /><span v-else class="tag amber">未抽取</span>
+            <StatusTag v-if="d.last_run_status" :status="d.last_run_status" /><span v-else class="tag amber">未分析</span>
           </div>
         </div>
       </div>

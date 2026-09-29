@@ -58,7 +58,7 @@ for i in range(80):
     cur.execute(
         "INSERT INTO entities (id,type,types_json,name,aliases_json,description,properties_json,status,created_at) "
         "VALUES (?,?,?,?,?,?,?,?,?)",
-        (eid, "Concept", "[]", f"实体{i:03d}", "[]", f"第 {i} 个演示概念", "{}", "verified", "2026-09-29"),
+        (eid, "Concept", "[]", f"对象{i:03d}", "[]", f"第 {i} 个演示概念", "{}", "verified", "2026-09-29"),
     )
     entity_ids.append(eid)
 
@@ -73,7 +73,7 @@ for i in range(120):
         "claim_type,polarity,modality,confidence,status,created_by,source_document_id,"
         "source_chunk_id,source_start_offset,source_end_offset,source_quote,created_at) "
         "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        (cid, s, "related_to", o, None, f"实体{s[-4:]} 与 实体{o[-4:]} 相关",
+        (cid, s, "related_to", o, None, f"对象{s[-4:]} 与 对象{o[-4:]} 相关",
          "{}", "factual", "positive", "asserted", 0.82, "candidate", "llm",
          doc_id, chunk_ids[i % len(chunk_ids)], 0, 10, "演示引用", d),
     )

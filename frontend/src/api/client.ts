@@ -1,5 +1,12 @@
 export async function api<T = unknown>(path: string, opt?: RequestInit): Promise<T> {
-  const r = await fetch(path, opt)
+  let r: Response
+  try {
+    r = await fetch(path, opt)
+  } catch {
+    // fetch 只在网络层失败时 reject（后端未启动 / 连接被拒 / 断网），拿不到任何响应。
+    // 浏览器给的原文是「Failed to fetch」——它只告诉用户"坏了"，不告诉用户能做什么。
+    throw new Error('无法连接到服务，请确认后端已启动后重试')
+  }
   const text = await r.text()
   let j: unknown = null
   try { j = text ? JSON.parse(text) : null } catch { j = null }

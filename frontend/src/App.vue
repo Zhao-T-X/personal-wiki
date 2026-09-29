@@ -47,8 +47,8 @@ const CRUMBS: Record<string, string> = {
 }
 const crumb = computed(() => {
   const path = route.path
-  if (path.startsWith('/knowledge/object/')) return ['知识', 'Knowledge Object']
-  if (path.startsWith('/knowledge/claim/')) return ['知识', 'Claim']
+  if (path.startsWith('/knowledge/object/')) return ['知识', '对象详情']
+  if (path.startsWith('/knowledge/claim/')) return ['知识', '知识详情']
   return (CRUMBS[path] || '首页').split(' / ')
 })
 
