@@ -27,7 +27,7 @@ const filtered = computed(() => {
           <slot :name="'cell-' + c.key" :row="row">{{ row[c.key] }}</slot>
         </td>
       </tr>
-      <tr v-if="!filtered.length"><td :colspan="columns.length"><div class="empty">暂无数据</div></td></tr>
+      <tr v-if="!filtered.length"><td :colspan="columns.length"><div class="empty">{{ $t('dataTable.noData') }}</div></td></tr>
     </tbody>
   </table>
 </template>

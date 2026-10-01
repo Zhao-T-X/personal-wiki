@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { post } from '../api/client'
 import { useAppStore } from '../stores/app'
 
+const { t } = useI18n()
 const store = useAppStore()
 const elapsed = ref(0)
 let ticker: number | undefined
@@ -27,7 +29,7 @@ const percent = computed(() => {
 async function cancel() {
   const id = store.extraction?.runId
   if (!id) return
-  try { await post(`/api/runs/${id}/cancel`); store.toast('已请求取消（当前批次结束后生效）') }
+  try { await post(`/api/runs/${id}/cancel`); store.toast(t('runProgress.cancelRequested')) }
   catch (e: any) { store.toast(e.message) }
 }
 </script>
@@ -36,7 +38,7 @@ async function cancel() {
   <div v-if="store.extraction" class="runprog">
     <div class="row">
       <span class="rpdot"></span>
-      <b class="rptitle">{{ store.extraction.stage }}</b>
+      <b class="rptitle">{{ t(store.extraction.stage) }}</b>
       <div class="grow"></div>
       <span class="faint" style="font-size:9px">{{ elapsed }}s</span>
     </div>
@@ -46,11 +48,11 @@ async function cancel() {
     </div>
     <div class="row" style="margin-top:8px">
       <span class="faint" style="font-size:9px">
-        {{ store.extraction.batch ? `批次 ${store.extraction.batch.done}/${store.extraction.batch.total}` : '准备中' }}
-        <template v-if="store.extraction.stepCount"> · 已完成 {{ store.extraction.stepCount }} 步</template>
+        {{ store.extraction.batch ? t('runProgress.batch', { done: store.extraction.batch.done, total: store.extraction.batch.total }) : t('runProgress.preparing') }}
+        <template v-if="store.extraction.stepCount"> · {{ t('runProgress.steps', { n: store.extraction.stepCount }) }}</template>
       </span>
       <div class="grow"></div>
-      <button class="btn sm" :disabled="!store.extraction.runId" @click="cancel">取消</button>
+      <button class="btn sm" :disabled="!store.extraction.runId" @click="cancel">{{ t('runProgress.cancel') }}</button>
     </div>
   </div>
 </template>

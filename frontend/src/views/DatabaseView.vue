@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { api } from '../api/client'
 import PageHead from '../components/PageHead.vue'
@@ -7,6 +8,7 @@ import KpiCard from '../components/KpiCard.vue'
 import DataTable from '../components/DataTable.vue'
 import { useAppStore } from '../stores/app'
 
+const { t } = useI18n()
 const store = useAppStore()
 const router = useRouter()
 const stats = ref<Record<string, number>>({})
@@ -24,7 +26,7 @@ async function check() {
   try {
     const r = await api<{ integrity: string; size_mb: number; page_count: number }>('/api/database/integrity')
     integrity.value = r
-    store.toast('完整性检查：' + r.integrity)
+    store.toast(t('database.integrityCheck') + '：' + r.integrity)
   } finally { checking.value = false }
 }
 
@@ -39,10 +41,10 @@ const columns = [
 
 <template>
   <div class="page">
-    <div class="eyebrow" style="cursor:pointer;margin-bottom:8px" @click="router.push('/settings')">← 设置 · 高级</div>
-    <PageHead title="Database" subtitle="SQLite 是所有知识与配置状态的 canonical persistence layer。">
+    <div class="eyebrow" style="cursor:pointer;margin-bottom:8px" @click="router.push('/settings')">← {{ t('database.back') }}</div>
+    <PageHead title="Database" :subtitle="t('database.subtitle')">
       <template #actions>
-        <button class="btn" :disabled="checking" @click="check">✓ 完整性检查</button>
+        <button class="btn" :disabled="checking" @click="check">{{ t('database.integrityCheck') }}</button>
       </template>
     </PageHead>
     <div class="grid g4">
@@ -50,7 +52,7 @@ const columns = [
       <KpiCard label="Tables" :value="Object.keys(stats).length" />
       <KpiCard label="Total Rows" :value="totalRows" />
       <KpiCard label="Integrity" :value="integrity?.integrity === 'ok' ? '100%' : (integrity?.integrity || '—')"
-               :trend="integrity?.integrity === 'ok' ? 'integrity_check 通过' : ''" :warn="integrity?.integrity !== 'ok'" />
+               :trend="integrity?.integrity === 'ok' ? t('database.checkPassed') : ''" :warn="integrity?.integrity !== 'ok'" />
     </div>
     <div class="card pad" style="margin-top:14px">
       <div class="cardhead"><h3>Schema Overview</h3><span class="muted" style="font-size:8px">page_count {{ integrity?.page_count ?? '—' }}</span></div>

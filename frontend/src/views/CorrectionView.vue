@@ -7,12 +7,14 @@
  * 用户不该为了改一条知识而先学会一个叫「纠正」的功能。
  */
 import { onMounted, reactive, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { api } from '../api/client'
 import CorrectionFlow from '../components/CorrectionFlow.vue'
 import PageHead from '../components/PageHead.vue'
 import { useAppStore } from '../stores/app'
 
+const { t } = useI18n()
 const router = useRouter()
 const store = useAppStore()
 
@@ -39,7 +41,7 @@ async function onApplied(r: any) {
 }
 
 async function applyManual() {
-  if (!m.subject.trim() || !m.predicate.trim()) { store.toast('subject 与 predicate 必填'); return }
+  if (!m.subject.trim() || !m.predicate.trim()) { store.toast(t('correction.subjectPredicateRequired')); return }
   applyingManual.value = true
   try {
     await flow.value?.applyPayload({
@@ -61,11 +63,11 @@ onMounted(loadHistory)
 
 <template>
   <div class="page">
-    <PageHead title="纠正知识"
-              subtitle="把一句新的事实变成一次真正的知识更新：分析 → 确认 → 新的事实 + 演化关系 + 记录">
+    <PageHead :title="t('correction.title')"
+              :subtitle="t('correction.subtitle')">
       <template #actions>
         <button class="btn ghost" :class="{ primary: manual }" @click="manual = !manual">
-          {{ manual ? '用句子分析' : '手动填写（无需模型）' }}
+          {{ manual ? t('correction.useSentence') : t('correction.manualEntry') }}
         </button>
       </template>
     </PageHead>
@@ -75,33 +77,33 @@ onMounted(loadHistory)
 
       <div v-if="manual">
         <hr class="hairline" style="margin:16px 0" />
-        <div class="sechead"><h3>手动填写（直接填写事实，无需模型）</h3></div>
+        <div class="sechead"><h3>{{ t('correction.manualTitle') }}</h3></div>
         <div class="grid3">
-          <input v-model="m.text" placeholder="原句（可选）" />
-          <input v-model="m.subject" placeholder="主体（实体名）" />
-          <input v-model="m.predicate" placeholder="关系（如 has_ceo）" />
-          <input v-model="m.object" placeholder="客体（可选）" />
-          <input v-model="m.relationship" placeholder="关系类型（supersedes 等，可选）" />
-          <input v-model="m.related_claim_id" placeholder="受影响事实 ID（可选）" />
+          <input v-model="m.text" :placeholder="t('correction.phSentence')" />
+          <input v-model="m.subject" :placeholder="t('correction.phSubject')" />
+          <input v-model="m.predicate" :placeholder="t('correction.phPredicate')" />
+          <input v-model="m.object" :placeholder="t('correction.phObject')" />
+          <input v-model="m.relationship" :placeholder="t('correction.phRelationship')" />
+          <input v-model="m.related_claim_id" :placeholder="t('correction.phClaimId')" />
         </div>
         <button class="btn primary" style="margin-top:10px" :disabled="applyingManual" @click="applyManual">
-          {{ applyingManual ? '执行中…' : '直接应用' }}
+          {{ applyingManual ? t('correction.applying') : t('correction.apply') }}
         </button>
       </div>
     </div>
 
     <div v-if="result" class="panel pad" style="margin-top:16px">
-      <div class="sechead"><h3>已生成</h3><span v-if="store.developerMode" class="tag green" style="margin:0">CORRECT</span></div>
+      <div class="sechead"><h3>{{ t('correction.generated') }}</h3><span v-if="store.developerMode" class="tag green" style="margin:0">CORRECT</span></div>
       <div class="out">
-        <span>新的事实：<b class="link" @click="openClaim(result.claim_id)">查看 →</b></span>
-        <span v-if="result.superseded_claim_id">旧的内容已转为历史：<b class="link" @click="openClaim(result.superseded_claim_id)">查看 →</b></span>
-        <span v-if="store.developerMode">操作 ID：<code>{{ result.operation_id }}</code></span>
+        <span>{{ t('correction.newFact') }}<b class="link" @click="openClaim(result.claim_id)">{{ t('correction.view') }}</b></span>
+        <span v-if="result.superseded_claim_id">{{ t('correction.oldToHistory') }}<b class="link" @click="openClaim(result.superseded_claim_id)">{{ t('correction.view') }}</b></span>
+        <span v-if="store.developerMode">{{ t('correction.opId') }}<code>{{ result.operation_id }}</code></span>
       </div>
     </div>
 
     <div class="panel pad" style="margin-top:16px">
-      <div class="sechead"><h3>修改记录</h3><span class="tag" style="margin:0">{{ history.length }}</span></div>
-      <div v-if="!history.length" class="empty">暂无纠正记录。</div>
+      <div class="sechead"><h3>{{ t('correction.history') }}</h3><span class="tag" style="margin:0">{{ history.length }}</span></div>
+      <div v-if="!history.length" class="empty">{{ t('correction.noRecords') }}</div>
       <div v-for="op in history" :key="op.id" class="item">
         <span v-if="store.developerMode" class="tag blue">CORRECT</span>
         <div class="grow">

@@ -16,6 +16,7 @@
  */
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { patchJson, post } from '../api/client'
 import CorrectionFlow from './CorrectionFlow.vue'
 import StatusTag from './StatusTag.vue'
@@ -39,6 +40,7 @@ const props = withDefaults(defineProps<{
 
 const router = useRouter()
 const store = useAppStore()
+const { t } = useI18n()
 const fixing = ref(false)
 const busy = ref(false)
 /** 这条知识刚刚被改过。要一直说到宿主把新的内容读回来为止，否则用户看到的还是旧值。 */
@@ -68,7 +70,7 @@ async function adopt() {
     // 采纳可能让两条本来各说各话的陈述突然互相矛盾。后端在同一个响应里说明它弄坏了
     // 什么，这里统一报告；页面不再自己回头查一遍关系——那是同一个判断的第二份实现，
     // 而且那份实现曾经指向一个不会显示这条冲突的界面。
-    if (!reportIssues(result?.issues, store, router)) store.toast('已采纳为知识')
+    if (!reportIssues(result?.issues, store, router)) store.toast(t('kcard.adoptedToast'))
     void store.loadPendingReview()
   } catch (e: any) { store.toast(e.message) } finally { busy.value = false }
 }
@@ -79,7 +81,7 @@ async function dismiss() {
   busy.value = true
   try {
     await patchJson(`/api/knowledge/claim/${props.claim.id}/status`, { status: 'rejected' })
-    store.toast('已忽略这条候选')
+    store.toast(t('kcard.dismissedToast'))
     emit('changed', { id: props.claim.id, status: 'rejected' })
   } catch (e: any) { store.toast(e.message) } finally { busy.value = false }
 }
@@ -114,7 +116,7 @@ function onCorrected() {
 <template>
   <div class="kcard" :class="{ compact }">
     <div class="khead">
-      <b class="ktitle">{{ title || '（缺少主体或关系）' }}</b>
+      <b class="ktitle">{{ title || t('kcard.untitled') }}</b>
       <div class="grow"></div>
       <StatusTag :status="claim.status" :label="claim.stateLabel" />
     </div>
@@ -125,28 +127,28 @@ function onCorrected() {
     <div v-if="claim.quote" class="kquote">“{{ claim.quote }}”</div>
 
     <div v-if="actions" class="kactions">
-      <button class="btn sm" :disabled="!claim.documentId" @click="openEvidence">依据</button>
+      <button class="btn sm" :disabled="!claim.documentId" @click="openEvidence">{{ t('kcard.evidence') }}</button>
       <!-- 待确认的知识还没被接受，所以对它说「纠正」是答错了问题。
            研究页、搜索页、问答页因此得到同一组动作——由状态决定，不由页面决定。 -->
       <template v-if="pending">
-        <button class="btn sm primary" :disabled="busy" @click="adopt">采纳</button>
-        <button class="btn sm" :disabled="busy" @click="dismiss">忽略</button>
+        <button class="btn sm primary" :disabled="busy" @click="adopt">{{ t('kcard.adopt') }}</button>
+        <button class="btn sm" :disabled="busy" @click="dismiss">{{ t('kcard.dismiss') }}</button>
       </template>
       <template v-else>
-        <button class="btn sm" :disabled="!claim.id" @click="openHistory">历史</button>
+        <button class="btn sm" :disabled="!claim.id" @click="openHistory">{{ t('kcard.history') }}</button>
         <button class="btn sm" :class="{ primary: fixing }" @click="fixing = !fixing">
-          {{ fixing ? '收起' : '纠正' }}
+          {{ fixing ? t('kcard.collapse') : t('kcard.correct') }}
         </button>
       </template>
       <div class="grow"></div>
-      <span v-if="evidenceCount != null" class="kcount">{{ evidenceCount }} 个依据</span>
+      <span v-if="evidenceCount != null" class="kcount">{{ t('kcard.evidenceN', { n: evidenceCount }) }}</span>
       <span v-else-if="claim.createdAt" class="kcount">{{ claim.createdAt.slice(0, 10) }}</span>
     </div>
 
     <!-- 已更新：把结果说出来，并给出"看变化"的去处，而不是静默换掉一个数字 -->
     <p v-if="corrected && !fixing" class="kupdated">
-      已更新 · 旧说法保留在历史里
-      <button class="btn sm ghost" @click="openHistory">查看变化 →</button>
+      {{ t('kcard.updated') }}
+      <button class="btn sm ghost" @click="openHistory">{{ t('kcard.viewChanges') }}</button>
     </p>
 
     <!-- 纠正长在知识旁边，而不是一个叫 Correction 的页面里。

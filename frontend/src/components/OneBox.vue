@@ -22,13 +22,22 @@
  */
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+import { Paperclip, Plus } from 'lucide-vue-next'
 import { post } from '../api/client'
 import { useAppStore } from '../stores/app'
 import AnswerCard from './AnswerCard.vue'
 import CorrectionFlow from './CorrectionFlow.vue'
 import ImportPanel from './ImportPanel.vue'
 import { correctionSeedFor } from '../utils/claim'
-import { INTENT_LABEL, canExecute, overrideOptions, overrideRequest, type IntentPlan } from '../utils/onebox'
+import { canExecute, overrideOptions, overrideRequest, type IntentPlan } from '../utils/onebox'
+
+const { t, te } = useI18n()
+/** 意图词：未知枚举原样显示，绝不编造。 */
+function intentLabel(intent: string) {
+  const key = `onebox.intent.${intent}`
+  return te(key) ? t(key) : intent
+}
 
 const props = withDefaults(defineProps<{
   /** 用户当前正在看的知识——让「这个不对」不必重新说明它在说哪条。 */
@@ -107,7 +116,7 @@ async function route(opts: { intent?: string } = {}) {
 async function run() {
   if (!canExecute(plan.value)) {
     // 界面不可达（按钮用同一个谓词），但绝不静默返回：宁可说清「没有下一步」。
-    store.toast('这一步没有可执行的动作——换一种说法，或从上面选一个意图')
+    store.toast(t('onebox.noStepToast'))
     return
   }
   running.value = true
@@ -140,35 +149,35 @@ const correctionPlan = computed(() => (result.value?.kind === 'correct' ? result
        @dragover.prevent="dragOver = true" @dragleave.prevent="dragOver = false" @drop.prevent="onDrop">
     <!-- v3 capture 头：先告诉用户「可以交给我什么」 -->
     <div class="obhead">
-      <div class="obmark">＋</div>
-      <div class="obht"><b>把内容交给我</b><span>拖入文件、粘贴链接，或者直接写下一段内容。</span></div>
+      <div class="obmark"><Plus :size="17" /></div>
+      <div class="obht"><b>{{ t('onebox.title') }}</b><span>{{ t('onebox.subtitle') }}</span></div>
     </div>
     <div class="obinput">
       <!-- 文件入口：纸夹，触发与首页同一份导入逻辑 -->
-      <button class="clip" title="上传文件" @click="pick">📎</button>
-      <input ref="inputEl" v-model="text" placeholder="粘贴链接或输入你想整理的内容……" @keydown.enter="route()" />
+      <button class="clip" :title="t('onebox.upload')" @click="pick"><Paperclip :size="16" /></button>
+      <input ref="inputEl" v-model="text" :placeholder="t('onebox.inputPlaceholder')" @keydown.enter="route()" />
     </div>
     <div class="obactions">
       <div class="obchips">
-        <button class="chip" @click="pick">上传文件</button>
-        <button class="chip" @click="router.push('/research')">开始研究</button>
-        <button class="chip" @click="focusInput">问一个问题</button>
+        <button class="chip" @click="pick">{{ t('onebox.upload') }}</button>
+        <button class="chip" @click="router.push('/research')">{{ t('onebox.startResearch') }}</button>
+        <button class="chip" @click="focusInput">{{ t('onebox.askOne') }}</button>
       </div>
       <button class="btn primary" :disabled="reading || running" @click="route()">
-        {{ reading ? '理解中…' : running ? '执行中…' : '整理内容' }}
+        {{ reading ? t('onebox.reading') : running ? t('onebox.running') : t('onebox.organize') }}
       </button>
     </div>
 
     <!-- 结果类型透明：用户不需要知道内部意图，但有权知道系统在做什么 -->
     <div v-if="reading || running || (plan && !result)" class="obstatus">
-      <template v-if="reading">正在理解这句话…</template>
+      <template v-if="reading">{{ t('onebox.understanding') }}</template>
       <template v-else-if="running">{{ plan?.summary }}</template>
       <template v-else>{{ plan?.summary }}</template>
     </div>
 
     <!-- 判断结果一直显示：读错了要能一键改，而不是重打一遍 -->
     <div v-if="plan && !result" class="obplan">
-      <span class="tag blue">我理解为：{{ INTENT_LABEL[plan.intent] || plan.intent }}</span>
+      <span class="tag blue">{{ t('onebox.understoodAs', { label: intentLabel(plan.intent) }) }}</span>
       <span class="faint" style="font-size:9.5px">{{ plan.reason }}</span>
       <div class="grow"></div>
       <template v-if="plan.intent === 'unknown'">
@@ -176,16 +185,16 @@ const correctionPlan = computed(() => (result.value?.kind === 'correct' ? result
       </template>
       <template v-else>
         <button v-for="o in options" :key="o.intent" class="btn sm ghost" @click="override(o.intent)">
-          {{ o.label }}
+          {{ t(o.label) }}
         </button>
-        <button v-if="overridden" class="btn sm ghost" @click="restoreReading">恢复系统判断</button>
+        <button v-if="overridden" class="btn sm ghost" @click="restoreReading">{{ t('onebox.restoreSystem') }}</button>
         <!-- 按钮与 run() 共用 canExecute：没有可执行步骤时按钮不存在，
              而不是存在但点了没反应。 -->
         <button v-if="executable" class="btn primary" :disabled="running" @click="run">
-          按这个执行
+          {{ t('onebox.execute') }}
         </button>
         <span v-else class="faint hint">
-          这一步没有可执行的下一步——换一种说法，或从上面选一个意图。
+          {{ t('onebox.noExecutable') }}
         </span>
       </template>
     </div>
@@ -196,41 +205,41 @@ const correctionPlan = computed(() => (result.value?.kind === 'correct' ? result
         <AnswerCard :question="text" :answer="result.body.answer || ''"
                     :evidence="result.body.evidence" :knowledge="result.body.knowledge"
                     :correction-existing="askCorrection.existing" :correction-seed="askCorrection.seed"
-                    @corrected="store.toast('知识已更新，再问一次会得到新答案')" />
+                    @corrected="store.toast(t('onebox.correctedToast'))" />
       </div>
     </template>
 
     <!-- 纠正：原地给出建议，而不是把用户丢到另一个页面 -->
     <template v-else-if="correctionPlan">
       <div class="panel pad" style="margin-top:12px">
-        <b style="font-size:12px">{{ correctionPlan.summary || '已找到相关知识与建议' }}</b>
+        <b style="font-size:12px">{{ correctionPlan.summary || t('onebox.correctionFound') }}</b>
         <p v-if="correctionPlan.related_claim_id" class="faint" style="font-size:10px">
-          与现有知识相关：{{ correctionPlan.related_claim_id.slice(0, 8) }} · 关系 {{ correctionPlan.relationship }}
+          {{ t('onebox.relatedTo', { id: correctionPlan.related_claim_id.slice(0, 8), rel: correctionPlan.relationship }) }}
         </p>
         <CorrectionFlow compact :seed="text" style="margin-top:10px"
-                        @applied="store.toast('知识已更新，再问一次会得到新答案')" />
+                        @applied="store.toast(t('onebox.correctedToast'))" />
       </div>
     </template>
 
     <template v-else-if="result?.kind === 'research'">
       <div class="panel pad" style="margin-top:12px">
-        <b style="font-size:12px">已创建研究任务</b>
+        <b style="font-size:12px">{{ t('onebox.researchCreated') }}</b>
         <p class="faint" style="font-size:10px;margin:4px 0 0">
-          研究完成后，结论会在研究页整理成「研究候选」，采纳后才成为知识。
+          {{ t('onebox.researchSub') }}
         </p>
         <button class="btn sm" style="margin-top:9px"
-                @click="router.push('/research?tab=tasks')">去看研究 →</button>
+                @click="router.push('/research?tab=tasks')">{{ t('onebox.goResearch') }}</button>
       </div>
     </template>
 
     <template v-else-if="result?.kind === 'knowledge'">
       <div class="panel pad" style="margin-top:12px">
-        <b style="font-size:12px">已整理为知识</b>
+        <b style="font-size:12px">{{ t('onebox.knowledgeCreated') }}</b>
         <p class="faint" style="font-size:10px;margin:4px 0 0">
-          整理了 {{ result.body.index?.counts?.claims ?? 0 }} 条知识，仍待你确认。
+          {{ t('onebox.knowledgeSub', { n: result.body.index?.counts?.claims ?? 0 }) }}
         </p>
         <button class="btn sm" style="margin-top:9px"
-                @click="router.push('/knowledge')">去知识空间 →</button>
+                @click="router.push('/knowledge')">{{ t('onebox.goKnowledge') }}</button>
       </div>
     </template>
 

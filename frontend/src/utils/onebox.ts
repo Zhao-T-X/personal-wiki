@@ -28,29 +28,32 @@ export interface IntentPlan {
   steps?: PlanStep[]
 }
 
+/** 意图的 i18n 键（`onebox.intent.<intent>`）。翻译发生在组件层，本文件保持纯函数。 */
+export const INTENT_KEY = 'onebox.intent.'
+
 export const INTENT_LABEL: Record<string, string> = {
-  ask: '查你的知识',
-  knowledge: '记为知识',
-  research: '去研究',
-  correct: '纠正知识',
-  unknown: '不确定',
+  ask: 'onebox.intent.ask',
+  knowledge: 'onebox.intent.knowledge',
+  research: 'onebox.intent.research',
+  correct: 'onebox.intent.correct',
+  unknown: 'onebox.intent.unknown',
 }
 
 /** 可以手动改成的意图。`unknown` 不是目的地，所以不在选项里。 */
 export const OVERRIDABLE_INTENTS = ['ask', 'knowledge', 'research', 'correct'] as const
 
 const OVERRIDE_LABEL: Record<string, string> = {
-  ask: '其实我是想问',
-  knowledge: '其实我是想记下来',
-  research: '其实我是想研究',
-  correct: '其实我是想纠正',
+  ask: 'onebox.override.ask',
+  knowledge: 'onebox.override.knowledge',
+  research: 'onebox.override.research',
+  correct: 'onebox.override.correct',
 }
 
 /**
  * 除当前意图之外的改法。
  *
  * 把「其实我是想问」显示在系统已经理解为"想问"的时候是废话，所以按当前意图过滤——
- * 用户看到的每个按钮都代表一次真实的改判。
+ * 用户看到的每个按钮都代表一次真实的改判。`label` 是 i18n 键，由组件翻译。
  */
 export function overrideOptions(intent: string | undefined | null): { intent: string; label: string }[] {
   return OVERRIDABLE_INTENTS

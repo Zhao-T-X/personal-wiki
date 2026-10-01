@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import cytoscape from 'cytoscape'
+import { ArrowRight, CircleHelp, Sparkles } from 'lucide-vue-next'
 import { api, patchJson, post } from '../api/client'
 import type { Claim, Entity, EventRow, IdeaRow, QuestionRow } from '../api/types'
 import PageHead from '../components/PageHead.vue'
@@ -9,11 +11,18 @@ import StatusTag from '../components/StatusTag.vue'
 import TypeDecision from '../components/TypeDecision.vue'
 import EmptyState from '../components/EmptyState.vue'
 import AppModal from '../components/AppModal.vue'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import KnowledgeCard from '../components/KnowledgeCard.vue'
 import { useAppStore } from '../stores/app'
 import { fmtDateTime } from '../utils/time'
 import { toCard, labelOf } from '../utils/claim'
+import { statusLabel } from '../utils/status'
 import { ENTITY_TYPES, entityTypeLabel } from '../utils/entityType'
+
+const { t } = useI18n()
 import { TYPE_COLORS, DEFAULT_NODE_COLOR, edgeEndpoints } from '../utils/graph'
 
 const route = useRoute()
@@ -45,7 +54,7 @@ async function saveEntity() {
       properties: entity.value.properties || {},
     })
     showEdit.value = false
-    store.toast('实体已更新')
+    store.toast(t('object.entityUpdated'))
     await load()
   } catch (e: any) { store.toast(e.message) }
 }
@@ -55,7 +64,7 @@ async function addIdea() {
   try {
     await post('/api/ideas', { content: ideaText.value.trim(), source_document_id: evidence.value[0]?.source_document_id || null })
     showIdea.value = false; ideaText.value = ''
-    store.toast('想法已记录（candidate）'); await load()
+    store.toast(t('object.ideaCreated')); await load()
   } catch (e: any) { store.toast(e.message) }
 }
 
@@ -64,24 +73,23 @@ async function addQuestion() {
   try {
     await post('/api/questions', { content: questionText.value.trim(), source_document_id: evidence.value[0]?.source_document_id || null })
     showQuestion.value = false; questionText.value = ''
-    store.toast('问题已创建（open）'); await load()
+    store.toast(t('object.questionCreated')); await load()
   } catch (e: any) { store.toast(e.message) }
 }
 
-/** 普通界面用语：分页标签与状态一律用产品语言（§11/§32），技术细节收进开发者模式。 */
-const TABS = [
-  { id: 'Overview', label: '概览' },
-  { id: 'Claims', label: '知识' },
-  { id: 'Relations', label: '关系' },
-  { id: 'Graph', label: '关系图' },
-  { id: 'Events', label: '事件' },
-  { id: 'Evidence', label: '依据' },
-  { id: 'Questions', label: '问题' },
-  { id: 'Ideas', label: '想法' },
-]
-const STATUS: Record<string, string> = {
-  open: '待处理', candidate: '待确认', verified: '已确认', rejected: '已否定', archived: '已归档',
-}
+/** 普通界面用语：分页标签与状态一律用产品语言（§11/§32），技术细节收进开发者模式。
+ *  id 是稳定键，label 走 i18n。状态词统一走 utils/status（原来这里还有一套
+ *  私有词汇表——同一状态两种说法，正是它要防的事）。 */
+const TABS = computed(() => [
+  { id: 'Overview', label: t('object.tabs.overview') },
+  { id: 'Claims', label: t('object.tabs.claims') },
+  { id: 'Relations', label: t('object.tabs.relations') },
+  { id: 'Graph', label: t('object.tabs.graph') },
+  { id: 'Events', label: t('object.tabs.events') },
+  { id: 'Evidence', label: t('object.tabs.evidence') },
+  { id: 'Questions', label: t('object.tabs.questions') },
+  { id: 'Ideas', label: t('object.tabs.ideas') },
+])
 const tab = ref('Overview')
 const entity = ref<Entity | null>(null)
 const counts = ref<Record<string, number>>({})
@@ -133,7 +141,7 @@ watch(() => route.params.id, () => { if (route.path.startsWith('/knowledge/objec
 
 function askAbout() {
   if (!entity.value) return
-  router.push({ path: '/qa', query: { q: `${entity.value.name} 是什么？它和哪些东西有关？` } })
+  router.push({ path: '/qa', query: { q: t('object.askQuery', { name: entity.value.name }) } })
 }
 /* ---------- local graph（从当前对象出发的一跳关系） ---------- */
 const graphBox = ref<HTMLElement | null>(null)
@@ -231,10 +239,10 @@ watch(tab, t => { if (t === 'Graph') drawLocalGraph() })
   <div class="page" v-if="entity">
     <PageHead :title="entity.name" :subtitle="undefined">
       <template #actions>
-        <button class="btn" @click="openEdit">编辑</button>
-        <button class="btn" @click="router.push('/review')">审核</button>
-        <button class="btn" @click="router.push('/research')">研究</button>
-        <button class="btn primary" @click="askAbout">就此提问</button>
+        <button class="btn" @click="openEdit">{{ t('object.edit') }}</button>
+        <button class="btn" @click="router.push('/review')">{{ t('object.review') }}</button>
+        <button class="btn" @click="router.push('/research')">{{ t('object.research') }}</button>
+        <button class="btn primary" @click="askAbout">{{ t('object.ask') }}</button>
       </template>
     </PageHead>
     <div class="row" style="gap:8px;flex-wrap:wrap;margin:-12px 0 16px">
@@ -260,13 +268,13 @@ watch(tab, t => { if (t === 'Graph') drawLocalGraph() })
     <!-- Overview -->
     <div v-if="tab === 'Overview'" class="grid g2">
       <div>
-        <div class="sechead"><h3>这是什么？</h3></div>
-        <div class="panel pad" style="font-size:10.5px;line-height:1.8;color:#3c4b66">{{ entity.description || '暂无描述——点右上角「编辑」补充。' }}</div>
-        <div class="sechead"><h3>类型判定 <span class="faint" style="font-size:9px;font-weight:400">· 为什么是这个类型</span></h3></div>
+        <div class="sechead"><h3>{{ t('object.whatIsThis') }}</h3></div>
+        <div class="panel pad" style="font-size:10.5px;line-height:1.8;color:#3c4b66">{{ entity.description || t('object.noDesc') }}</div>
+        <div class="sechead"><h3>{{ t('object.typeDecision') }} <span class="faint" style="font-size:9px;font-weight:400">{{ t('object.typeDecisionSub') }}</span></h3></div>
         <div class="panel" style="padding:6px"><TypeDecision :decisions="typeDecision" /></div>
       </div>
       <div>
-        <div class="sechead"><h3>核心知识</h3><span class="more" @click="tab = 'Claims'">全部 {{ counts.claims }} →</span></div>
+        <div class="sechead"><h3>{{ t('object.coreKnowledge') }}</h3><span class="more" @click="tab = 'Claims'">{{ t('object.allN', { n: counts.claims }) }}</span></div>
         <!-- 知识在这里也以卡片出现：同一事实在详情页、搜索、问答、研究里是同一个形状，
              带着同样的状态用词和同样的 [依据][历史][纠正]。之前是原始数据行，
              还把谓词标识符直接打在了界面上。 -->
@@ -274,14 +282,14 @@ watch(tab, t => { if (t === 'Graph') drawLocalGraph() })
           <KnowledgeCard v-for="c in claims.slice(0, 6)" :key="c.id"
                          :claim="toCard(c)" compact @changed="load" />
         </div>
-        <EmptyState v-if="!claims.length" text="暂无知识" />
-        <div class="sechead"><h3>Relations</h3><span class="more" @click="tab = 'Relations'">全部 →</span></div>
+        <EmptyState v-if="!claims.length" :text="t('object.noClaims')" />
+        <div class="sechead"><h3>{{ t('object.tabs.relations') }}</h3><span class="more" @click="tab = 'Relations'">{{ t('object.all') }}</span></div>
         <div class="panel pad" style="padding:6px">
           <div v-for="r in relations.slice(0, 5)" :key="r.id" class="item" style="cursor:default">
-            <div class="ico-badge ib-blue">→</div>
-            <div class="grow"><b>{{ r.source_name }} → {{ labelOf(r.predicate) }} → {{ r.target_name }}</b><p>{{ r.status }}</p></div>
+            <div class="ico-badge ib-blue"><ArrowRight :size="14" /></div>
+            <div class="grow"><b>{{ r.source_name }} → {{ labelOf(r.predicate) }} → {{ r.target_name }}</b><p>{{ statusLabel(r.status) }}</p></div>
           </div>
-          <EmptyState v-if="!relations.length" text="暂无图谱关系" />
+          <EmptyState v-if="!relations.length" :text="t('object.noRelations')" />
         </div>
       </div>
     </div>
@@ -292,30 +300,30 @@ watch(tab, t => { if (t === 'Graph') drawLocalGraph() })
         <KnowledgeCard v-for="c in claims" :key="c.id"
                        :claim="toCard(c)" @changed="load" />
       </div>
-      <EmptyState v-if="!claims.length" text="暂无知识" />
+      <EmptyState v-if="!claims.length" :text="t('object.noClaims')" />
     </div>
 
     <!-- Relations -->
     <div v-if="tab === 'Relations'">
       <div class="panel pad" style="padding:6px">
         <div v-for="r in relations" :key="r.id" class="item" style="cursor:default">
-          <div class="ico-badge ib-blue">→</div>
-          <div class="grow"><b>{{ r.source_name }} → {{ labelOf(r.predicate) }} → {{ r.target_name }}</b><p>置信度 {{ r.confidence != null ? Math.round(r.confidence * 100) + '%' : '—' }}</p></div>
+          <div class="ico-badge ib-blue"><ArrowRight :size="14" /></div>
+          <div class="grow"><b>{{ r.source_name }} → {{ labelOf(r.predicate) }} → {{ r.target_name }}</b><p>{{ r.confidence != null ? t('object.confidence', { n: Math.round(r.confidence * 100) + '%' }) : '—' }}</p></div>
           <StatusTag :status="r.status" />
         </div>
-        <EmptyState v-if="!relations.length" text="暂无图谱关系" />
+        <EmptyState v-if="!relations.length" :text="t('object.noRelations')" />
       </div>
-      <div class="notice violet" style="margin-top:12px">为什么有的知识没有进入关系图？系统只会把足够确定的陈述放进关系图，其余先作为知识保留，确认后会再出现。</div>
+      <div class="notice violet" style="margin-top:12px">{{ t('object.relationsNote') }}</div>
     </div>
 
     <!-- Graph：局部一跳关系（不是全库力导向图） -->
     <div v-if="tab === 'Graph'">
       <div class="row" style="margin-bottom:12px">
-        <span class="faint" style="font-size:9px">从「{{ entity.name }}」出发的一跳关系 · 点击节点进入对象 · 点击连线查看关系来源</span>
+        <span class="faint" style="font-size:9px">{{ t('object.graphHint', { name: entity.name }) }}</span>
         <div class="grow"></div>
-        <button class="btn sm" @click="drawLocalGraph">重新布局</button>
+        <button class="btn sm" @click="drawLocalGraph">{{ t('knowledge.relayout') }}</button>
       </div>
-      <div v-if="graphLoading" class="empty" style="margin-bottom:12px">正在构建知识地图…</div>
+      <div v-if="graphLoading" class="empty" style="margin-bottom:12px">{{ t('object.buildingGraph') }}</div>
       <div ref="graphBox" class="gcanvas"></div>
       <div v-if="selectedEdge" class="panel pad" style="margin-top:12px">
         <div style="font-size:12.5px">
@@ -324,22 +332,22 @@ watch(tab, t => { if (t === 'Graph') drawLocalGraph() })
           <b>{{ selectedEdge.target }}</b>
         </div>
         <div class="row" style="margin-top:10px;gap:8px;flex-wrap:wrap">
-          <span v-if="selectedEdge.confidence != null" class="tag">置信度 {{ Math.round(selectedEdge.confidence * 100) }}%</span>
+          <span v-if="selectedEdge.confidence != null" class="tag">{{ t('object.confidence', { n: Math.round(selectedEdge.confidence * 100) + '%' }) }}</span>
           <StatusTag v-if="selectedEdge.status" :status="selectedEdge.status" />
-          <button v-if="selectedEdge.documentId" class="btn sm" @click="openEdgeSource">打开原文并定位 →</button>
-          <button class="btn sm ghost" @click="selectedEdge = null">关闭</button>
+          <button v-if="selectedEdge.documentId" class="btn sm" @click="openEdgeSource">{{ t('object.openSource') }}</button>
+          <button class="btn sm ghost" @click="selectedEdge = null">{{ t('object.close') }}</button>
         </div>
       </div>
       <EmptyState
         v-else-if="graphEmpty && !graphLoading"
-        title="还没有关系"
-        text="这个对象尚未与其它对象建立关系——关系由高确定性陈述派生，确认候选后会出现。"
+        :title="t('object.noRelationsTitle')"
+        :text="t('object.noRelationsText')"
       />
     </div>
 
     <!-- Events -->
     <div v-if="tab === 'Events'" class="panel pad">
-      <div class="notice" style="margin-bottom:10px;background:var(--surface2)">以下事件来自与该对象共享来源文档的记录（事件本身不直接关联实体）。</div>
+      <div class="notice" style="margin-bottom:10px;background:var(--surface2)">{{ t('object.eventsNote') }}</div>
       <div class="timeline">
         <div v-for="e in events" :key="e.id" class="tle">
           <b>{{ e.description }}</b>
@@ -349,7 +357,7 @@ watch(tab, t => { if (t === 'Graph') drawLocalGraph() })
             <span class="when">{{ e.time?.start || fmtDateTime(e.created_at) }}</span>
           </div>
         </div>
-        <EmptyState v-if="!events.length" text="该对象关联的来源文档中暂无事件" />
+        <EmptyState v-if="!events.length" :text="t('object.noEvents')" />
       </div>
     </div>
 
@@ -358,84 +366,89 @@ watch(tab, t => { if (t === 'Graph') drawLocalGraph() })
       <div v-for="c in evidence" :key="c.id" class="evidence" style="margin-bottom:12px">
         “{{ c.source_quote }}”
         <div class="src">
-          <span>{{ docLabels[c.source_document_id] || '来源文档' }}</span>
+          <span>{{ docLabels[c.source_document_id] || t('object.sourceDoc') }}</span>
           <span v-if="c.source_start_offset != null && store.developerMode">offset [{{ c.source_start_offset }}, {{ c.source_end_offset }})</span>
         </div>
-        <button class="btn sm" style="margin-top:9px" @click="openEvidenceSource(c)">打开原文并定位 →</button>
+        <button class="btn sm" style="margin-top:9px" @click="openEvidenceSource(c)">{{ t('object.openSource') }}</button>
       </div>
       <EmptyState
         v-if="!evidence.length"
-        title="还没有可展示的证据"
-        text="证据来自整理资料时定位到的原文片段——先为这个对象关联的文档做一次整理。"
+        :title="t('object.noEvidenceTitle')"
+        :text="t('object.noEvidenceText')"
       >
-        <template #action><button class="btn" @click="router.push('/knowledge')">去知识库</button></template>
+        <template #action><button class="btn" @click="router.push('/knowledge')">{{ t('object.goKnowledge') }}</button></template>
       </EmptyState>
     </div>
 
     <!-- Questions -->
     <div v-if="tab === 'Questions'">
-      <div class="sechead" style="margin-top:0"><h3>相关问题</h3><button class="btn" @click="showQuestion = true">＋ 新建问题</button></div>
+      <div class="sechead" style="margin-top:0"><h3>{{ t('object.relatedQuestions') }}</h3><button class="btn" @click="showQuestion = true">{{ t('object.newQuestion') }}</button></div>
       <div class="panel pad" style="padding:6px">
         <div v-for="q in questions" :key="q.id" class="item" @click="router.push('/research')">
-          <div class="ico-badge ib-blue">?</div>
-          <div class="grow"><b>{{ q.content }}</b><p>{{ STATUS[q.status] || q.status }}</p></div>
+          <div class="ico-badge ib-blue"><CircleHelp :size="14" /></div>
+          <div class="grow"><b>{{ q.content }}</b><p>{{ statusLabel(q.status) }}</p></div>
           <StatusTag :status="q.status" />
         </div>
-        <EmptyState v-if="!questions.length" text="该对象关联的来源文档中暂无问题" />
+        <EmptyState v-if="!questions.length" :text="t('object.noQuestions')" />
       </div>
     </div>
 
     <!-- Ideas -->
     <div v-if="tab === 'Ideas'">
-      <div class="sechead" style="margin-top:0"><h3>相关想法</h3><button class="btn" @click="showIdea = true">＋ 记录想法</button></div>
+      <div class="sechead" style="margin-top:0"><h3>{{ t('object.relatedIdeas') }}</h3><button class="btn" @click="showIdea = true">{{ t('object.newIdea') }}</button></div>
       <div class="panel pad" style="padding:6px">
         <div v-for="i in ideas" :key="i.id" class="item" style="cursor:default">
-          <div class="ico-badge ib-violet">✦</div>
-          <div class="grow"><b>{{ i.content }}</b><p>{{ STATUS[i.status] || i.status }}</p></div>
+          <div class="ico-badge ib-violet"><Sparkles :size="14" /></div>
+          <div class="grow"><b>{{ i.content }}</b><p>{{ statusLabel(i.status) }}</p></div>
           <StatusTag :status="i.status" />
         </div>
-        <EmptyState v-if="!ideas.length" text="该对象关联的来源文档中暂无想法" />
+        <EmptyState v-if="!ideas.length" :text="t('object.noIdeas')" />
       </div>
     </div>
 
-    <AppModal :open="showEdit" title="编辑对象"
-               :subtitle="store.developerMode ? '类型受 Ontology 注册表约束；改名会同步别名并做去重。' : '选择这个对象的类别。改名会同步别名并做去重。'" @close="showEdit = false">
-      <input v-model="editName" class="field" style="width:100%" placeholder="名称" />
-      <select v-model="editType" class="field" style="width:100%;margin-top:9px">
-        <option v-for="t in ENTITY_TYPES" :key="t.id" :value="t.id">{{ t.label }}</option>
-      </select>
-      <input v-model="editAliases" class="field" style="width:100%;margin-top:9px" placeholder="别名（逗号分隔）" />
-      <textarea v-model="editDesc" class="field" style="width:100%;height:80px;margin-top:9px" placeholder="描述"></textarea>
-      <div style="display:flex;justify-content:flex-end;gap:7px;margin-top:12px">
-        <button class="btn" @click="showEdit = false">取消</button>
-        <button class="btn primary" @click="saveEntity">保存</button>
+    <AppModal :open="showEdit" :title="t('object.modal.editTitle')"
+               :subtitle="store.developerMode ? t('object.modal.editSubDev') : t('object.modal.editSub')" @close="showEdit = false">
+      <div class="grid gap-3">
+        <Input v-model="editName" :placeholder="t('object.modal.name')" />
+        <Select v-model="editType">
+          <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem v-for="tt in ENTITY_TYPES" :key="tt.id" :value="tt.id">{{ entityTypeLabel(tt.id) }}</SelectItem>
+          </SelectContent>
+        </Select>
+        <Input v-model="editAliases" :placeholder="t('object.modal.aliases')" />
+        <Textarea v-model="editDesc" class="min-h-[80px]" :placeholder="t('object.modal.desc')" />
+      </div>
+      <div class="mt-4 flex justify-end gap-2">
+        <Button variant="outline" size="sm" @click="showEdit = false">{{ t('object.modal.cancel') }}</Button>
+        <Button size="sm" @click="saveEntity">{{ t('object.modal.save') }}</Button>
       </div>
     </AppModal>
 
-    <AppModal :open="showIdea" title="记录想法" subtitle="手工记录的观点默认为 candidate，可在「审核」中确认。" @close="showIdea = false">
-      <textarea v-model="ideaText" class="field" style="width:100%;height:100px" placeholder="来自来源的想法、方案或研究方向…"></textarea>
-      <div style="display:flex;justify-content:flex-end;gap:7px;margin-top:12px">
-        <button class="btn" @click="showIdea = false">取消</button>
-        <button class="btn primary" @click="addIdea">保存</button>
+    <AppModal :open="showIdea" :title="t('object.modal.ideaTitle')" :subtitle="t('object.modal.ideaSub')" @close="showIdea = false">
+      <Textarea v-model="ideaText" class="min-h-[100px]" :placeholder="t('object.modal.ideaPlaceholder')" />
+      <div class="mt-4 flex justify-end gap-2">
+        <Button variant="outline" size="sm" @click="showIdea = false">{{ t('object.modal.cancel') }}</Button>
+        <Button size="sm" @click="addIdea">{{ t('object.modal.save') }}</Button>
       </div>
     </AppModal>
 
-    <AppModal :open="showQuestion" title="新建问题" subtitle="能够驱动知识获取、研究或验证的问题。" @close="showQuestion = false">
-      <textarea v-model="questionText" class="field" style="width:100%;height:90px" placeholder="例如：检索质量如何量化影响 RAG 的最终效果？"></textarea>
-      <div style="display:flex;justify-content:flex-end;gap:7px;margin-top:12px">
-        <button class="btn" @click="showQuestion = false">取消</button>
-        <button class="btn primary" @click="addQuestion">创建</button>
+    <AppModal :open="showQuestion" :title="t('object.modal.questionTitle')" :subtitle="t('object.modal.questionSub')" @close="showQuestion = false">
+      <Textarea v-model="questionText" class="min-h-[90px]" :placeholder="t('object.modal.questionPlaceholder')" />
+      <div class="mt-4 flex justify-end gap-2">
+        <Button variant="outline" size="sm" @click="showQuestion = false">{{ t('object.modal.cancel') }}</Button>
+        <Button size="sm" @click="addQuestion">{{ t('object.modal.create') }}</Button>
       </div>
     </AppModal>
   </div>
 
   <div class="page" v-else-if="loadError">
-    <PageHead title="对象不存在" :subtitle="loadError">
+    <PageHead :title="t('object.notFound')" :subtitle="loadError">
       <template #actions>
-        <button class="btn" @click="router.back()">← 返回</button>
+        <button class="btn" @click="router.back()">← {{ t('object.back') }}</button>
       </template>
     </PageHead>
-    <EmptyState :text="'找不到这个知识对象（' + loadError + '）——它可能已被删除或合并。'" />
+    <EmptyState :text="t('object.notFoundText', { msg: loadError })" />
   </div>
 </template>
 

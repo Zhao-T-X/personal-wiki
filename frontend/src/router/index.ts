@@ -1,33 +1,23 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 
 import HomeView from '../views/HomeView.vue'
-import KnowledgeView from '../views/KnowledgeView.vue'
-import ObjectView from '../views/ObjectView.vue'
-import ClaimView from '../views/ClaimView.vue'
-import QaView from '../views/QaView.vue'
-import ResearchView from '../views/ResearchView.vue'
-import ReviewView from '../views/ReviewView.vue'
-import CorrectionView from '../views/CorrectionView.vue'
-import EvalDashboard from '../views/EvalDashboard.vue'
-import AgentView from '../views/AgentView.vue'
-import SettingsView from '../views/SettingsView.vue'
-import DatabaseView from '../views/DatabaseView.vue'
-import ExtractionExperimentView from '../views/ExtractionExperimentView.vue'
 
+/* 首页保持同步导入（首屏不闪），其余视图按需加载：
+   把 Reka UI、cytoscape 等重依赖摊到各个 chunk，首屏包显著变小。 */
 const routes = [
   { path: '/', component: HomeView },
-  { path: '/knowledge', component: KnowledgeView },
-  { path: '/knowledge/object/:id', component: ObjectView },
-  { path: '/knowledge/claim/:id', component: ClaimView },
-  { path: '/qa', component: QaView },
-  { path: '/research', component: ResearchView },
-  { path: '/review', component: ReviewView },
-  { path: '/correction', component: CorrectionView },
-  { path: '/agent', component: AgentView },
-  { path: '/settings', component: SettingsView },
-  { path: '/settings/database', component: DatabaseView },
-  { path: '/eval', component: EvalDashboard },
-  { path: '/extraction-experiment', component: ExtractionExperimentView },
+  { path: '/knowledge', component: () => import('../views/KnowledgeView.vue') },
+  { path: '/knowledge/object/:id', component: () => import('../views/ObjectView.vue') },
+  { path: '/knowledge/claim/:id', component: () => import('../views/ClaimView.vue') },
+  { path: '/qa', component: () => import('../views/QaView.vue') },
+  { path: '/research', component: () => import('../views/ResearchView.vue') },
+  { path: '/review', component: () => import('../views/ReviewView.vue') },
+  { path: '/correction', component: () => import('../views/CorrectionView.vue') },
+  { path: '/agent', component: () => import('../views/AgentView.vue') },
+  { path: '/settings', component: () => import('../views/SettingsView.vue') },
+  { path: '/settings/database', component: () => import('../views/DatabaseView.vue') },
+  { path: '/eval', component: () => import('../views/EvalDashboard.vue') },
+  { path: '/extraction-experiment', component: () => import('../views/ExtractionExperimentView.vue') },
 ]
 
 export const router = createRouter({ history: createWebHashHistory(), routes })

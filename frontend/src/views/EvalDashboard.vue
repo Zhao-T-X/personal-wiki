@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import PageHead from '../components/PageHead.vue'
 import EmptyState from '../components/EmptyState.vue'
 import { useAppStore } from '../stores/app'
@@ -7,34 +8,35 @@ import { fmtDateTime } from '../utils/time'
 import { getEvalBaseline, getEvalRun, listEvalRuns, pinEvalBaseline, runEval } from '../api/eval'
 import type { EvalRunDetail, EvalRunListItem, EvalSuite, EvalSummary } from '../api/types'
 
+const { t } = useI18n()
 const store = useAppStore()
 
 /* ---- suite metadata ---- */
 const SUITES: { id: EvalSuite; label: string; icon: string }[] = [
-  { id: 'extraction', label: '抽取评测', icon: '✦' },
-  { id: 'qa', label: '问答评测', icon: '◎' },
-  { id: 'retrieval', label: '检索评测', icon: '◇' },
+  { id: 'extraction', label: t('eval.suiteExtraction'), icon: '✦' },
+  { id: 'qa', label: t('eval.suiteQa'), icon: '◎' },
+  { id: 'retrieval', label: t('eval.suiteRetrieval'), icon: '◇' },
 ]
 const SUITE_LABEL: Record<EvalSuite, string> = {
-  extraction: '抽取评测', qa: '问答评测', retrieval: '检索评测',
+  extraction: t('eval.suiteExtraction'), qa: t('eval.suiteQa'), retrieval: t('eval.suiteRetrieval'),
 }
 
 /** Metric display config. `higherBetter:false` means lower is an improvement. */
 const METRIC_META: Record<string, { label: string; higherBetter: boolean }> = {
-  entity_precision: { label: '实体精确率', higherBetter: true },
-  entity_recall: { label: '实体召回率', higherBetter: true },
-  claim_precision: { label: '主张精确率', higherBetter: true },
-  claim_recall: { label: '主张召回率', higherBetter: true },
-  evidence_accuracy: { label: '证据准确率', higherBetter: true },
-  ontology_violation_rate: { label: '本体违规率', higherBetter: false },
-  citation_coverage: { label: '引用覆盖率', higherBetter: true },
-  groundedness: { label: '依据度', higherBetter: true },
-  answer_correctness: { label: '回答正确性', higherBetter: true },
-  unknown_answer_hallucination_rate: { label: '未知回答幻觉率', higherBetter: false },
-  recall_at_5: { label: '召回@5', higherBetter: true },
-  recall_at_10: { label: '召回@10', higherBetter: true },
-  precision_at_5: { label: '精确率@5', higherBetter: true },
-  mrr: { label: 'MRR', higherBetter: true },
+  entity_precision: { label: t('eval.mEntityPrecision'), higherBetter: true },
+  entity_recall: { label: t('eval.mEntityRecall'), higherBetter: true },
+  claim_precision: { label: t('eval.mClaimPrecision'), higherBetter: true },
+  claim_recall: { label: t('eval.mClaimRecall'), higherBetter: true },
+  evidence_accuracy: { label: t('eval.mEvidenceAccuracy'), higherBetter: true },
+  ontology_violation_rate: { label: t('eval.mOntologyViolation'), higherBetter: false },
+  citation_coverage: { label: t('eval.mCitationCoverage'), higherBetter: true },
+  groundedness: { label: t('eval.mGroundedness'), higherBetter: true },
+  answer_correctness: { label: t('eval.mAnswerCorrectness'), higherBetter: true },
+  unknown_answer_hallucination_rate: { label: t('eval.mHallucination'), higherBetter: false },
+  recall_at_5: { label: t('eval.mRecall5'), higherBetter: true },
+  recall_at_10: { label: t('eval.mRecall10'), higherBetter: true },
+  precision_at_5: { label: t('eval.mPrecision5'), higherBetter: true },
+  mrr: { label: t('eval.mMrr'), higherBetter: true },
 }
 
 /* ---- state ---- */
@@ -116,7 +118,7 @@ async function selectRun(runId: string) {
     const detail = await getEvalRun(runId)
     current.value = detail
   } catch (e: any) {
-    store.toast(e?.message ? `加载失败：${e.message}` : '加载评测明细失败')
+    store.toast(e?.message ? t('eval.loadFailMsg', { msg: e.message }) : t('eval.loadFail'))
   } finally {
     loadingRun.value = false
   }
@@ -130,9 +132,9 @@ async function startRun(suite: EvalSuite) {
     current.value = detail
     // refresh history, newest first
     await loadRuns()
-    store.toast(`已运行 ${SUITE_LABEL[suite]}`)
+    store.toast(t('eval.ranSuite', { suite: SUITE_LABEL[suite] }))
   } catch (e: any) {
-    store.toast(e?.message ? `运行失败：${e.message}` : '评测运行失败')
+    store.toast(e?.message ? t('eval.runFailMsg', { msg: e.message }) : t('eval.runFail'))
   } finally {
     running.value = null
   }
@@ -143,9 +145,9 @@ async function pinBaseline() {
   pinning.value = true
   try {
     await pinEvalBaseline({ suite: current.value.suite, run_id: current.value.run_id })
-    store.toast(`已将 ${SUITE_LABEL[current.value.suite]} 设为基线`)
+    store.toast(t('eval.baselineSet', { suite: SUITE_LABEL[current.value.suite] }))
   } catch (e: any) {
-    store.toast(e?.message ? `设基线失败：${e.message}` : '设置基线失败')
+    store.toast(e?.message ? t('eval.pinFailMsg', { msg: e.message }) : t('eval.pinFail'))
   } finally {
     pinning.value = false
   }
@@ -169,15 +171,15 @@ function deltaTxt(d: number | null) {
 }
 function fmtVal(v: unknown): string {
   if (typeof v === 'number') return (v * 100).toFixed(1) + '%'
-  if (typeof v === 'boolean') return v ? '是' : '否'
+  if (typeof v === 'boolean') return v ? t('eval.yes') : t('eval.no')
   if (v == null) return '—'
   if (typeof v === 'object') return JSON.stringify(v)
   return String(v)
 }
 function caseTitle(c: Record<string, unknown>, i: number) {
   return (typeof c.case_id === 'string' || typeof c.case_id === 'number'
-    ? `用例 ${c.case_id}`
-    : `用例 ${i + 1}`)
+    ? t('eval.caseId', { id: c.case_id })
+    : t('eval.caseId', { id: i + 1 }))
 }
 
 watch(currentSuite, (s) => { if (s) loadBaseline(s) })
@@ -195,7 +197,7 @@ onMounted(async () => {
 
 <template>
   <div class="page">
-    <PageHead title="评测看板" subtitle="运行抽取 / 问答 / 检索评测，对比基线指标，逐用例审查明细" />
+    <PageHead :title="t('eval.title')" :subtitle="t('eval.subtitle')" />
 
     <!-- run controls -->
     <div class="panel pad" style="margin-bottom:16px">
@@ -209,23 +211,23 @@ onMounted(async () => {
           @click="startRun(s.id)"
         >
           <span class="ric">{{ s.icon }}</span>
-          {{ running === s.id ? `运行中 · ${s.label}…` : `运行 ${s.label}` }}
+          {{ running === s.id ? t('eval.running', { suite: s.label }) : t('eval.runSuite', { suite: s.label }) }}
         </button>
         <div class="grow"></div>
-        <button class="btn ghost" :disabled="loadingRuns" @click="loadRuns">↻ 刷新历史</button>
+        <button class="btn ghost" :disabled="loadingRuns" @click="loadRuns">{{ t('eval.refreshHistory') }}</button>
       </div>
     </div>
 
     <!-- metric cards -->
     <div class="sechead">
-      <h3>指标概览
+      <h3>{{ t('eval.overview') }}
         <span v-if="currentSuite" class="faint" style="font-weight:400;font-size:10px">
           · {{ SUITE_LABEL[currentSuite] }}
           <template v-if="current">· {{ fmtDateTime(current.created_at) }}</template>
         </span>
       </h3>
       <button v-if="current" class="btn sm ghost" :disabled="pinning" @click="pinBaseline">
-        {{ pinning ? '设置中…' : '设为基线' }}
+        {{ pinning ? t('eval.setting') : t('eval.setBaseline') }}
       </button>
     </div>
 
@@ -240,21 +242,21 @@ onMounted(async () => {
           <span class="diff" :class="m.improved === null ? 'flat' : m.improved ? 'good' : 'bad'">
             {{ deltaTxt(m.delta) }}
           </span>
-          <span class="vs">vs 基线</span>
+          <span class="vs">{{ t('eval.vsBaseline') }}</span>
         </div>
-        <div class="mbase faint" v-else>无基线可对比</div>
+        <div class="mbase faint" v-else>{{ t('eval.noBaseline') }}</div>
       </div>
     </div>
     <EmptyState
       v-else
-      title="暂无指标"
-      text="点击上方按钮运行评测，或在后端就绪后加载最近一次运行，即可看到聚合指标与基线对比。"
+      :title="t('eval.noMetrics')"
+      :text="t('eval.noMetricsBody')"
     />
 
     <!-- run history -->
-    <div class="sechead"><h3>运行历史</h3><span class="tag" style="margin:0">{{ runs.length }}</span></div>
+    <div class="sechead"><h3>{{ t('eval.runHistory') }}</h3><span class="tag" style="margin:0">{{ runs.length }}</span></div>
     <div class="panel pad" style="padding:6px">
-      <div v-if="!runs.length" class="empty">还没有评测运行记录。</div>
+      <div v-if="!runs.length" class="empty">{{ t('eval.noRuns') }}</div>
       <div
         v-for="r in runs"
         :key="r.run_id"
@@ -265,28 +267,28 @@ onMounted(async () => {
         <span class="tag blue" style="flex:none">{{ SUITE_LABEL[r.suite] }}</span>
         <div class="grow">
           <b>{{ r.run_id.slice(0, 12) }}</b>
-          <p class="faint small">{{ fmtDateTime(r.created_at) }} · {{ casesOf(r) }} 项指标</p>
+          <p class="faint small">{{ fmtDateTime(r.created_at) }} · {{ casesOf(r) }} {{ t('eval.metricUnit') }}</p>
         </div>
-        <span v-if="loadingRun && current && current.run_id === r.run_id" class="faint small">加载中…</span>
+        <span v-if="loadingRun && current && current.run_id === r.run_id" class="faint small">{{ t('eval.loadDetail') }}</span>
       </div>
     </div>
 
     <!-- case details -->
     <div class="sechead" v-if="current">
-      <h3>逐用例明细
-        <span class="faint" style="font-weight:400;font-size:10px">· {{ caseList.length }} 条</span>
+      <h3>{{ t('eval.caseDetails') }}
+        <span class="faint" style="font-weight:400;font-size:10px">· {{ caseList.length }} {{ t('eval.caseUnit') }}</span>
       </h3>
     </div>
     <div v-if="current" class="panel pad" style="padding:6px">
       <div v-if="!caseList.length" class="empty">
-        本次运行的报告中没有逐用例明细（report.case_details 为空或未提供）。
+        {{ t('eval.noCaseDetails') }}
       </div>
       <div v-for="(c, i) in caseList" :key="i" class="case">
         <div class="item" style="border-radius:0" @click="toggleCase(i)">
           <span class="tag" style="flex:none">{{ i + 1 }}</span>
           <div class="grow">
             <b>{{ caseTitle(c, i) }}</b>
-            <p class="faint small">点击{{ expanded.has(i) ? '收起' : '展开' }}字段</p>
+            <p class="faint small">{{ t('eval.tapTo', { action: expanded.has(i) ? t('eval.collapse') : t('eval.expand') }) }}</p>
           </div>
           <span class="faint">{{ expanded.has(i) ? '▾' : '▸' }}</span>
         </div>

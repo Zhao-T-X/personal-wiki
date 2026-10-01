@@ -9,8 +9,10 @@
  * 失败时给「发生了什么」+「下一步怎么做」（重新加载），不显示堆栈、HTML、HTTP 状态码。
  */
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { LoadState } from '../utils/dataState'
-import { FALLBACK_ERROR_TEXT } from '../utils/dataState'
+
+const { t } = useI18n()
 
 const props = withDefaults(defineProps<{
   /** `useAsyncState().state.value`，或任何手写的 `{ status, error }`。 */
@@ -22,10 +24,15 @@ const props = withDefaults(defineProps<{
   /** 提供就渲染「重新加载」。 */
   reload?: () => unknown
 }>(), {
-  loadingText: '正在读取…',
-  errorTitle: '加载失败',
-  errorText: FALLBACK_ERROR_TEXT,
+  loadingText: '',
+  errorTitle: '',
+  errorText: '',
 })
+
+/** 兜底文案：父组件大多已传 i18n 文案，这里只兜住没传的情况。 */
+const loadingTextR = computed(() => props.loadingText || t('loadBoundary.loading'))
+const errorTitleR = computed(() => props.errorTitle || t('loadBoundary.errorTitle'))
+const errorTextR = computed(() => props.errorText || t('loadBoundary.errorTitle'))
 
 const waiting = computed(() => props.state.status === 'idle' || props.state.status === 'loading')
 const failed = computed(() => props.state.status === 'error')
@@ -35,15 +42,15 @@ const failed = computed(() => props.state.status === 'error')
   <div v-if="failed" class="loaderr" role="alert">
     <span class="leico">⚠</span>
     <div class="grow">
-      <b>{{ errorTitle }}</b>
-      <p class="letext">{{ errorText }}</p>
+      <b>{{ errorTitleR }}</b>
+      <p class="letext">{{ errorTextR }}</p>
       <p v-if="state.error" class="lereason">{{ state.error }}</p>
     </div>
-    <button v-if="reload" class="btn" @click="reload()">重新加载</button>
+    <button v-if="reload" class="btn" @click="reload()">{{ t('loadBoundary.reload') }}</button>
   </div>
 
   <div v-else-if="waiting" class="loadwait" aria-busy="true">
-    <span class="lwdot"></span><span>{{ loadingText }}</span>
+    <span class="lwdot"></span><span>{{ loadingTextR }}</span>
   </div>
 
   <slot v-else />

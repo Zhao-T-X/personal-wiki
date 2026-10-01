@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+import { Search, Sparkles, Zap } from 'lucide-vue-next'
 import cytoscape from 'cytoscape'
 import { api, post, del } from '../api/client'
 import { TYPE_COLORS, DEFAULT_NODE_COLOR } from '../utils/graph'
@@ -15,6 +17,10 @@ import AppModal from '../components/AppModal.vue'
 import EmptyState from '../components/EmptyState.vue'
 import IntegrityPanel from '../components/IntegrityPanel.vue'
 import LoadBoundary from '../components/LoadBoundary.vue'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAppStore } from '../stores/app'
 import { toCard } from '../utils/claim'
 import { safeErrorText } from '../utils/dataState'
@@ -25,14 +31,20 @@ import { ENTITY_TYPES, entityTypeLabel } from '../utils/entityType'
 const route = useRoute()
 const router = useRouter()
 const store = useAppStore()
+const { t } = useI18n()
 
-const tab = ref(route.query.tab === 'graph' ? '图谱' : route.query.tab === 'timeline' ? '时间线' : '文档')
-const TABS = ['文档', '图谱', '时间线']
+/** tab 的内部值是稳定键，标签走 i18n（SegTabs 支持 {value,label}）。 */
+const tab = ref(route.query.tab === 'graph' ? 'graph' : route.query.tab === 'timeline' ? 'timeline' : 'docs')
+const TABS = computed(() => [
+  { value: 'docs', label: t('knowledge.tab.docs') },
+  { value: 'graph', label: t('knowledge.tab.graph') },
+  { value: 'timeline', label: t('knowledge.tab.timeline') },
+])
 watch(() => route.query.tab, t => {
-  if (t === 'graph') tab.value = '图谱'
-  else if (t === 'timeline') tab.value = '时间线'
+  if (t === 'graph') tab.value = 'graph'
+  else if (t === 'timeline') tab.value = 'timeline'
 })
-watch(tab, t => { if (t === '图谱') setTimeout(drawGraph, 50) })
+watch(tab, t => { if (t === 'graph') setTimeout(drawGraph, 50) })
 
 /* ---------- 搜索：先给知识，再给原文 ----------
  *
@@ -48,8 +60,16 @@ const searchKnowledge = ref<any[]>([])
 /** 搜索失败必须说出来：一次失败的检索和「库里没有」看起来完全一样。 */
 const searchError = ref('')
 let searchTimer: number | undefined
-/** Why a result matched — replaces the raw RRF score, which told users nothing. */
-const MATCH_LABEL: Record<string, string> = { title: '标题命中', content: '正文命中', semantic: '语义相近' }
+/** Why a result matched — key into `knowledge.match.*`, translated in the template. */
+const MATCH_KEYS: Record<string, string> = {
+  title: 'knowledge.match.title',
+  content: 'knowledge.match.content',
+  semantic: 'knowledge.match.semantic',
+}
+function matchLabel(m: string) {
+  const key = MATCH_KEYS[m]
+  return key ? t(key) : m
+}
 
 watch(searchQ, () => {
   window.clearTimeout(searchTimer)
@@ -69,7 +89,7 @@ async function runSearch() {
   } catch (e: any) {
     searchKnowledge.value = []
     searchResults.value = []
-    searchError.value = '搜索失败——这不代表知识库里没有相关内容。'
+    searchError.value = t('knowledge.searchError')
     void e
   } finally { searching.value = false }
 }
@@ -114,7 +134,7 @@ async function moreEntities() {
     const es = await api<Entity[]>(`/api/entities?limit=60&offset=${entities.value.length}`)
     if (es.length) entityTotal.value = (es[0] as any).total ?? entityTotal.value
     entitiesRes.set([...entities.value, ...es])
-  } catch (e: any) { store.toast('加载更多对象失败：' + e.message) }
+  } catch (e: any) { store.toast(t('knowledge.errMoreEntities', { msg: e.message })) }
 }
 
 /** 时间线同样按页加载：事件可能成千上万，一次读全既慢又淹没真正要看的那几条。 */
@@ -122,7 +142,7 @@ async function moreEvents() {
   try {
     const es = await api<EventRow[]>(`/api/events?limit=${eventLimit.value}&offset=${events.value.length}`)
     eventsRes.set([...events.value, ...es])
-  } catch (e: any) { store.toast('加载更多事件失败：' + (e.message || '请稍后重试')) }
+  } catch (e: any) { store.toast(t('knowledge.errMoreEvents', { msg: e.message || t('knowledge.retryLater') })) }
 }
 
 const drawerDoc = ref<DocumentRow | null>(null)
@@ -145,7 +165,7 @@ const evType = ref('meeting'); const evDesc = ref(''); const evDate = ref(''); c
 /** Day bucket: the date extracted from the source text when present, else the creation date. */
 function eventDay(e: EventRow): string {
   const raw = (e.time?.start as string | undefined) || e.created_at || ''
-  return raw.slice(0, 10) || '未知日期'
+  return raw.slice(0, 10) || t('knowledge.unknownDate')
 }
 /** Clock shown next to an event; empty for date-only events. */
 function eventClock(e: EventRow): string {
@@ -170,7 +190,7 @@ onMounted(async () => {
   void store.loadPendingReview()
   await loadAll()
   if (searchQ.value) runSearch()
-  if (tab.value === '图谱') setTimeout(drawGraph, 50)
+  if (tab.value === 'graph') setTimeout(drawGraph, 50)
   if (route.query.doc) await openSource(route.query.doc as string, route.query.chunk as string | undefined)
 })
 watch(() => route.query.doc, d => { if (d) openSource(d as string, route.query.chunk as string | undefined) })
@@ -185,7 +205,7 @@ async function openDoc(d: DocumentRow): Promise<boolean> {
     drawerChunks.value = await api<Chunk[]>('/api/documents/' + d.id + '/chunks')
   } catch (e: any) {
     drawerDoc.value = null
-    store.toast('打开文档失败——' + (safeErrorText(e) || '暂时没能读取这篇文档。'))
+    store.toast(t('knowledge.openDocFailed', { msg: safeErrorText(e) || t('knowledge.openDocFailedDefault') }))
     return false
   }
   await loadDrawerKnowledge()
@@ -201,7 +221,7 @@ async function loadDrawerKnowledge() {
     drawerKnowledge.value = await api<any>('/api/documents/' + drawerDoc.value.id + '/knowledge')
   } catch {
     drawerKnowledge.value = null
-    drawerKnowledgeError.value = '暂时读不到这篇产生的知识——这不代表这篇没有产出。'
+    drawerKnowledgeError.value = t('knowledge.noKnowledgeYet')
   }
 }
 
@@ -214,7 +234,7 @@ const highlightChunk = ref<string | null>(null)
 
 /** Open a document drawer and, when given, reveal + highlight the originating chunk. */
 async function openSource(docId: string, chunkId?: string) {
-  tab.value = '文档'
+  tab.value = 'docs'
   highlightChunk.value = chunkId || null
   if (!await openDoc({ id: docId } as DocumentRow)) return
   await nextTick()
@@ -228,7 +248,7 @@ async function openSource(docId: string, chunkId?: string) {
 async function actDoc(d: DocumentRow, action: 'index' | 'local' | 'embed' | 'delete') {
   try {
     if (action === 'delete') {
-      if (!confirm('删除该文档及其全部派生数据？')) return
+      if (!confirm(t('knowledge.confirmDelete'))) return
       await del('/api/documents/' + d.id); drawerDoc.value = null; await loadAll(); return
     }
     const suffix = action === 'index' ? '/index' : action === 'local' ? '/index/local' : '/embed'
@@ -237,9 +257,9 @@ async function actDoc(d: DocumentRow, action: 'index' | 'local' | 'embed' | 'del
       const r = await post('/api/documents/' + d.id + suffix)
       if (action === 'index') {
         store.clearExtraction()
-        store.toast(`《${d.title}》已理解完成`, { label: '去审核', run: () => router.push('/review') })
+        store.toast(t('knowledge.understood', { title: d.title }), { label: t('knowledge.goReview'), run: () => router.push('/review') })
       } else {
-        store.toast('完成：' + JSON.stringify(r).slice(0, 60))
+        store.toast(t('knowledge.done', { summary: JSON.stringify(r).slice(0, 60) }))
       }
     } catch (e: any) {
       if (action === 'index') store.clearExtraction()
@@ -254,7 +274,7 @@ async function backfillEmbeddings() {
   embedding.value = true
   try {
     const r = await post<any>('/api/embeddings/backfill')
-    store.toast(`已嵌入 ${r.embedded_documents} 篇文档 · ${r.chunks} 片段 · ${r.model}`)
+    store.toast(t('knowledge.embedded', { docs: r.embedded_documents, chunks: r.chunks, model: r.model }))
     await loadAll()
   } catch (e: any) { store.toast(e.message) } finally { embedding.value = false }
 }
@@ -264,21 +284,21 @@ async function saveNote() {
   try {
     await post('/api/documents', { title: newTitle.value, content: newBody.value, source_type: newType.value })
     showNew.value = false; newTitle.value = ''; newBody.value = ''
-    store.toast('已创建'); await loadAll()
+    store.toast(t('knowledge.created')); await loadAll()
   } catch (e: any) { store.toast(e.message) }
 }
 async function saveEntity() {
   try {
     await post('/api/entities', { name: entName.value, type: entType.value, description: entDesc.value || null })
     showNewEntity.value = false; entName.value = ''; entDesc.value = ''
-    store.toast('对象已创建（待确认）'); await loadEntities()
+    store.toast(t('knowledge.entityCreated')); await loadEntities()
   } catch (e: any) { store.toast(e.message) }
 }
 async function saveEvent() {
   try {
     await post('/api/events', { event_type: evType.value, description: evDesc.value, time: evDate.value ? { start: evDate.value, precision: 'day' } : {} })
     showNewEvent.value = false; evDesc.value = ''; evDate.value = ''
-    store.toast('事件已创建'); await loadEvents()
+    store.toast(t('knowledge.eventCreated')); await loadEvents()
   } catch (e: any) { store.toast(e.message) }
 }
 /* ---------- import pipeline ----------
@@ -326,37 +346,39 @@ const showAllDocs = computed(() => docLimit.value >= docTotal.value)
 /* ---------- v3 文档列表：过滤 + 分组 + 相对时间 ----------
  * 过滤是客户端的（数据已在本页），分组只回答一个问题：最近动过的在哪。 */
 const DAY = 86400e3
-const DOC_FILTERS = ['全部', '最近', '已确认', '待处理']
-const docFilter = ref('全部')
+/** 过滤器内部值是稳定键，标签走 i18n。 */
+const DOC_FILTERS = ['all', 'recent', 'verified', 'pending'] as const
+const docFilter = ref<string>('all')
+const docFilterOptions = computed(() => DOC_FILTERS.map(f => ({ value: f, label: t(`knowledge.filter.${f}`) })))
 function docTime(d: DocumentRow): number {
   const t = new Date(String(d.updated_at || '').replace(' ', 'T')).getTime()
   return isNaN(t) ? 0 : t
 }
 function isRecentDoc(d: DocumentRow) { return docTime(d) > Date.now() - 7 * DAY }
 const filteredDocs = computed(() => {
-  if (docFilter.value === '待处理') return docs.value.filter(d => !d.last_run_status)
-  if (docFilter.value === '已确认') return docs.value.filter(d => !!d.last_run_status)
-  if (docFilter.value === '最近') return docs.value.filter(isRecentDoc)
+  if (docFilter.value === 'pending') return docs.value.filter(d => !d.last_run_status)
+  if (docFilter.value === 'verified') return docs.value.filter(d => !!d.last_run_status)
+  if (docFilter.value === 'recent') return docs.value.filter(isRecentDoc)
   return docs.value
 })
 const recentDocs = computed(() => filteredDocs.value.filter(isRecentDoc))
 const olderDocs = computed(() => filteredDocs.value.filter(d => !isRecentDoc(d)))
 function relTime(ts?: string): string {
   if (!ts) return ''
-  const t = docTime({ updated_at: ts } as DocumentRow)
-  if (!t) return String(ts).slice(0, 10)
-  const days = Math.floor((Date.now() - t) / DAY)
-  if (days <= 0) return '今天'
-  if (days === 1) return '昨天'
-  if (days < 7) return `${days} 天前`
-  if (days < 30) return `${Math.floor(days / 7)} 周前`
+  const ts0 = docTime({ updated_at: ts } as DocumentRow)
+  if (!ts0) return String(ts).slice(0, 10)
+  const days = Math.floor((Date.now() - ts0) / DAY)
+  if (days <= 0) return t('knowledge.today')
+  if (days === 1) return t('knowledge.yesterday')
+  if (days < 7) return t('knowledge.daysAgo', { n: days })
+  if (days < 30) return t('knowledge.weeksAgo', { n: Math.floor(days / 7) })
   return String(ts).slice(0, 10)
 }
 function docIcon(d: DocumentRow): { label: string; cls: string } {
-  const t = (d.source_type || '').toLowerCase()
-  if (t.includes('pdf')) return { label: 'PDF', cls: 'pdf' }
-  if (t.includes('url') || t.includes('web') || t.includes('link')) return { label: 'URL', cls: 'url' }
-  if (t.includes('md') || t.includes('html')) return { label: 'MD', cls: 'md' }
+  const src = (d.source_type || '').toLowerCase()
+  if (src.includes('pdf')) return { label: 'PDF', cls: 'pdf' }
+  if (src.includes('url') || src.includes('web') || src.includes('link')) return { label: 'URL', cls: 'url' }
+  if (src.includes('md') || src.includes('html')) return { label: 'MD', cls: 'md' }
   return { label: 'TXT', cls: '' }
 }
 </script>
@@ -367,26 +389,26 @@ function docIcon(d: DocumentRow): { label: string; cls: string } {
     <div class="khead">
       <div>
         <div class="eyebrow">KNOWLEDGE</div>
-        <h1 class="ktitle">你的知识</h1>
-        <p class="ksub">找到你已经保存的内容，继续阅读、提问或修正。</p>
+        <h1 class="ktitle">{{ t('knowledge.title') }}</h1>
+        <p class="ksub">{{ t('knowledge.sub') }}</p>
       </div>
       <div class="row" style="gap:8px">
-        <button class="btn" @click="importer?.pick()">＋ 导入资料</button>
+        <button class="btn" @click="importer?.pick()">{{ t('knowledge.importBtn') }}</button>
       </div>
     </div>
 
     <!-- 全页只有一个搜索框：找知识、找正文、找对象、找文档都从它进 -->
     <div class="ksearch">
-      <input v-model="searchQ" placeholder="搜索知识、正文、对象或文档……" />
-      <span v-if="searching" class="tag">搜索中…</span>
+      <input v-model="searchQ" :placeholder="t('knowledge.searchPlaceholder')" />
+      <span v-if="searching" class="tag">{{ t('knowledge.searching') }}</span>
     </div>
 
     <!-- 搜索结果：知识是第一层，原文是它的依据 -->
     <div v-if="searchQ.trim()" class="panel pad" style="margin-bottom:16px">
       <template v-if="searchKnowledge.length">
         <div class="sechead" style="margin:0 0 10px">
-          <h3>知识</h3>
-          <span class="faint" style="font-size:9px">{{ searchKnowledge.length }} 条 · 知识库里现在记着的事</span>
+          <h3>{{ t('knowledge.hitsTitle') }}</h3>
+          <span class="faint" style="font-size:9px">{{ t('knowledge.hitsMeta', { n: searchKnowledge.length }) }}</span>
         </div>
         <div class="khits">
           <KnowledgeCard v-for="k in searchKnowledge" :key="k.claim_id" :claim="toCard(k)"
@@ -395,45 +417,47 @@ function docIcon(d: DocumentRow): { label: string; cls: string } {
       </template>
 
       <div class="sechead" :style="searchKnowledge.length ? 'margin:16px 0 8px' : 'margin:0 0 8px'">
-        <h3>{{ searchKnowledge.length ? '相关原文' : '搜索结果' }}</h3>
-        <span class="faint" style="font-size:9px">{{ searchResults.length }} 条 · 点击查看来源文档</span>
+        <h3>{{ searchKnowledge.length ? t('knowledge.sourcesTitle') : t('knowledge.resultsTitle') }}</h3>
+        <span class="faint" style="font-size:9px">{{ t('knowledge.resultsMeta', { n: searchResults.length }) }}</span>
       </div>
       <div v-for="(r, i) in searchResults" :key="i" class="item" @click="openResult(r)">
-        <div class="ico-badge ib-blue">⌕</div>
+        <div class="ico-badge ib-blue"><Search :size="14" /></div>
         <div class="grow">
           <b>{{ r.title }}</b>
           <p>{{ (r.content || '').slice(0, 140) }}</p>
           <div style="margin-top:4px">
-            <span v-for="m in (r.matched_in || [])" :key="m" class="tag blue">{{ MATCH_LABEL[m] || m }}</span>
-            <span class="tag">片段 #{{ r.chunk_index ?? '—' }}</span>
-            <span class="tag">打开来源 →</span>
+            <span v-for="m in (r.matched_in || [])" :key="m" class="tag blue">{{ matchLabel(m) }}</span>
+            <span class="tag">{{ t('knowledge.chunkNo', { n: r.chunk_index ?? '—' }) }}</span>
+            <span class="tag">{{ t('knowledge.openSource') }}</span>
           </div>
         </div>
       </div>
       <!-- 搜索失败时明确说是失败：此时空结果不代表"库里没有" -->
       <div v-if="searchError" class="notice red" style="margin:0">{{ searchError }}</div>
-      <EmptyState v-else-if="!searchResults.length && !searching" text="没有匹配结果——试试更短的关键词，或先为文档生成嵌入" />
+      <EmptyState v-else-if="!searchResults.length && !searching" :text="t('knowledge.noResults')" />
     </div>
 
     <SegTabs v-model="tab" :options="TABS" style="margin:0 0 14px" />
 
     <!-- 文档 -->
-    <div v-if="tab === '文档'">
+    <div v-if="tab === 'docs'">
       <!-- 导入口与首页是同一个组件、同一份实现；这里只保留进度队列，入口在页头 -->
       <ImportPanel ref="importer" hide-dropzone @imported="onImported" @open-document="openDocById" />
 
       <div class="filter-tabs">
-        <button v-for="f in DOC_FILTERS" :key="f" class="ftab" :class="{ active: docFilter === f }" @click="docFilter = f">{{ f }}</button>
+        <button v-for="f in docFilterOptions" :key="f.value" class="ftab" :class="{ active: docFilter === f.value }" @click="docFilter = f.value">{{ f.label }}</button>
         <div class="grow"></div>
-        <button class="btn sm" :disabled="embedding" @click="backfillEmbeddings">{{ embedding ? '生成中…' : '⚡ 重新生成语义索引' }}</button>
-        <button class="btn sm primary" @click="showNew = true">＋ 新建文档</button>
+        <button class="btn sm" :disabled="embedding" @click="backfillEmbeddings">
+          <Zap :size="11" style="vertical-align:-1px" /> {{ embedding ? t('knowledge.generating') : t('knowledge.reindex') }}
+        </button>
+        <button class="btn sm primary" @click="showNew = true">{{ t('knowledge.newDoc') }}</button>
       </div>
       <!-- 读不到文档时说"读不到"，而不是"还没有文档" -->
-      <LoadBoundary :state="docsRes.state.value" loading-text="正在读取文档…"
-                    error-text="暂时无法加载文档——这不代表你的文档不见了。"
+      <LoadBoundary :state="docsRes.state.value" :loading-text="t('knowledge.loadingDocs')"
+                    :error-text="t('knowledge.errDocs')"
                     :reload="loadDocs">
-        <template v-for="(group, gi) in [{ title: '最近', meta: '按更新时间排序', items: recentDocs },
-                                        { title: '全部资料', meta: `${docTotal} 篇`, items: olderDocs }]" :key="gi">
+        <template v-for="(group, gi) in [{ title: t('knowledge.group.recent'), meta: t('knowledge.group.recentMeta'), items: recentDocs },
+                                        { title: t('knowledge.group.all'), meta: t('knowledge.group.allMeta', { n: docTotal }), items: olderDocs }]" :key="gi">
           <div v-if="group.items.length" class="docgroup">
             <div class="dghead"><b>{{ group.title }}</b><span class="faint">{{ group.meta }}</span></div>
             <div class="doclist">
@@ -442,8 +466,8 @@ function docIcon(d: DocumentRow): { label: string; cls: string } {
                 <div class="docmain">
                   <b class="docname">{{ d.title }}</b>
                   <div class="docmeta">
-                    {{ d.chunk_count ?? 0 }} 片段 · {{ d.source_type }}
-                    <span v-if="!d.last_run_status" class="docattn">· 未索引</span>
+                    {{ t('knowledge.chunksN', { n: d.chunk_count ?? 0 }) }} · {{ d.source_type }}
+                    <span v-if="!d.last_run_status" class="docattn">{{ t('knowledge.unindexed') }}</span>
                   </div>
                 </div>
                 <div class="docright"><span class="doctime">{{ relTime(d.updated_at) }}</span></div>
@@ -451,21 +475,21 @@ function docIcon(d: DocumentRow): { label: string; cls: string } {
             </div>
           </div>
         </template>
-        <EmptyState v-if="!filteredDocs.length" text="还没有文档——导入或新建一篇" />
+        <EmptyState v-if="!filteredDocs.length" :text="t('knowledge.noDocs')" />
         <div v-if="!showAllDocs" style="text-align:center;margin-top:10px">
-          <button class="btn" @click="docLimit += 50; loadDocs()">加载更多（{{ docTotal - docs.length }} 条）</button>
+          <button class="btn" @click="docLimit += 50; loadDocs()">{{ t('knowledge.loadMoreDocs', { n: docTotal - docs.length }) }}</button>
         </div>
       </LoadBoundary>
 
-      <div class="sechead"><h3>知识对象 <span class="faint" style="font-weight:400;font-size:9px">· {{ entities.length }}/{{ entityTotal }}</span></h3>
-        <button class="btn" @click="showNewEntity = true">＋ 新建对象</button>
+      <div class="sechead"><h3>{{ t('knowledge.objects') }} <span class="faint" style="font-weight:400;font-size:9px">· {{ entities.length }}/{{ entityTotal }}</span></h3>
+        <button class="btn" @click="showNewEntity = true">{{ t('knowledge.newEntity') }}</button>
       </div>
-      <LoadBoundary :state="entitiesRes.state.value" loading-text="正在读取知识对象…"
-                    error-text="暂时无法加载知识对象——这不代表它们不存在。"
+      <LoadBoundary :state="entitiesRes.state.value" :loading-text="t('knowledge.loadingEntities')"
+                    :error-text="t('knowledge.errEntities')"
                     :reload="loadEntities">
         <div class="grid g3">
           <div v-for="e in entities" :key="e.id" class="panel pad item" style="display:block" @click="router.push('/knowledge/object/' + e.id)">
-            <div class="row"><div class="ico-badge" :class="e.status === 'verified' ? 'ib-mint' : 'ib-blue'">✦</div>
+            <div class="row"><div class="ico-badge" :class="e.status === 'verified' ? 'ib-mint' : 'ib-blue'"><Sparkles :size="14" /></div>
               <div><b>{{ e.name }}</b><div class="faint" style="font-size:8.5px">{{ entityTypeLabel(e.type) }}</div></div></div>
             <hr class="hairline" />
             <p style="margin:0">{{ e.description?.slice(0, 60) || '—' }}</p>
@@ -473,17 +497,17 @@ function docIcon(d: DocumentRow): { label: string; cls: string } {
           </div>
         </div>
         <div v-if="entities.length < entityTotal" style="text-align:center;margin-top:10px">
-          <button class="btn" @click="moreEntities">加载更多（{{ entityTotal - entities.length }} 个）</button>
+          <button class="btn" @click="moreEntities">{{ t('knowledge.loadMoreEntities', { n: entityTotal - entities.length }) }}</button>
         </div>
       </LoadBoundary>
 
       <!-- v3 摘要条：状态收在页尾一行里，不再用首屏横幅提醒 -->
       <div class="ksummary">
         <div class="ksitems">
-          <span class="ksi"><i class="ksdot"></i>{{ docTotal }} 篇资料</span>
-          <span v-if="store.pendingReview" class="ksi attn"><i class="ksdot attn"></i>{{ store.pendingReview }} 条候选知识待确认</span>
+          <span class="ksi"><i class="ksdot"></i>{{ t('knowledge.summaryDocs', { n: docTotal }) }}</span>
+          <span v-if="store.pendingReview" class="ksi attn"><i class="ksdot attn"></i>{{ t('knowledge.summaryPending', { n: store.pendingReview }) }}</span>
         </div>
-        <button v-if="store.pendingReview" class="kslink" @click="router.push('/review')">查看待处理 →</button>
+        <button v-if="store.pendingReview" class="kslink" @click="router.push('/review')">{{ t('knowledge.viewPending') }}</button>
       </div>
 
       <!-- 知识体检：发现 → 影响 → 确认 → 结果。合并后立即重跑搜索，
@@ -492,23 +516,23 @@ function docIcon(d: DocumentRow): { label: string; cls: string } {
     </div>
 
     <!-- 图谱 -->
-    <div v-show="tab === '图谱'">
+    <div v-show="tab === 'graph'">
       <div class="row" style="margin-bottom:12px">
         <span class="faint" style="font-size:9px">
-          <template v-if="graphInfo.nodes">已显示 {{ graphInfo.nodes }} 个对象 · {{ graphInfo.edges }} 条关系（仅展示部分网络，点击对象查看其完整关系）</template>
-          <template v-else>点击节点进入对象详情 · 深色描边为已验证实体 · 拖拽/滚轮缩放</template>
+          <template v-if="graphInfo.nodes">{{ t('knowledge.graphInfo', { nodes: graphInfo.nodes, edges: graphInfo.edges }) }}</template>
+          <template v-else>{{ t('knowledge.graphHint') }}</template>
         </span>
         <div class="grow"></div>
-        <button class="btn sm" @click="drawGraph">重新布局</button>
+        <button class="btn sm" @click="drawGraph">{{ t('knowledge.relayout') }}</button>
       </div>
       <div ref="graphBox" class="gcanvas"></div>
     </div>
 
     <!-- 时间线 -->
-    <div v-if="tab === '时间线'">
-      <div class="sechead"><h3>时间线</h3><button class="btn" @click="showNewEvent = true">＋ 新建事件</button></div>
-      <LoadBoundary :state="eventsRes.state.value" loading-text="正在读取事件…"
-                    error-text="暂时无法加载事件——这不代表时间线是空的。"
+    <div v-if="tab === 'timeline'">
+      <div class="sechead"><h3>{{ t('knowledge.tab.timeline') }}</h3><button class="btn" @click="showNewEvent = true">{{ t('knowledge.newEvent') }}</button></div>
+      <LoadBoundary :state="eventsRes.state.value" :loading-text="t('knowledge.loadingEvents')"
+                    :error-text="t('knowledge.errEvents')"
                     :reload="loadEvents">
         <div class="panel pad">
           <div class="timeline">
@@ -519,17 +543,17 @@ function docIcon(d: DocumentRow): { label: string; cls: string } {
                 <div>
                   <StatusTag :status="e.status" />
                   <span class="tag">{{ e.event_type }}</span>
-                  <span v-if="e.location" class="tag">📍 {{ e.location }}</span>
+                  <span v-if="e.location" class="tag">{{ e.location }}</span>
                   <span v-if="eventClock(e)" class="when">{{ eventClock(e) }}</span>
                 </div>
               </div>
             </template>
-            <EmptyState v-if="!events.length" text="还没有事件" />
+            <EmptyState v-if="!events.length" :text="t('knowledge.noEvents')" />
           </div>
         </div>
       </LoadBoundary>
       <div v-if="events.length > 0 && events.length % eventLimit === 0" style="text-align:center;margin-top:10px">
-        <button class="btn" @click="moreEvents">加载更多事件</button>
+        <button class="btn" @click="moreEvents">{{ t('knowledge.loadMoreEvents') }}</button>
       </div>
     </div>
 
@@ -538,72 +562,91 @@ function docIcon(d: DocumentRow): { label: string; cls: string } {
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
           <StatusTag v-if="drawerDoc.last_run_status" :status="drawerDoc.last_run_status" />
           <span class="tag blue">{{ drawerDoc.source_type }}</span>
-          <span class="tag">{{ drawerDoc.chunk_count }} 片段</span>
+          <span class="tag">{{ t('knowledge.chunksN', { n: drawerDoc.chunk_count }) }}</span>
         </div>
         <div class="row" style="flex-wrap:wrap;gap:8px;margin-bottom:12px">
-          <button class="btn primary" @click="actDoc(drawerDoc, 'index')">理解这份资料</button>
-          <button class="btn" @click="actDoc(drawerDoc, 'local')">仅分段（不分析）</button>
-          <button class="btn" @click="actDoc(drawerDoc, 'embed')">生成语义索引</button>
-          <button class="btn danger" @click="actDoc(drawerDoc, 'delete')">删除</button>
+          <button class="btn primary" @click="actDoc(drawerDoc, 'index')">{{ t('knowledge.docActions.understand') }}</button>
+          <button class="btn" @click="actDoc(drawerDoc, 'local')">{{ t('knowledge.docActions.chunkOnly') }}</button>
+          <button class="btn" @click="actDoc(drawerDoc, 'embed')">{{ t('knowledge.docActions.embed') }}</button>
+          <button class="btn danger" @click="actDoc(drawerDoc, 'delete')">{{ t('knowledge.docActions.delete') }}</button>
         </div>
         <!-- 这篇产生的知识。文档抽屉 = 该文档作用域的视图，不是"知识库首页"。
              读不到它时说明"读不到"——空白的知识区看起来就像这篇什么都没抽出来。 -->
         <div v-if="drawerKnowledgeError" class="notice violet" style="margin:14px 0 4px">{{ drawerKnowledgeError }}</div>
         <div v-else-if="drawerKnowledge?.claims?.length" style="margin:14px 0 4px">
           <div class="sechead" style="margin-top:0">
-            <h3>这篇产生的知识</h3>
-            <span class="tag" style="margin:0">{{ drawerKnowledge.counts.claims }} 条事实</span>
+            <h3>{{ t('knowledge.docKnowledge') }}</h3>
+            <span class="tag" style="margin:0">{{ t('knowledge.factsN', { n: drawerKnowledge.counts.claims }) }}</span>
           </div>
           <div class="dkl">
             <KnowledgeCard v-for="c in drawerCards" :key="c.id" :claim="c" compact
                            @changed="refreshDrawerKnowledge" />
           </div>
           <p v-if="drawerKnowledge.counts.claims > drawerCards.length" class="faint" style="font-size:9.5px;margin:7px 0 0">
-            另有 {{ drawerKnowledge.counts.claims - drawerCards.length }} 条未在此列出。
+            {{ t('knowledge.moreClaims', { n: drawerKnowledge.counts.claims - drawerCards.length }) }}
           </p>
         </div>
 
         <details ref="chunksBox" style="margin:10px 0">
-          <summary style="cursor:pointer;font-size:10px;color:var(--sub)">原文片段 ({{ drawerChunks.length }})</summary>
+          <summary style="cursor:pointer;font-size:10px;color:var(--sub)">{{ t('knowledge.chunksSummary', { n: drawerChunks.length }) }}</summary>
           <div v-for="c in drawerChunks" :key="c.id" class="listitem chunk" :class="{ hl: c.id === highlightChunk }" style="margin-top:6px">
-            <b>#{{ c.chunk_index }}</b><span v-if="c.id === highlightChunk" class="tag blue" style="margin-left:6px">来源片段</span><p>{{ c.content.slice(0, 160) }}…</p>
+            <b>#{{ c.chunk_index }}</b><span v-if="c.id === highlightChunk" class="tag blue" style="margin-left:6px">{{ t('knowledge.sourceChunk') }}</span><p>{{ c.content.slice(0, 160) }}…</p>
           </div>
         </details>
         <MarkdownView :content="drawerDoc.content || ''" />
       </template>
     </AppDrawer>
 
-    <AppModal :open="showNew" title="新建文档" subtitle="记录一条 Markdown 笔记，或导入文件作为来源。" @close="showNew = false">
-      <input v-model="newTitle" class="field" style="width:100%" placeholder="标题" />
-      <select v-model="newType" class="field" style="width:100%;margin-top:9px"><option>note</option><option>markdown</option><option>text</option></select>
-      <textarea v-model="newBody" class="field" style="width:100%;height:120px;margin-top:9px" placeholder="内容（支持 Markdown）…"></textarea>
-      <div style="display:flex;justify-content:flex-end;gap:7px;margin-top:12px">
-        <button class="btn" @click="showNew = false">取消</button>
-        <button class="btn primary" @click="saveNote">保存</button>
+    <AppModal :open="showNew" :title="t('knowledge.modal.newDocTitle')" :subtitle="t('knowledge.modal.newDocSub')" @close="showNew = false">
+      <div class="grid gap-3">
+        <Input v-model="newTitle" :placeholder="t('knowledge.modal.docTitle')" />
+        <Select v-model="newType">
+          <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="note">note</SelectItem>
+            <SelectItem value="markdown">markdown</SelectItem>
+            <SelectItem value="text">text</SelectItem>
+          </SelectContent>
+        </Select>
+        <Textarea v-model="newBody" class="min-h-[120px]" :placeholder="t('knowledge.modal.docBody')" />
+      </div>
+      <div class="mt-4 flex justify-end gap-2">
+        <Button variant="outline" size="sm" @click="showNew = false">{{ t('knowledge.modal.cancel') }}</Button>
+        <Button size="sm" @click="saveNote">{{ t('knowledge.modal.save') }}</Button>
       </div>
     </AppModal>
 
-    <AppModal :open="showNewEntity" title="新建对象" subtitle="手工创建的对象默认为待确认，可在「审核」中确认。" @close="showNewEntity = false">
-      <input v-model="entName" class="field" style="width:100%" placeholder="名称（如 Retrieval-Augmented Generation）" />
-      <select v-model="entType" class="field" style="width:100%;margin-top:9px">
-        <option v-for="t in ENTITY_TYPES" :key="t.id" :value="t.id">{{ t.label }}</option>
-      </select>
-      <textarea v-model="entDesc" class="field" style="width:100%;height:80px;margin-top:9px" placeholder="描述…"></textarea>
-      <div style="display:flex;justify-content:flex-end;gap:7px;margin-top:12px">
-        <button class="btn" @click="showNewEntity = false">取消</button>
-        <button class="btn primary" @click="saveEntity">创建</button>
+    <AppModal :open="showNewEntity" :title="t('knowledge.modal.newEntityTitle')" :subtitle="t('knowledge.modal.newEntitySub')" @close="showNewEntity = false">
+      <div class="grid gap-3">
+        <Input v-model="entName" :placeholder="t('knowledge.modal.entityName')" />
+        <Select v-model="entType">
+          <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem v-for="t in ENTITY_TYPES" :key="t.id" :value="t.id">{{ entityTypeLabel(t.id) }}</SelectItem>
+          </SelectContent>
+        </Select>
+        <Textarea v-model="entDesc" class="min-h-[80px]" :placeholder="t('knowledge.modal.entityDesc')" />
+      </div>
+      <div class="mt-4 flex justify-end gap-2">
+        <Button variant="outline" size="sm" @click="showNewEntity = false">{{ t('knowledge.modal.cancel') }}</Button>
+        <Button size="sm" @click="saveEntity">{{ t('knowledge.modal.create') }}</Button>
       </div>
     </AppModal>
 
-    <AppModal :open="showNewEvent" title="新建事件" subtitle="手工记录一条事件（可留空日期）。" @close="showNewEvent = false">
-      <select v-model="evType" class="field" style="width:100%">
-        <option v-for="t in ['meeting','release','update','decision','announcement','evaluation','experiment','incident','other']" :key="t">{{ t }}</option>
-      </select>
-      <input v-model="evDesc" class="field" style="width:100%;margin-top:9px" placeholder="事件描述" />
-      <input v-model="evDate" type="date" class="field" style="width:100%;margin-top:9px" />
-      <div style="display:flex;justify-content:flex-end;gap:7px;margin-top:12px">
-        <button class="btn" @click="showNewEvent = false">取消</button>
-        <button class="btn primary" @click="saveEvent">创建</button>
+    <AppModal :open="showNewEvent" :title="t('knowledge.modal.newEventTitle')" :subtitle="t('knowledge.modal.newEventSub')" @close="showNewEvent = false">
+      <div class="grid gap-3">
+        <Select v-model="evType">
+          <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem v-for="t in ['meeting','release','update','decision','announcement','evaluation','experiment','incident','other']" :key="t" :value="t">{{ t }}</SelectItem>
+          </SelectContent>
+        </Select>
+        <Input v-model="evDesc" :placeholder="t('knowledge.modal.eventDesc')" />
+        <Input v-model="evDate" type="date" />
+      </div>
+      <div class="mt-4 flex justify-end gap-2">
+        <Button variant="outline" size="sm" @click="showNewEvent = false">{{ t('knowledge.modal.cancel') }}</Button>
+        <Button size="sm" @click="saveEvent">{{ t('knowledge.modal.create') }}</Button>
       </div>
     </AppModal>
   </div>

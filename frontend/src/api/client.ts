@@ -1,3 +1,5 @@
+import { i18n } from '../i18n'
+
 export async function api<T = unknown>(path: string, opt?: RequestInit): Promise<T> {
   let r: Response
   try {
@@ -5,7 +7,7 @@ export async function api<T = unknown>(path: string, opt?: RequestInit): Promise
   } catch {
     // fetch 只在网络层失败时 reject（后端未启动 / 连接被拒 / 断网），拿不到任何响应。
     // 浏览器给的原文是「Failed to fetch」——它只告诉用户"坏了"，不告诉用户能做什么。
-    throw new Error('无法连接到服务，请确认后端已启动后重试')
+    throw new Error(i18n.global.t('common.serverUnreachable'))
   }
   const text = await r.text()
   let j: unknown = null

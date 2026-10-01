@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { api, patchJson, post } from '../api/client'
 import EmptyState from './EmptyState.vue'
@@ -10,6 +11,7 @@ import { useAppStore } from '../stores/app'
  * believed. Nothing here overwrites a claim — the user is confirming a
  * relationship, not editing a record.
  */
+const { t } = useI18n()
 const router = useRouter()
 const store = useAppStore()
 
@@ -80,8 +82,7 @@ async function batchResolve(status: 'accepted' | 'rejected', relationship?: stri
   const ids = [...selected.value]
   if (!ids.length) return
   if (relationship === 'supersedes' && !confirm(
-      `把这 ${ids.length} 条都标记为「新知识取代旧知识」？\n\n` +
-      '每一条都会让对应的旧断言不再代表当前状态（内容与证据仍然保留）。可以撤销。')) return
+      t('change.confirmSupersedeMsg', { n: ids.length }))) return
   busy.value = 'batch'
   let ok = 0
   for (const id of ids) {
@@ -93,8 +94,8 @@ async function batchResolve(status: 'accepted' | 'rejected', relationship?: stri
   busy.value = ''
   selected.value = new Set()
   await load()
-  const label = status === 'rejected' ? '已标记并存' : (relationship === 'supersedes' ? '已记录取代' : '已确认')
-  store.toast(`${label} ${ok}/${ids.length} 条`, { label: '撤销', run: () => batchReset(ids) })
+  const verb = status === 'rejected' ? t('change.toastCoexist') : (relationship === 'supersedes' ? t('change.toastSuperseded') : t('change.toastAccepted'))
+  store.toast(t('change.toastBatch', { verb, ok, total: ids.length }), { label: t('common.undo'), run: () => batchReset(ids) })
 }
 
 async function batchReset(ids: string[]) {
@@ -104,17 +105,14 @@ async function batchReset(ids: string[]) {
     catch { /* keep going */ }
   }
   await load()
-  store.toast(`已撤销 ${ok}/${ids.length} 条`)
+  store.toast(t('change.toastResetPart', { ok, total: ids.length }))
 }
 
-const RELATION: Record<string, { label: string; tone: string }> = {
-  duplicate: { label: '重复', tone: 'green' },
-  coexists: { label: '并存', tone: '' },
-  supersedes: { label: '取代', tone: 'blue' },
-  contradicts: { label: '矛盾', tone: 'amber' },
-  unclear: { label: '待定', tone: '' },
+/** 关系标签走 i18n，色调保持原样（change.rel.*）。 */
+const REL_TONE: Record<string, string> = {
+  duplicate: 'green', coexists: '', supersedes: 'blue', contradicts: 'amber', unclear: '',
 }
-const rel = (r: string) => RELATION[r] || { label: r, tone: '' }
+const rel = (r: string) => ({ label: t('change.rel.' + r) || r, tone: REL_TONE[r] || '' })
 
 const obj = (name: string | null, text: string | null) => name || text || '—'
 
@@ -133,10 +131,9 @@ async function resolve(c: ClaimChange, status: 'accepted' | 'rejected', relation
   try {
     await patchJson(`/api/claim-relations/${c.id}`,
                     relationship ? { status, relationship } : { status })
-    const message = status === 'rejected'
-      ? '已标记：两者都保留'
-      : (relationship === 'supersedes' ? '已记录：新知识取代旧知识' : '已确认')
-    store.toast(message, { label: '撤销', run: () => reset(c) })
+    const message = status === 'rejected' ? t('change.toastCoexist')
+      : (relationship === 'supersedes' ? t('change.toastSuperseded') : t('change.toastAccepted'))
+    store.toast(message, { label: t('common.undo'), run: () => reset(c) })
     await load()
   } catch (e: any) { store.toast(e.message) } finally { busy.value = '' }
 }
@@ -145,7 +142,7 @@ async function reset(c: ClaimChange) {
   try {
     await patchJson(`/api/claim-relations/${c.id}`, { status: 'candidate' })
     await load()
-    store.toast('已撤销，回到待确认')
+    store.toast(t('change.toastReverted'))
   } catch (e: any) { store.toast(e.message) }
 }
 
@@ -174,29 +171,29 @@ async function applyVerdict(c: ClaimChange, verdict: { relationship: string }) {
 <template>
   <div v-if="pending.length || loading" style="margin-bottom:22px">
     <div class="sechead">
-      <h3>知识变化 <span class="tag amber" style="margin-left:4px">{{ pending.length }}</span></h3>
-      <span class="faint" style="font-size:9px">新内容与已有知识的关系——系统只提出判断，由你决定</span>
+      <h3>{{ t('change.title') }} <span class="tag amber" style="margin-left:4px">{{ pending.length }}</span></h3>
+      <span class="faint" style="font-size:9px">{{ t('change.titleMeta') }}</span>
     </div>
 
     <div v-if="pending.length" class="row batchbar">
       <label class="chk">
         <input type="checkbox" :checked="allSelected" @change="toggleAll" />
-        <span>全选</span>
+        <span>{{ t('change.selectAll') }}</span>
       </label>
       <span class="muted" style="font-size:9.5px">
-        <template v-if="selectedCount">已选 {{ selectedCount }} 条</template>
-        <template v-else>勾选后可批量处理</template>
+        <template v-if="selectedCount">{{ t('change.selected', { n: selectedCount }) }}</template>
+        <template v-else>{{ t('change.selectedHint') }}</template>
       </span>
       <div class="grow"></div>
       <button class="btn primary" :disabled="!selectedCount || busy === 'batch'"
-              @click="batchResolve('accepted', 'supersedes')">确认取代</button>
+              @click="batchResolve('accepted', 'supersedes')">{{ t('change.confirmSupersede') }}</button>
       <button class="btn" :disabled="!selectedCount || busy === 'batch'"
-              @click="batchResolve('rejected')">标记为并存</button>
-      <button v-if="selectedCount" class="btn ghost" :disabled="busy === 'batch'" @click="clearSelection">清除选择</button>
+              @click="batchResolve('rejected')">{{ t('change.markCoexist') }}</button>
+      <button v-if="selectedCount" class="btn ghost" :disabled="busy === 'batch'" @click="clearSelection">{{ t('change.clearSelection') }}</button>
     </div>
 
     <p v-if="changes.length >= 200" class="muted" style="font-size:9px;margin:0 0 12px">
-      关系候选较多，本页仅加载前 200 条；处理完当前批次后再刷新可查看其余待确认关系。
+      {{ t('change.moreHint') }}
     </p>
 
     <div v-for="c in pending" :key="c.id" class="panel pad changecard" :class="{ picked: isSelected(c.id) }">
@@ -206,56 +203,56 @@ async function applyVerdict(c: ClaimChange, verdict: { relationship: string }) {
         <span class="tag" :class="rel(c.relationship).tone">{{ rel(c.relationship).label }}</span>
         <b style="font-size:11.5px">{{ c.new_subject }} · {{ c.new_predicate }}</b>
         <div class="grow"></div>
-        <span v-if="c.confidence != null" class="faint" style="font-size:9px">置信度 {{ Math.round(c.confidence * 100) }}%</span>
+        <span v-if="c.confidence != null" class="faint" style="font-size:9px">{{ t('change.confidence', { n: Math.round(c.confidence * 100) }) }}</span>
       </div>
 
       <div class="grid g2" style="margin-top:12px">
         <div class="changeside old">
-          <div class="sidelabel">已有知识</div>
+          <div class="sidelabel">{{ t('change.sideOld') }}</div>
           <b>{{ obj(c.old_object, c.old_object_text) }}</b>
           <div class="sidefoot">
-            <span>{{ c.old_document_title || '来源文档' }}</span>
-            <button v-if="c.old_document_id" class="btn sm" @click="openSource(c.old_document_id)">查看原文</button>
+            <span>{{ c.old_document_title || t('change.sourceDoc') }}</span>
+            <button v-if="c.old_document_id" class="btn sm" @click="openSource(c.old_document_id)">{{ t('change.viewOriginal') }}</button>
           </div>
           <p v-if="c.old_quote" class="sidequote">“{{ c.old_quote }}”</p>
         </div>
         <div class="changeside new">
-          <div class="sidelabel">新信息</div>
+          <div class="sidelabel">{{ t('change.sideNew') }}</div>
           <b>{{ obj(c.new_object, c.new_object_text) }}</b>
           <div class="sidefoot">
-            <span>{{ c.new_document_title || '来源文档' }}</span>
-            <button v-if="c.new_document_id" class="btn sm" @click="openSource(c.new_document_id)">查看原文</button>
+            <span>{{ c.new_document_title || t('change.sourceDoc') }}</span>
+            <button v-if="c.new_document_id" class="btn sm" @click="openSource(c.new_document_id)">{{ t('change.viewOriginal') }}</button>
           </div>
           <p v-if="c.new_quote" class="sidequote">“{{ c.new_quote }}”</p>
         </div>
       </div>
 
       <div v-if="c.reason" class="notice violet" style="margin-top:12px">
-        <b>为什么会有这条判断？</b>{{ c.reason }}
+        <b>{{ t('change.reasonHead') }}</b>{{ c.reason }}
       </div>
 
       <div class="row" style="margin-top:12px;gap:8px;flex-wrap:wrap">
         <button class="btn primary" :disabled="busy === c.id" @click="resolve(c, 'accepted', 'supersedes')">
-          新知识取代旧知识
+          {{ t('change.supersedeBtn') }}
         </button>
-        <button class="btn" :disabled="busy === c.id" @click="resolve(c, 'rejected')">两者都保留</button>
+        <button class="btn" :disabled="busy === c.id" @click="resolve(c, 'rejected')">{{ t('change.keepBothBtn') }}</button>
         <button class="btn ghost" :disabled="analyzing === c.id" @click="analyze(c)">
-          {{ analyzing === c.id ? 'AI 判断中…' : '让 AI 判断' }}
+          {{ analyzing === c.id ? t('change.aiJudging') : t('change.aiJudgeBtn') }}
         </button>
       </div>
 
       <div v-if="aiVerdicts[c.id]" class="notice violet" style="margin-top:10px">
-        <b>AI 判断：{{ rel(aiVerdicts[c.id].relationship).label }}</b>
-        <span class="faint" style="margin-left:6px">置信度 {{ Math.round(aiVerdicts[c.id].confidence * 100) }}%</span>
+        <b>{{ t('change.aiVerdict', { label: rel(aiVerdicts[c.id].relationship).label }) }}</b>
+        <span class="faint" style="margin-left:6px">{{ t('change.confidence', { n: Math.round(aiVerdicts[c.id].confidence * 100) }) }}</span>
         <div style="margin-top:6px">{{ aiVerdicts[c.id].reason }}</div>
-        <button class="btn sm" style="margin-top:9px" @click="applyVerdict(c, aiVerdicts[c.id])">采纳这个判断</button>
+        <button class="btn sm" style="margin-top:9px" @click="applyVerdict(c, aiVerdicts[c.id])">{{ t('change.adoptVerdict') }}</button>
       </div>
     </div>
 
     <EmptyState
       v-if="!pending.length && !loading"
-      title="没有需要确认的知识变化"
-      text="新文档进入时会自动与已有断言比对；出现重复、矛盾或可能的取代时，会在这里请你判断。"
+      :title="t('change.emptyTitle')"
+      :text="t('change.emptyText')"
     />
   </div>
 </template>

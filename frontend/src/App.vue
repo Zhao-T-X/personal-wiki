@@ -1,8 +1,16 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+import {
+  BookOpen, Bot, CircleCheck, Clock, Gauge, GitCompare, House,
+  MessagesSquare, Pencil, Settings, Telescope,
+  Command as CommandIcon,
+} from 'lucide-vue-next'
 import { loadPredicateLabels } from './utils/claim'
 import { useAppStore } from './stores/app'
+import { setLocale, type AppLocale } from './i18n'
+import { Button } from '@/components/ui/button'
 import AppToast from './components/AppToast.vue'
 import CommandPalette from './components/CommandPalette.vue'
 import RunProgress from './components/RunProgress.vue'
@@ -10,7 +18,15 @@ import RunProgress from './components/RunProgress.vue'
 const route = useRoute()
 const router = useRouter()
 const store = useAppStore()
+const { t, locale } = useI18n()
 const cmdOpen = ref(false)
+
+/** 语言切换：显示的是「将切换到」的目标语言，持久化 + 同步 <html lang>。 */
+function toggleLocale() {
+  const next: AppLocale = locale.value === 'zh-CN' ? 'en' : 'zh-CN'
+  setLocale(next)
+}
+const localeToggleLabel = computed(() => (locale.value === 'zh-CN' ? 'EN' : '中文'))
 
 /* 五个空间，对应五种「我要做什么」：
  *
@@ -21,23 +37,23 @@ const cmdOpen = ref(false)
  * 有事时出现；后两者只有维护系统本身时才用得上。一级菜单减少不等于功能消失——
  * 每一条都另有去路，见下方注释。
  */
-const items = [
-  { id: '/', icon: '⌂', text: '首页' },
-  { id: '/knowledge', icon: '◫', text: '知识' },
-  { id: '/qa', icon: '⌕', text: '问答' },
-  { id: '/research', icon: '✦', text: '研究' },
-  { id: '/settings', icon: '⚙', text: '设置' },
-]
+const items = computed(() => [
+  { id: '/', icon: House, text: t('nav.home') },
+  { id: '/knowledge', icon: BookOpen, text: t('nav.knowledge') },
+  { id: '/qa', icon: MessagesSquare, text: t('nav.qa') },
+  { id: '/research', icon: Telescope, text: t('nav.research') },
+  { id: '/settings', icon: Settings, text: t('nav.settings') },
+])
 
 /** 维护系统本身时才需要的界面，由设置里的 Developer Mode 决定是否出现。
     关掉只是不在侧栏占位置，路由仍然直连可用。 */
-const devItems = [
-  { id: '/agent', icon: '◌', text: 'Agent 工作台' },
-  { id: '/extraction-experiment', icon: '◆', text: '抽取对比' },
-  { id: '/eval', icon: '◈', text: '评测' },
-  { id: '/review', icon: '✓', text: '审核' },
-  { id: '/correction', icon: '✎', text: '纠正' },
-]
+const devItems = computed(() => [
+  { id: '/agent', icon: Bot, text: t('nav.agent') },
+  { id: '/extraction-experiment', icon: GitCompare, text: t('nav.extraction') },
+  { id: '/eval', icon: Gauge, text: t('nav.eval') },
+  { id: '/review', icon: CircleCheck, text: t('nav.review') },
+  { id: '/correction', icon: Pencil, text: t('nav.correction') },
+])
 
 function onKey(e: KeyboardEvent) {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); cmdOpen.value = !cmdOpen.value }
@@ -63,40 +79,41 @@ const MOBILE_ITEMS = items
         <div><b>LLM-Wiki</b><small>Personal Knowledge</small></div>
       </div>
       <div v-for="it in items" :key="it.id" class="nav" :class="{ active: route.path === it.id || (it.id !== '/' && route.path.startsWith(it.id)) }" @click="router.push(it.id)">
-        <span class="nico">{{ it.icon }}</span><span>{{ it.text }}</span>
+        <span class="nico"><component :is="it.icon" :size="15" /></span><span>{{ it.text }}</span>
       </div>
 
       <!-- 待确认是一个「状态」，不是一个「目的地」：用普通导航样式，不抢戏；
            只有真正重要的冲突才用强调色。点击才进入审核。 -->
       <div v-if="store.pendingReview" class="nav" :class="{ active: route.path === '/review' }"
-           :title="`${store.pendingReview} 条候选知识等你确认`" @click="router.push('/review')">
-        <span class="nico">◷</span><span>待确认</span>
+           :title="t('nav.pendingTitle', { count: store.pendingReview })" @click="router.push('/review')">
+        <span class="nico"><Clock :size="15" /></span><span>{{ t('nav.pending') }}</span>
         <span class="pill">{{ store.pendingReview }}</span>
       </div>
 
       <div class="spacer"></div>
       <template v-if="store.developerMode">
-        <div class="navlbl">开发者</div>
+        <div class="navlbl">{{ t('nav.devLabel') }}</div>
         <div v-for="it in devItems" :key="it.id" class="nav"
              :class="{ active: route.path.startsWith(it.id) }" @click="router.push(it.id)">
-          <span class="nico">{{ it.icon }}</span><span>{{ it.text }}</span>
+          <span class="nico"><component :is="it.icon" :size="15" /></span><span>{{ it.text }}</span>
         </div>
       </template>
       <div v-if="store.health" class="healthcard">
-        <div class="healthrow"><span class="ok">● 运行正常</span><span>{{ store.health.version }}</span></div>
-        <div class="healthrow"><span>SQLite · WAL</span><span>Local-first</span></div>
+        <div class="healthrow"><span class="ok">● {{ t('health.ok') }}</span><span>{{ store.health.version }}</span></div>
+        <div class="healthrow"><span>{{ t('health.db') }}</span><span>{{ t('health.local') }}</span></div>
       </div>
     </aside>
 
     <main class="main">
       <header class="topbar">
         <div class="omni" @click="cmdOpen = true">
-          <span>⌕</span><span>搜索 / 打开</span><kbd>⌘K</kbd>
+          <span>⌕</span><span>{{ t('topbar.searchPlaceholder') }}</span><kbd>⌘K</kbd>
         </div>
         <div class="grow"></div>
         <div class="top-actions">
-          <button class="iconbtn" title="命令面板" @click="cmdOpen = true">⌘</button>
-          <button class="iconbtn" title="设置" @click="router.push('/settings')">⚙</button>
+          <Button variant="ghost" size="sm" class="px-2 text-xs font-semibold" :title="localeToggleLabel === 'EN' ? t('topbar.switchToEn') : t('topbar.switchToZh')" @click="toggleLocale">{{ localeToggleLabel }}</Button>
+          <Button variant="ghost" size="icon" :title="t('topbar.palette')" @click="cmdOpen = true"><CommandIcon /></Button>
+          <Button variant="ghost" size="icon" :title="t('topbar.settings')" @click="router.push('/settings')"><Settings /></Button>
         </div>
       </header>
       <div class="content">
@@ -107,9 +124,9 @@ const MOBILE_ITEMS = items
     <CommandPalette :open="cmdOpen" @close="cmdOpen = false" />
     <nav class="mobilebar">
       <button v-for="it in MOBILE_ITEMS" :key="it.id" :class="{ active: route.path === it.id || (it.id !== '/' && route.path.startsWith(it.id)) }" @click="router.push(it.id)">
-        <span>{{ it.icon }}</span><small>{{ it.text }}</small>
+        <span><component :is="it.icon" :size="18" /></span><small>{{ it.text }}</small>
       </button>
-      <button @click="cmdOpen = true"><span>⌘</span><small>命令</small></button>
+      <button @click="cmdOpen = true"><span>⌘</span><small>{{ t('nav.command') }}</small></button>
     </nav>
     <RunProgress />
     <AppToast />

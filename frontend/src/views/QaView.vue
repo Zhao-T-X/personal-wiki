@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+import { Bot, MessageCircle, Search, Sigma, Telescope } from 'lucide-vue-next'
 import { api, post } from '../api/client'
 import type { Run } from '../api/types'
 import AnswerCard from '../components/AnswerCard.vue'
@@ -19,6 +21,7 @@ import { fmtDateTime } from '../utils/time'
 const route = useRoute()
 const router = useRouter()
 const store = useAppStore()
+const { t } = useI18n()
 
 type Mode = 'knowledge' | 'agent'
 /** Normal users never pick an engine — the system answers from the knowledge base and
@@ -51,8 +54,8 @@ const answerStale = ref(false)
 
 function onCorrected(r?: any) {
   answerStale.value = true
-  store.toast('知识已更新 · 再问一次会得到新答案', {
-    label: '看这条知识', run: () => { if (r?.claim_id) router.push('/knowledge/claim/' + r.claim_id) },
+  store.toast(t('qa.correctedToast'), {
+    label: t('qa.correctedView'), run: () => { if (r?.claim_id) router.push('/knowledge/claim/' + r.claim_id) },
   })
 }
 
@@ -74,7 +77,7 @@ const resultBox = ref<HTMLElement | null>(null)
 
 /** Jump to the source: knowledge page opens the document drawer and highlights this chunk. */
 function openEvidence(e: { document_id?: string; id?: string }) {
-  if (!e.document_id) { store.toast('这条证据没有关联的来源文档'); return }
+  if (!e.document_id) { store.toast(t('anscard.noSourceToast')); return }
   router.push({ path: '/knowledge', query: { doc: e.document_id, chunk: e.id } })
 }
 
@@ -107,7 +110,7 @@ async function loadRoles() {
     agentRoles.value = r.roles
   } catch (e: any) {
     agentRoles.value = []
-    rolesError.value = '暂时读不到可选的 Agent 列表——自动路由仍然可用。'
+    rolesError.value = t('qa.rolesError')
     void e
   }
 }
@@ -124,13 +127,13 @@ const trace = computed(() => {
 const boundary = computed(() => {
   const ev = result.value?.evidence || []
   const items: { level: 'ok' | 'cond' | 'open'; text: string }[] = []
-  if (ev.length >= 3) items.push({ level: 'ok', text: `有 ${ev.length} 条证据直接支持这个回答` })
-  else if (ev.length) items.push({ level: 'cond', text: `只有 ${ev.length} 条证据，回答可能不完整` })
-  else items.push({ level: 'open', text: '没有找到直接支持这个回答的片段' })
-  items.push({ level: 'cond', text: '回答不因证据不足而自动补全——条件性结论已在正文中标注' })
+  if (ev.length >= 3) items.push({ level: 'ok', text: t('qa.boundary.strong', { n: ev.length }) })
+  else if (ev.length) items.push({ level: 'cond', text: t('qa.boundary.weak', { n: ev.length }) })
+  else items.push({ level: 'open', text: t('qa.boundary.none') })
+  items.push({ level: 'cond', text: t('qa.boundary.noAutofill') })
   const kw = question.value.trim().slice(0, 6)
   const related = openQuestions.value.filter(q => kw && (q.content as string).includes(kw)).length
-  items.push({ level: 'open', text: related ? `${related} 个开放问题与本主题相关，可继续研究` : '没有匹配的开放问题' })
+  items.push({ level: 'open', text: related ? t('qa.boundary.relatedOpen', { n: related }) : t('qa.boundary.noRelatedOpen') })
   return items
 })
 
@@ -138,14 +141,14 @@ const boundary = computed(() => {
 const evidenceLevel = computed(() => {
   if (!result.value) return null
   const n = result.value.evidence?.length || 0
-  if (n === 0) return { label: '无证据支持', cls: 'red' }
-  if (n < 3) return { label: '证据有限', cls: 'amber' }
-  return { label: '有据可依', cls: 'green' }
+  if (n === 0) return { label: t('qa.level.none'), cls: 'red' }
+  if (n < 3) return { label: t('qa.level.limited'), cls: 'amber' }
+  return { label: t('qa.level.grounded'), cls: 'green' }
 })
 
 async function send() {
   const q = question.value.trim()
-  if (!q) { store.toast('请输入问题'); return }
+  if (!q) { store.toast(t('qa.needQuestion')); return }
   if (mode.value === 'knowledge') await askKnowledge()
   else await askAgent()
 }
@@ -181,7 +184,7 @@ const conversationId = ref('')
 function newConversation() {
   conversationId.value = (crypto as any).randomUUID ? crypto.randomUUID() : `c-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   agentResult.value = null
-  store.toast('已开启新会话')
+  store.toast(t('qa.newConversationToast'))
 }
 
 async function askAgent() {
@@ -206,28 +209,28 @@ function switchMode(m: Mode) {
   result.value = null; agentResult.value = null
 }
 
-const columns = [
-  { key: 'task_type', label: '模式' }, { key: 'created_at', label: '时间' },
-  { key: 'question', label: '问题' }, { key: 'status', label: '结果' }, { key: 'duration_ms', label: '耗时 ms' },
-]
+const columns = computed(() => [
+  { key: 'task_type', label: t('qa.cols.mode') }, { key: 'created_at', label: t('qa.cols.time') },
+  { key: 'question', label: t('qa.cols.question') }, { key: 'status', label: t('qa.cols.status') }, { key: 'duration_ms', label: t('qa.cols.duration') },
+])
 </script>
 
 <template>
   <div class="page">
     <div class="qahead">
       <div class="eyebrow">ASK</div>
-      <h1 class="qatitle">问答</h1>
-      <p class="qasub">答案来自你的知识，并且告诉你为什么这样回答。</p>
+      <h1 class="qatitle">{{ t('qa.title') }}</h1>
+      <p class="qasub">{{ t('qa.sub') }}</p>
     </div>
 
     <!-- mode switch: only offered in Developer Mode. Normal users never choose an engine. -->
     <div v-if="store.developerMode" class="row" style="justify-content:center;margin-bottom:16px;gap:10px">
       <div class="seg" style="padding:3px">
-        <button :class="{ active: mode === 'knowledge' }" @click="switchMode('knowledge')">知识库问答</button>
-        <button :class="{ active: mode === 'agent' }" @click="switchMode('agent')">Agent 问答</button>
+        <button :class="{ active: mode === 'knowledge' }" @click="switchMode('knowledge')">{{ t('qa.modeKnowledge') }}</button>
+        <button :class="{ active: mode === 'agent' }" @click="switchMode('agent')">{{ t('qa.modeAgent') }}</button>
       </div>
       <select v-if="mode === 'agent'" v-model="agentRole" class="field" style="padding:8px 10px">
-        <option value="auto">自动路由 Agent</option>
+        <option value="auto">{{ t('qa.autoRoute') }}</option>
         <option v-for="r in agentRoles" :key="r.id" :value="r.id">{{ r.name }} · {{ r.description }}</option>
       </select>
       <span v-if="mode === 'agent' && rolesError" class="faint" style="font-size:9.5px">{{ rolesError }}</span>
@@ -235,11 +238,11 @@ const columns = [
 
     <div class="askwrap">
       <div class="askcard">
-        <input v-model="question" placeholder="问你的知识库任何问题…" @keydown.enter="send()" />
+        <input v-model="question" :placeholder="t('qa.askPlaceholder')" @keydown.enter="send()" />
         <div class="askbottom">
-          <span>基于你的知识库回答</span>
+          <span>{{ t('qa.basedOn') }}</span>
           <button class="btn primary" :disabled="loading || agentLoading" @click="send()">
-            {{ loading || agentLoading ? '询问中…' : '询问' }}
+            {{ loading || agentLoading ? t('qa.asking') : t('qa.ask') }}
           </button>
         </div>
       </div>
@@ -249,31 +252,31 @@ const columns = [
       <!-- Agent answer -->
       <div class="panel pad" v-if="mode === 'agent'">
         <div class="row">
-          <h3 style="font-size:13px">Answer</h3>
+          <h3 style="font-size:13px">{{ t('qa.agentAnswerTitle') }}</h3>
           <span v-if="agentResult" class="tag violet">{{ agentResult.agent }} Agent</span>
           <span v-if="agentResult?.framework" class="tag">{{ agentResult.framework }}</span>
-          <span v-if="conversationId" class="tag blue" title="多轮对话：历史以压缩摘要 + 近窗消息随问随答">会话中</span>
-          <button v-if="conversationId" class="btn sm ghost" @click="newConversation">新会话</button>
+          <span v-if="conversationId" class="tag blue" :title="t('qa.inConversationTitle')">{{ t('qa.inConversation') }}</span>
+          <button v-if="conversationId" class="btn sm ghost" @click="newConversation">{{ t('qa.newConversation') }}</button>
           <div class="grow"></div>
           <span v-if="agentMs" class="faint" style="font-size:9px">{{ agentMs }} ms</span>
         </div>
-        <div v-if="agentLoading" class="faint" style="font-size:10px;margin-top:10px">Agent 正在检索知识库并推理…（可调用 search_knowledge / get_entity / get_entity_graph）</div>
+        <div v-if="agentLoading" class="faint" style="font-size:10px;margin-top:10px">{{ t('qa.agentThinking') }}</div>
         <MarkdownView v-else-if="agentResult" :content="agentResult.answer" style="margin-top:10px" />
-        <div v-else class="empty">选择 Agent 与问题后开始提问</div>
+        <div v-else class="empty">{{ t('qa.agentEmpty') }}</div>
       </div>
 
       <!-- Knowledge answer -->
       <div class="panel pad" v-if="mode === 'knowledge'">
         <div class="row">
-          <h3 style="font-size:13px">回答</h3>
+          <h3 style="font-size:13px">{{ t('qa.answerTitle') }}</h3>
           <span v-if="evidenceLevel" class="tag" :class="evidenceLevel.cls">{{ evidenceLevel.label }}</span>
           <div class="grow"></div>
           <button v-if="result && !loading" class="btn sm" :disabled="validating" @click="validateCitations">
-            {{ validating ? '校验中…' : '校验引用' }}
+            {{ validating ? t('qa.validating') : t('qa.validate') }}
           </button>
         </div>
-        <div v-if="loading" class="faint" style="font-size:10px;margin-top:10px">正在检索你的知识并整理证据…</div>
-        <div v-else-if="!result" class="empty">输入问题开始提问</div>
+        <div v-if="loading" class="faint" style="font-size:10px;margin-top:10px">{{ t('qa.loadingAnswer') }}</div>
+        <div v-else-if="!result" class="empty">{{ t('qa.emptyAsk') }}</div>
         <!-- 答案：问题 → 结论 → 依据 → 纠正，统一走 AnswerCard，不与问答页各写一套 -->
         <AnswerCard v-else
           :question="question" :answer="result.answer"
@@ -285,25 +288,25 @@ const columns = [
              只是一条研究提案还没被采纳。说清这一点，并把下一步放在手边——
              否则「没有足够证据」会让人去找一份并不缺失的文档。 -->
         <div v-if="result?.reason === 'candidate_not_accepted'" class="notice violet" style="margin-top:12px">
-          知识库里有一条与此相关的研究候选，还没有被采纳为知识——所以现在不能当作事实来回答。
+          {{ t('qa.candidateNotice') }}
           <div class="row" style="margin-top:8px;gap:8px">
-            <button class="btn sm primary" @click="router.push('/review')">去审核并采纳 →</button>
+            <button class="btn sm primary" @click="router.push('/review')">{{ t('qa.candidateCta') }}</button>
           </div>
         </div>
         <div v-if="result && !result.evidence.length" class="notice violet" style="margin-top:12px">
-          知识库里没有找到支持这个回答的片段。答案可能来自模型的通用知识，请谨慎采信，或先导入相关文档。
+          {{ t('qa.noEvidenceNotice') }}
         </div>
 
         <!-- 改完之后答案就过期了，说出来并把手边的下一步给出来 -->
         <div v-if="answerStale" class="notice violet" style="margin-top:12px">
-          这条答案是在修改前的知识上算出来的，可能已经过期。
+          {{ t('qa.staleNotice') }}
           <div class="row" style="margin-top:8px;gap:8px">
-            <button class="btn sm primary" :disabled="loading" @click="reask">用新的知识重新提问 →</button>
+            <button class="btn sm primary" :disabled="loading" @click="reask">{{ t('qa.reask') }}</button>
           </div>
         </div>
 
         <div v-if="validation" class="sechead" style="margin-top:14px">
-          <h3>引用校验</h3>
+          <h3>{{ t('qa.validationTitle') }}</h3>
           <span class="tag" :class="'g-' + validation.grade" style="margin:0">{{ validation.grade }} · {{ Math.round(validation.overall * 100) }}%</span>
         </div>
         <div v-if="validation" class="cval">
@@ -314,7 +317,7 @@ const columns = [
           </div>
           <div v-if="validation.grounding" class="gbox">
             <b :class="validation.grounding.grounded ? 'ok' : 'bad'">
-              {{ validation.grounding.grounded ? '语义上可由引用支撑' : '存在无法由引用支撑的说法' }}
+              {{ validation.grounding.grounded ? t('qa.groundingOk') : t('qa.groundingBad') }}
             </b>
             <p v-if="validation.grounding.rationale" class="faint small">{{ validation.grounding.rationale }}</p>
             <ul v-if="validation.grounding.assertions?.length" class="glist">
@@ -332,70 +335,70 @@ const columns = [
 
       <div class="grid g2" style="margin-top:16px" v-if="result && mode === 'knowledge'">
         <div>
-          <div class="sechead"><h3>全部依据 <span class="faint" style="font-weight:400;font-size:9px">· {{ result.evidence.length }} sources · 需要深入时再看</span></h3></div>
+          <div class="sechead"><h3>{{ t('qa.allEvidence') }} <span class="faint" style="font-weight:400;font-size:9px">· {{ t('qa.sourcesMeta', { n: result.evidence.length }) }}</span></h3></div>
           <div class="panel pad" style="padding:6px">
-            <div v-for="(e, i) in result.evidence" :key="i" class="item" style="cursor:pointer" title="打开来源文档并定位到该片段" @click="openEvidence(e)">
+            <div v-for="(e, i) in result.evidence" :key="i" class="item" style="cursor:pointer" :title="t('anscard.openSourceTitle')" @click="openEvidence(e)">
               <span class="tag blue" style="flex:none">{{ i + 1 }}</span>
               <div class="grow">
                 <b>{{ e.title }}</b>
                 <p>{{ (e.content || '').slice(0, 100) }}</p>
                 <div style="margin-top:4px">
                   <span class="tag">{{ e.source_type || 'Document' }}</span>
-                  <span class="tag blue">打开来源 →</span>
+                  <span class="tag blue">{{ t('anscard.open') }}</span>
                 </div>
               </div>
             </div>
             <EmptyState
               v-if="!result.evidence.length"
-              title="没有匹配的证据"
-              text="检索没有找到支持这个回答的片段——回答目前不受你的知识库支撑。"
+              :title="t('qa.noEvidenceTitle')"
+              :text="t('qa.noEvidenceText')"
             />
           </div>
-          <div class="sechead"><h3>知识边界</h3></div>
+          <div class="sechead"><h3>{{ t('qa.boundaryTitle') }}</h3></div>
           <div class="panel pad"><BoundaryList :items="boundary" /></div>
         </div>
         <div>
-          <div class="sechead"><h3>检索轨迹</h3><span class="tag blue" style="margin:0">{{ result.evidence.length }} hits</span></div>
+          <div class="sechead"><h3>{{ t('qa.traceTitle') }}</h3><span class="tag blue" style="margin:0">{{ result.evidence.length }} hits</span></div>
           <div class="panel pad" style="padding:6px">
             <div v-for="(n, m) in trace" :key="m" class="item" style="cursor:default">
-              <div class="ico-badge ib-violet">Σ</div>
-              <div class="grow"><b>{{ m }}</b><p>贡献 {{ n }} 条证据</p></div>
+              <div class="ico-badge ib-violet"><Sigma :size="14" /></div>
+              <div class="grow"><b>{{ m }}</b><p>{{ t('qa.contributes', { n }) }}</p></div>
             </div>
-            <div class="item" style="cursor:default"><div class="ico-badge ib-blue">⌕</div><div class="grow"><b>Hybrid Query</b><p>{{ question }}</p></div></div>
+            <div class="item" style="cursor:default"><div class="ico-badge ib-blue"><Search :size="14" /></div><div class="grow"><b>Hybrid Query</b><p>{{ question }}</p></div></div>
           </div>
-          <div class="sechead"><h3>下一步</h3></div>
-          <button class="btn" style="width:100%" @click="router.push({ path: '/research', query: { q: question } })">◇ 就此问题继续研究</button>
-          <button v-if="store.developerMode" class="btn" style="width:100%;margin-top:8px" @click="switchMode('agent');send()">◌ 换用 Agent 深入回答</button>
+          <div class="sechead"><h3>{{ t('qa.nextSteps') }}</h3></div>
+          <button class="btn" style="width:100%" @click="router.push({ path: '/research', query: { q: question } })"><Telescope :size="12" style="vertical-align:-1px" /> {{ t('qa.researchThis') }}</button>
+          <button v-if="store.developerMode" class="btn" style="width:100%;margin-top:8px" @click="switchMode('agent');send()"><Bot :size="12" style="vertical-align:-1px" /> {{ t('qa.agentDeep') }}</button>
         </div>
       </div>
 
       <div v-if="agentResult && mode === 'agent'" class="grid g2" style="margin-top:16px">
         <div class="panel pad">
-          <div class="sechead" style="margin-top:0"><h3>这次回答做了什么</h3></div>
+          <div class="sechead" style="margin-top:0"><h3>{{ t('qa.whatAgentDid') }}</h3></div>
           <div class="listitem"><b>Agent</b><p>{{ agentResult.agent }} · {{ agentResult.framework || 'AgentScope' }}</p></div>
-          <div class="listitem"><b>可用工具</b><p>search_knowledge · get_entity · get_entity_graph · list_skills</p></div>
-          <div class="listitem"><b>运行记录</b><p>已写入任务列表（llm_runs · task_type=agent）</p></div>
+          <div class="listitem"><b>{{ t('qa.tools') }}</b><p>search_knowledge · get_entity · get_entity_graph · list_skills</p></div>
+          <div class="listitem"><b>{{ t('qa.runRecord') }}</b><p>{{ t('qa.runRecordText') }}</p></div>
         </div>
         <div>
-          <div class="sechead" style="margin-top:0"><h3>下一步</h3></div>
-          <button class="btn" style="width:100%" @click="recent.length && (runDrawerId = recent[0].id)">查看本次运行明细</button>
-          <button class="btn" style="width:100%;margin-top:8px" @click="router.push('/agent')">◌ 打开 Agent 工作台</button>
-          <button class="btn" style="width:100%;margin-top:8px" @click="switchMode('knowledge');send()">◎ 换用知识库问答（带证据）</button>
+          <div class="sechead" style="margin-top:0"><h3>{{ t('qa.nextSteps') }}</h3></div>
+          <button class="btn" style="width:100%" @click="recent.length && (runDrawerId = recent[0].id)">{{ t('qa.viewRun') }}</button>
+          <button class="btn" style="width:100%;margin-top:8px" @click="router.push('/agent')"><Bot :size="12" style="vertical-align:-1px" /> {{ t('qa.openAgent') }}</button>
+          <button class="btn" style="width:100%;margin-top:8px" @click="switchMode('knowledge');send()"><MessageCircle :size="12" style="vertical-align:-1px" /> {{ t('qa.switchKb') }}</button>
         </div>
       </div>
 
-      <div class="sechead"><h3>最近问答</h3><button class="btn sm" @click="loadMeta">刷新</button></div>
+      <div class="sechead"><h3>{{ t('qa.recentTitle') }}</h3><button class="btn sm" @click="loadMeta">{{ t('qa.refresh') }}</button></div>
       <!-- 读不到历史时说"读不到"：一张空表会让人以为"我从来没问过问题" -->
-      <LoadBoundary :state="meta.state.value" loading-text="正在读取最近的问答…"
-                    error-text="暂时读不到历史问答——这不代表你没有问过。"
+      <LoadBoundary :state="meta.state.value" :loading-text="t('qa.loadingRecent')"
+                    :error-text="t('qa.errRecent')"
                     :reload="meta.reload">
         <div class="panel pad" style="padding:6px">
           <DataTable :columns="columns" :rows="recent" clickable @row-click="(r: Run) => (runDrawerId = r.id)">
             <template #cell-task_type="{ row }">
-              <span v-if="store.developerMode" class="tag" :class="row.task_type === 'agent' ? 'violet' : 'blue'">{{ row.task_type === 'agent' ? 'Agent · ' + (row.agent_role || '') : '知识库' }}</span>
-              <span v-else class="tag blue">问答</span>
+              <span v-if="store.developerMode" class="tag" :class="row.task_type === 'agent' ? 'violet' : 'blue'">{{ row.task_type === 'agent' ? 'Agent · ' + (row.agent_role || '') : t('qa.kbTag') }}</span>
+              <span v-else class="tag blue">{{ t('qa.qaTag') }}</span>
             </template>
-            <template #cell-question="{ row }"><b>{{ row.summary?.question || (row.task_type === 'agent' ? '(Agent 对话)' : '(历史记录)') }}</b></template>
+            <template #cell-question="{ row }"><b>{{ row.summary?.question || (row.task_type === 'agent' ? t('qa.agentConversation') : t('qa.historyRecord')) }}</b></template>
             <template #cell-status="{ row }"><StatusTag :status="row.status" /></template>
             <template #cell-created_at="{ row }">{{ fmtDateTime(row.created_at) }}</template>
           </DataTable>

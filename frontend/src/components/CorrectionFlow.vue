@@ -19,11 +19,14 @@
  * `buildCorrectionSeed()`（utils/correction.ts）唯一构造。
  */
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { api, post } from '../api/client'
 import { useAppStore } from '../stores/app'
-import { statusStyle } from '../utils/status'
+import { statusLabel } from '../utils/status'
 import { reportIssues } from '../utils/issues'
+
+const { t } = useI18n()
 
 const props = withDefaults(defineProps<{
   /** 内联用（答案卡片 / 知识卡片）：只留结论与两个按钮。 */
@@ -38,7 +41,7 @@ const props = withDefaults(defineProps<{
   compact: false,
   seed: '',
   existing: '',
-  confirmLabel: '确认修改',
+  confirmLabel: '',
 })
 
 const emit = defineEmits<{ (e: 'applied', result: any): void }>()
@@ -53,26 +56,22 @@ const analyzing = ref(false)
 const applying = ref(false)
 const error = ref('')
 
-const DIM_LABELS: Record<string, string> = {
-  schema: '结构', evidence: '依据', quote: '引用',
-  entity_resolution: '识别对象', predicate: '关系校验',
-  conflict: '冲突', provenance: '来源',
+function dimLabel(k: string | number) {
+  const key = String(k)
+  return ({ schema: t('correction.dimSchema'), evidence: t('correction.dimEvidence'), quote: t('correction.dimQuote'),
+    entity_resolution: t('correction.dimEntity'), predicate: t('correction.dimPredicate'),
+    conflict: t('correction.dimConflict'), provenance: t('correction.dimProvenance') } as Record<string, string>)[key] || key
 }
-const VERDICT_LABELS: Record<string, string> = {
-  supported: '与现有知识一致',
-  contradicted: '与现有知识矛盾',
-  unrelated: '与现有知识无关',
-  uncertain: '无法验证',
+function verdictLabel(v: string) {
+  return ({ supported: t('correction.vSupported'), contradicted: t('correction.vContradicted'),
+    unrelated: t('correction.vUnrelated'), uncertain: t('correction.vUncertain') } as Record<string, string>)[v] || v
 }
 /** What will happen to the knowledge we already had — in the user's words. */
-const RELATION_LABEL: Record<string, string> = {
-  supersedes: '将取代旧知识',
-  contradicts: '与旧知识冲突，需你判断',
-  duplicate: '与旧知识相同',
-  coexists: '与旧知识并存',
-  new: '作为新知识写入',
-  unresolved: '无法映射到受控词表',
-  rejected: '违反本体约束',
+function relationLabel(r: string) {
+  return ({ supersedes: t('correction.relSupersedes'), contradicts: t('correction.relContradicts'),
+    duplicate: t('correction.relDuplicate'), coexists: t('correction.relCoexists'),
+    new: t('correction.relNew'), unresolved: t('correction.relUnresolved'),
+    rejected: t('correction.relRejected') } as Record<string, string>)[r] || r
 }
 
 const affected = ref<any>(null)
@@ -84,7 +83,7 @@ function reset() {
 
 async function analyze() {
   const q = text.value.trim()
-  if (!q) { store.toast('先写一句要改成什么'); return }
+  if (!q) { store.toast(t('correction.writeFirst')); return }
   error.value = ''
   reset()
   analyzing.value = true
@@ -120,7 +119,7 @@ async function applyPayload(payload: any) {
     emit('applied', r)
     // 纠正成功时先说成功；它若牵连出新问题，那条消息会顶上来（两句话不能同时说，
     // 但漏掉「改了」或漏掉「弄坏了什么」都是说谎）。
-    if (!reportIssues(r?.issues, store, router)) store.toast('已更新 · 旧知识保留在历史里')
+    if (!reportIssues(r?.issues, store, router)) store.toast(t('correction.updated'))
     void store.loadPendingReview()
     return r
   } catch (e: any) {
@@ -152,16 +151,16 @@ defineExpose({ analyze, applyPayload, reset, applyState: applying })
 <template>
   <div class="cflow" :class="{ compact }">
     <!-- 要改的是哪条知识：只说一次，而且是给人看的说法 -->
-    <p v-if="existing" class="existing">当前知识：<b>{{ existing }}</b></p>
+    <p v-if="existing" class="existing">{{ t('correction.existing') }}<b>{{ existing }}</b></p>
     <textarea v-model="text" :rows="compact ? 2 : 3" class="ta"
               :placeholder="existing
-                ? '把它改成正确的说法，例如：苹果的首席执行官 John Ternus'
-                : (compact ? '哪里不对？例如：苹果现在的 CEO 是 John Ternus。' : '写下你认为正确的说法，例如：苹果公司的新任 CEO 是约翰·特努斯。')" />
+                ? t('correction.placeholderExisting')
+                : (compact ? t('correction.placeholderCompact') : t('correction.placeholderFull'))" />
     <div class="row" style="margin-top:8px">
       <button class="btn primary sm" :disabled="analyzing" @click="analyze">
-        {{ analyzing ? '分析中…' : '分析' }}
+        {{ analyzing ? t('correction.analyzing') : t('correction.analyze') }}
       </button>
-      <span v-if="!compact" class="faint small">需要已配置的语言模型；无模型时可在下方手动填写。</span>
+      <span v-if="!compact" class="faint small">{{ t('correction.needModel') }}</span>
     </div>
 
     <div v-if="error" class="notice red" style="margin-top:10px">{{ error }}</div>
@@ -170,34 +169,33 @@ defineExpose({ analyze, applyPayload, reset, applyState: applying })
     <div v-if="plan" class="result" style="margin-top:12px">
       <template v-if="plan.blocked">
         <div class="notice red">
-          <b>这句改不了。</b>「{{ plan.intent?.predicate_candidate || text }}」没能对应到一个已知的关系，
-          系统不会生造一个。请换一种说法。
+          <b>{{ t('correction.cannotFix') }}</b>{{ t('correction.cannotFixHint', { predicate: String(plan.intent?.predicate_candidate || text) }) }}
         </div>
       </template>
       <template v-else>
         <div class="sechead" style="margin-top:0">
-          <h3>要对这条做什么</h3>
+          <h3>{{ t('correction.whatToDo') }}</h3>
           <span class="tag" :class="plan.apply_supersede ? 'amber' : 'blue'" style="margin:0">
-            {{ RELATION_LABEL[plan.relationship] || plan.relationship }}
+            {{ relationLabel(plan.relationship) }}
           </span>
         </div>
 
         <div class="diff">
           <div v-if="affected" class="side old">
-            <span class="lbl">已有知识</span>
+            <span class="lbl">{{ t('correction.oldKnowledge') }}</span>
             <b>{{ affected.content || affected.object || '（原有知识）' }}</b>
-            <span v-if="affected.status" class="faint small">{{ statusStyle(affected.status).label }}</span>
+            <span v-if="affected.status" class="faint small">{{ statusLabel(affected.status) }}</span>
           </div>
           <div v-else class="side old empty-side">
-            <span class="lbl">已有知识</span>
-            <b>没有找到相关知识</b>
-            <span class="faint small">这条会作为新知识写入</span>
+            <span class="lbl">{{ t('correction.oldKnowledge') }}</span>
+            <b>{{ t('correction.noRelated') }}</b>
+            <span class="faint small">{{ t('correction.asNew') }}</span>
           </div>
           <div class="arrow">→</div>
           <div class="side new">
-            <span class="lbl">建议</span>
+            <span class="lbl">{{ t('correction.suggestion') }}</span>
             <b>{{ proposed.subject }} · {{ proposed.predicate }} · {{ proposed.object || '—' }}</b>
-            <span v-if="plan.apply_supersede" class="faint small">旧知识不会被删除，会保留为历史</span>
+            <span v-if="plan.apply_supersede" class="faint small">{{ t('correction.oldKept') }}</span>
           </div>
         </div>
 
@@ -205,21 +203,21 @@ defineExpose({ analyze, applyPayload, reset, applyState: applying })
 
         <div v-if="plan.verification && plan.verification.verdict !== 'uncertain'" class="verification" :class="plan.verification.verdict">
           <div class="vhead">
-            <span class="tag" :class="plan.verification.verdict">{{ VERDICT_LABELS[plan.verification.verdict] || plan.verification.verdict }}</span>
-            <span class="faint">置信度 {{ Math.round((plan.verification.confidence || 0) * 100) }}%</span>
+            <span class="tag" :class="plan.verification.verdict">{{ verdictLabel(plan.verification.verdict) }}</span>
+            <span class="faint">{{ t('correction.confidence', { n: Math.round((plan.verification.confidence || 0) * 100) }) }}</span>
           </div>
           <p class="rationale">{{ plan.verification.rationale }}</p>
         </div>
 
         <div v-if="!compact && planQuality" class="quality">
           <div class="qhead">
-            <span>受影响知识的质量</span>
+            <span>{{ t('correction.affectedQuality') }}</span>
             <b class="grade" :class="'g-' + planQuality.grade">{{ planQuality.grade }}</b>
             <span class="faint">{{ Math.round(planQuality.overall * 100) }}%</span>
           </div>
           <div class="bars">
             <div v-for="(v, k) in planQuality.dimensions" :key="k" class="bar">
-              <span>{{ DIM_LABELS[k] || k }}</span>
+              <span>{{ dimLabel(k) }}</span>
               <span class="bt"><i :style="{ width: Math.round(v * 100) + '%' }" :class="{ low: v < 0.5 }"></i></span>
               <span class="bv">{{ Math.round(v * 100) }}</span>
             </div>
@@ -228,10 +226,10 @@ defineExpose({ analyze, applyPayload, reset, applyState: applying })
 
         <div class="row" style="margin-top:12px">
           <button class="btn primary sm" :disabled="applying" @click="confirm">
-            {{ applying ? '更新中…' : confirmLabel }}
+            {{ applying ? t('correction.applying') : (confirmLabel || t('correction.confirm')) }}
           </button>
-          <button class="btn ghost sm" @click="reset">取消</button>
-          <button v-if="affected" class="btn ghost sm" @click="openClaim(affected.claim_id)">看旧知识</button>
+          <button class="btn ghost sm" @click="reset">{{ t('correction.cancelBtn') }}</button>
+          <button v-if="affected" class="btn ghost sm" @click="openClaim(affected.claim_id)">{{ t('correction.viewOld') }}</button>
         </div>
       </template>
     </div>

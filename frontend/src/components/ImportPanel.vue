@@ -11,9 +11,12 @@
  */
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { api, post, postForm } from '../api/client'
 import { hasLabel, labelOf } from '../utils/claim'
 import { useAppStore } from '../stores/app'
+
+const { t } = useI18n()
 
 withDefaults(defineProps<{
   /** 首页用大号 hero 版；知识页用常规版。 */
@@ -26,8 +29,8 @@ withDefaults(defineProps<{
   hideDropzone?: boolean
 }>(), {
   hero: false,
-  title: '把文件拖到这里导入',
-  hint: '支持 Markdown / TXT / HTML，可一次拖入多个文件',
+  title: '',
+  hint: '',
   showReview: true,
   hideDropzone: false,
 })
@@ -60,10 +63,10 @@ const fileInput = ref<HTMLInputElement | null>(null)
 
 function newStages(): ImportStage[] {
   return [
-    { key: 'import', label: '读取文件', state: 'pending' },
-    { key: 'parse', label: '解析内容', state: 'pending' },
-    { key: 'chunk', label: '切分片段', state: 'pending' },
-    { key: 'analyze', label: '抽取知识', state: 'pending' },
+    { key: 'import', label: t('import.stageImport'), state: 'pending' },
+    { key: 'parse', label: t('import.stageParse'), state: 'pending' },
+    { key: 'chunk', label: t('import.stageChunk'), state: 'pending' },
+    { key: 'analyze', label: t('import.stageAnalyze'), state: 'pending' },
   ]
 }
 
@@ -72,19 +75,19 @@ function setStage(item: ImportItem, key: string, state: StageState) {
   if (stage) stage.state = state
 }
 
-const IMPORT_COUNTS: { key: string; label: string }[] = [
-  { key: 'entities', label: '对象' },
-  { key: 'claims', label: '知识' },
-  { key: 'relations', label: '关系' },
-  { key: 'events', label: '事件' },
-  { key: 'ideas', label: '想法' },
-  { key: 'questions', label: '问题' },
+const IMPORT_COUNTS: { key: string; lk: string }[] = [
+  { key: 'entities', lk: 'import.cntEntities' },
+  { key: 'claims', lk: 'import.cntClaims' },
+  { key: 'relations', lk: 'import.cntRelations' },
+  { key: 'events', lk: 'import.cntEvents' },
+  { key: 'ideas', lk: 'import.cntIdeas' },
+  { key: 'questions', lk: 'import.cntQuestions' },
 ]
 /** Only non-zero counts: a row of zeroes is noise, not a result. */
 function foundCounts(item: ImportItem) {
   const c = item.counts
   if (!c) return []
-  return IMPORT_COUNTS.map(m => ({ ...m, value: c[m.key] || 0 })).filter(m => m.value > 0)
+  return IMPORT_COUNTS.map(m => ({ key: m.key, value: c[m.key] || 0, label: t(m.lk) })).filter(m => m.value > 0)
 }
 function pendingOf(item: ImportItem) {
   const c = item.counts
@@ -159,7 +162,7 @@ async function processFile(item: ImportItem, file: File) {
 
   if (!store.health) await store.loadHealth()
   if (!store.health?.llm_configured) {
-    item.error = '未配置语言模型，已完成分块。配置模型后可运行「用模型抽取」补上知识。'
+    item.error = t('import.noLLM')
     return
   }
 
@@ -224,22 +227,22 @@ defineExpose({ pick, importFiles, closeQueue })
          @drop.prevent="onDrop"
          @click="pick">
       <div class="dzicon">⤓</div>
-      <div class="dztitle" :class="{ hero }">{{ title }}</div>
-      <div class="dzhint">{{ hint }}<br v-if="!hero" />导入后会自动分块并抽取知识，抽完再让你确认</div>
+      <div class="dztitle" :class="{ hero }">{{ title || t('import.dropTitle') }}</div>
+      <div class="dzhint">{{ hint || t('import.dropHint') }}<br v-if="!hero" />{{ t('import.afterImport') }}</div>
     </div>
 
     <!-- 导入队列：每个文件一行，展示处理到哪一步、发现了什么 -->
     <div v-if="importQueue.length" class="panel pad">
       <div class="row">
         <b style="font-size:12px">
-          <template v-if="importing">正在处理 {{ Math.min(finishedCount + 1, importQueue.length) }} / {{ importQueue.length }}</template>
-          <template v-else>已处理 {{ importQueue.length }} 个文件</template>
+          <template v-if="importing">{{ t('import.processing', { cur: Math.min(finishedCount + 1, importQueue.length), total: importQueue.length }) }}</template>
+          <template v-else>{{ t('import.done', { n: importQueue.length }) }}</template>
         </b>
         <div class="grow"></div>
         <button v-if="showReview && totalPending" class="btn primary sm" @click="router.push('/review')">
-          去确认这 {{ totalPending }} 项 →
+          {{ t('import.goReview', { n: totalPending }) }}
         </button>
-        <button class="btn sm ghost" :disabled="importing" @click="closeQueue">关闭</button>
+        <button class="btn sm ghost" :disabled="importing" @click="closeQueue">{{ t('import.close') }}</button>
       </div>
 
       <div v-for="(item, i) in importQueue" :key="i" class="impitem">
@@ -250,7 +253,7 @@ defineExpose({ pick, importFiles, closeQueue })
             <div v-for="s in item.stages" :key="s.key" class="ifstep" :class="s.state">
               <span class="ifdot">{{ s.state === 'done' ? '✓' : s.state === 'failed' ? '×' : s.state === 'active' ? '◌' : '·' }}</span>
               <span>{{ s.label }}</span>
-              <span v-if="s.key === 'chunk' && item.chunks" class="tag">{{ item.chunks }} 片段</span>
+              <span v-if="s.key === 'chunk' && item.chunks" class="tag">{{ t('import.chunks', { n: item.chunks }) }}</span>
             </div>
           </div>
           <p v-if="item.error" class="muted" style="font-size:9px;margin:9px 0 0">{{ item.error }}</p>
@@ -258,7 +261,7 @@ defineExpose({ pick, importFiles, closeQueue })
           <!-- 所以它读出了什么。数字不是结果，内容才是：
                它一眼要让用户明白「这个产品不是帮我存文件，是帮我理解文件」。 -->
           <div v-else-if="item.knowledge" class="learned">
-            <div class="lhead">我从这篇整理出了什么</div>
+            <div class="lhead">{{ t('import.learned') }}</div>
 
             <div v-if="item.knowledge.names?.length" class="lnames">
               <span v-for="n in item.knowledge.names.slice(0, 8)" :key="n" class="tag blue">{{ n }}</span>
@@ -275,19 +278,19 @@ defineExpose({ pick, importFiles, closeQueue })
 
             <p v-if="item.knowledge.counts?.pending" class="lpending">
               {{ foundCounts(item).map(c => `${c.value} ${c.label}`).join(' · ') }}
-              —— 其中 {{ item.knowledge.counts.pending }} 条需要你确认才会成为正式知识
+              —— {{ t('import.needConfirm', { n: item.knowledge.counts.pending }) }}
             </p>
             <p v-else-if="foundCounts(item).length" class="lpending">
               {{ foundCounts(item).map(c => `${c.value} ${c.label}`).join(' · ') }}
             </p>
 
             <div class="lask">
-              <span class="faint" style="font-size:9.5px">关于这篇，你可以问：</span>
+              <span class="faint" style="font-size:9.5px">{{ t('import.askAbout') }}</span>
               <button v-for="q in questionsFor(item)" :key="q" class="qchip" @click="askAbout(q)">{{ q }}</button>
             </div>
 
             <div class="row" style="margin-top:11px">
-              <button class="btn sm" @click="emit('open-document', item.documentId)">查看这篇的原文与断言 →</button>
+              <button class="btn sm" @click="emit('open-document', item.documentId)">{{ t('import.viewSource') }}</button>
             </div>
           </div>
 
@@ -298,7 +301,7 @@ defineExpose({ pick, importFiles, closeQueue })
               </div>
             </div>
             <div v-if="item.documentId && item.counts" style="margin-top:10px">
-              <button class="btn sm" @click="emit('open-document', item.documentId)">查看原文</button>
+              <button class="btn sm" @click="emit('open-document', item.documentId)">{{ t('import.viewOriginal') }}</button>
             </div>
           </template>
         </div>

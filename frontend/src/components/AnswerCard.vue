@@ -10,6 +10,7 @@
  */
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import MarkdownView from './MarkdownView.vue'
 import KnowledgeCard from './KnowledgeCard.vue'
 import CorrectionFlow from './CorrectionFlow.vue'
@@ -46,13 +47,14 @@ const emit = defineEmits<{
 
 const router = useRouter()
 const store = useAppStore()
+const { t } = useI18n()
 const fixOpen = ref(false)
 
 const sources = computed(() => props.evidence || [])
 const knowledgeCards = computed(() => (props.knowledge || []).map(k => toCard(k)))
 
 function openEvidence(e: { document_id?: string; id?: string }) {
-  if (!e.document_id) { store.toast('这条证据没有关联的来源文档'); return }
+  if (!e.document_id) { store.toast(t('anscard.noSourceToast')); return }
   router.push({ path: '/knowledge', query: { doc: e.document_id, chunk: e.id } })
 }
 
@@ -72,16 +74,16 @@ function onCorrected() { fixOpen.value = false; emit('corrected') }
     <!-- 依据：紧跟回答，轻灰列表 + 分隔线，不另起一面墙 -->
     <template v-if="sources.length">
       <div class="divider"></div>
-      <div class="evhead">依据 · {{ sources.length }} 个来源</div>
+      <div class="evhead">{{ t('anscard.evidenceHead', { n: sources.length }) }}</div>
       <div class="srclist">
         <button v-for="(s, i) in sources" :key="i" class="src" :disabled="!openable"
-                :title="openable ? '打开来源文档并定位到该片段' : ''" @click="openEvidence(s)">
+                :title="openable ? t('anscard.openSourceTitle') : ''" @click="openEvidence(s)">
           <span class="num">{{ i + 1 }}</span>
           <span class="grow">
-            <b>{{ s.title || '来源文档' }}</b>
+            <b>{{ s.title || t('anscard.sourceDoc') }}</b>
             <span v-if="s.content" class="snip">{{ (s.content || '').slice(0, 96) }}</span>
           </span>
-          <span v-if="openable" class="open">打开 →</span>
+          <span v-if="openable" class="open">{{ t('anscard.open') }}</span>
         </button>
       </div>
     </template>
@@ -89,7 +91,7 @@ function onCorrected() { fixOpen.value = false; emit('corrected') }
     <!-- 支持知识：几条事实，自带追查与就地纠正 -->
     <template v-if="knowledgeCards.length">
       <div class="divider"></div>
-      <div class="evhead">支持知识 · {{ knowledgeCards.length }} 条</div>
+      <div class="evhead">{{ t('anscard.knowledgeHead', { n: knowledgeCards.length }) }}</div>
       <div class="ksupport">
         <KnowledgeCard v-for="k in knowledgeCards" :key="k.id" :claim="k" compact
                        @changed="emit('supporting-changed')" />
@@ -98,8 +100,8 @@ function onCorrected() { fixOpen.value = false; emit('corrected') }
 
     <!-- 纠正入口：答案旁边的轻入口，不跳页，沿用 CorrectionFlow -->
     <div class="correct">
-      <span class="faint">这条回答有问题？</span>
-      <button class="btn sm ghost" @click="fixOpen = !fixOpen">{{ fixOpen ? '收起' : '纠正' }}</button>
+      <span class="faint">{{ t('anscard.wrongPrompt') }}</span>
+      <button class="btn sm ghost" @click="fixOpen = !fixOpen">{{ fixOpen ? t('anscard.collapse') : t('anscard.correct') }}</button>
     </div>
     <CorrectionFlow v-if="fixOpen" compact :existing="correctionExisting" :seed="correctionSeed"
                     style="margin-top:10px" @applied="onCorrected" />

@@ -14,10 +14,12 @@
  * 不挑——候选摆出来，由人点一下。少了这一层，扫描出来的疑问就永远停在后台没人看见。
  */
 import { computed, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { api, del, post } from '../api/client'
 import { useAppStore } from '../stores/app'
 
+const { t } = useI18n()
 const emit = defineEmits<{ (e: 'changed'): void }>()
 const router = useRouter()
 const store = useAppStore()
@@ -36,7 +38,7 @@ const decisions = ref<any[]>([])
     world, and the reason it can be taken back at any time. */
 const dismissed = ref<any[]>([])
 /** The pair just ruled out, for the confirmation the user should see. */
-const saved = ref('')
+const saved = ref<{ keep: string; drop: string } | ''>('')
 
 const duplicates = computed(() => scan.value?.duplicate_entities || [])
 const unlinked = computed(() => scan.value?.unlinked_claims || [])
@@ -104,7 +106,7 @@ async function applyLinks() {
   busy.value = true
   try {
     const body = await post<any>('/api/integrity/object-links', { min_confidence: 'high' })
-    store.toast(body.applied ? `已接入 ${body.applied} 条知识` : '没有可自动接入的条目')
+    store.toast(body.applied ? t('integrity.applied', { n: body.applied }) : t('integrity.appliedNone'))
     await load()
     emit('changed')
   } catch (e: any) { store.toast(e.message) } finally { busy.value = false }
@@ -120,7 +122,7 @@ async function confirmLink(claimId: string, entityId: string) {
   try {
     const body = await post<any>('/api/integrity/object-links/confirm',
       { claim_id: claimId, entity_id: entityId })
-    store.toast(body.linked ? `已接入「${body.entity_name}」` : '这条已经接入过，未重复写入')
+    store.toast(body.linked ? t('integrity.linked', { name: body.entity_name }) : t('integrity.linkedDup'))
     await load()
     emit('changed')
   } catch (e: any) { store.toast(e.message) } finally { busy.value = false }
@@ -136,7 +138,7 @@ async function dismiss(proposal: any) {
   try {
     const recorded = await post<any>('/api/integrity/suppressions',
       { claim_id: proposal.claim_id, object_text: proposal.object_text })
-    store.toast('已忽略这条建议', { label: '撤销', run: () => undoDismissal(recorded.id) })
+    store.toast(t('integrity.dismissedToast'), { label: t('common.undo'), run: () => undoDismissal(recorded.id) })
     await Promise.all([load(), loadDecisions()])
   } catch (e: any) { store.toast(e.message) } finally { busy.value = false }
 }
@@ -147,7 +149,7 @@ async function undoDismissal(id: string) {
   try {
     await del('/api/integrity/suppressions/' + id)
     await Promise.all([load(), loadDecisions()])
-    store.toast('已恢复提示')
+    store.toast(t('integrity.restoredToast'))
   } catch (e: any) { store.toast(e.message) } finally { busy.value = false }
 }
 
@@ -161,7 +163,7 @@ async function markNotSame() {
   try {
     await post('/api/integrity/curation',
       { entity_id_a: preview.value.keep.id, entity_id_b: preview.value.drop.id })
-    saved.value = `${preview.value.keep.name} 与 ${preview.value.drop.name}`
+    saved.value = { keep: preview.value.keep.name, drop: preview.value.drop.name }
     preview.value = null
     impact.value = null
     await Promise.all([load(), loadDecisions()])
@@ -190,146 +192,144 @@ function openConflicts() { router.push('/review') }
   <div v-if="visible || result" class="panel pad ipanel">
     <div class="row">
       <span class="warn">⚠</span>
-      <b>知识体检</b>
-      <span class="faint" style="font-size:9.5px">发现的问题由你确认，系统不自动改知识</span>
+      <b>{{ t('integrity.title') }}</b>
+      <span class="faint" style="font-size:9.5px">{{ t('integrity.subtitle') }}</span>
       <div class="grow"></div>
-      <button class="btn sm ghost" :disabled="busy" @click="load">重新检查</button>
+      <button class="btn sm ghost" :disabled="busy" @click="load">{{ t('integrity.recheck') }}</button>
     </div>
 
     <!-- 1. 发现 -->
     <div v-if="duplicates.length || exactLinks.length || suggestions.length" class="ipbody">
       <div v-for="p in duplicates" :key="p.entity_a.id + p.entity_b.id" class="iprow">
-        <span class="tag amber">可能重复的主体</span>
-        <b>{{ p.entity_a.name }}</b><span class="faint">· {{ p.entity_a.claims }} 条知识</span>
-        <span class="faint">与</span>
-        <b>{{ p.entity_b.name }}</b><span class="faint">· {{ p.entity_b.claims }} 条知识</span>
+        <span class="tag amber">{{ t('integrity.tagDupSubject') }}</span>
+        <b>{{ p.entity_a.name }}</b><span class="faint">· {{ t('integrity.claimsCount', { n: p.entity_a.claims }) }}</span>
+        <span class="faint">{{ t('integrity.andWord') }}</span>
+        <b>{{ p.entity_b.name }}</b><span class="faint">· {{ t('integrity.claimsCount', { n: p.entity_b.claims }) }}</span>
         <div class="grow"></div>
-        <button class="btn sm" :disabled="busy" @click="openImpact(p)">查看影响</button>
+        <button class="btn sm" :disabled="busy" @click="openImpact(p)">{{ t('integrity.viewImpact') }}</button>
       </div>
 
       <div v-for="p in exactLinks" :key="p.claim_id" class="iprow">
-        <span class="tag blue">字面量未接入主体</span>
+        <span class="tag blue">{{ t('integrity.tagLiteralUnlinked') }}</span>
         <span>{{ p.subject_label }} {{ p.predicate_label || '' }}</span>
         <b>「{{ p.object_text }}」</b>
         <span class="faint">→ 已有主体</span><b>{{ p.target.name }}</b>
       </div>
       <div v-if="exactLinks.length" class="ipactions">
         <button class="btn sm" :disabled="busy" @click="applyLinks">
-          接入这 {{ exactLinks.length }} 条（只连接，不新建主体）
+          {{ t('integrity.applyLinks', { n: exactLinks.length }) }}
         </button>
       </div>
 
       <!-- 需要人来选的那些：系统给出候选，但不挑。 -->
       <div v-for="p in suggestions" :key="'s' + p.claim_id" class="iprow">
-        <span class="tag blue">字面量未接入主体</span>
+        <span class="tag blue">{{ t('integrity.tagLiteralUnlinked') }}</span>
         <span>{{ p.subject_label }} {{ p.predicate_label || '' }}</span>
         <b>「{{ p.object_text }}」</b>
-        <span class="faint">{{ p.matched_by === 'ambiguous' ? '指向其中哪一个？' : '是不是指' }}</span>
+        <span class="faint">{{ p.matched_by === 'ambiguous' ? t('integrity.ambiguousHint') : t('integrity.likelyHint') }}</span>
         <button v-for="c in p.candidates" :key="c.id" class="btn sm" :disabled="busy"
                 :title="p.matched_by === 'ambiguous'
-                  ? '多个主体都声明了这个名称，需要你选一个'
-                  : `名称相近 ${Math.round((c.similarity || 0) * 100)}%`"
+                  ? t('integrity.ambiguousTitle')
+                  : t('integrity.similarTitle', { n: Math.round((c.similarity || 0) * 100) })"
                 @click="confirmLink(p.claim_id, c.id)">{{ c.name }}</button>
-        <button class="btn sm ghost" :disabled="busy" title="不再提示这一条（随时可恢复）"
-                @click="dismiss(p)">忽略</button>
+        <button class="btn sm ghost" :disabled="busy" :title="t('integrity.dismiss')"
+                @click="dismiss(p)">{{ t('integrity.dismiss') }}</button>
       </div>
       <p v-if="suggestions.length" class="faint" style="font-size:9.5px;margin:8px 4px 0">
-        这几条系统不替你做决定——要么多个主体声明了同一个名称，要么只是名称相近。确认后才会接入；
-        接入的是已有的主体，不新建、也不合并。
+        {{ t('integrity.needHumanHint') }}
       </p>
     </div>
 
     <!-- 2. 解释影响 —— 合并之前先把后果算出来 -->
     <div v-if="impact" class="ipdialog">
       <div class="ipdhead">
-        <b>可能是同一个主体</b>
+        <b>{{ t('integrity.impactTitle') }}</b>
         <div class="grow"></div>
-        <button class="btn sm ghost" @click="cancel">取消</button>
+        <button class="btn sm ghost" @click="cancel">{{ t('integrity.cancel') }}</button>
       </div>
-      <div class="ipdnames"><b>{{ preview?.keep.name }}</b> 与 <b>{{ preview?.drop.name }}</b></div>
+      <div class="ipdnames"><b>{{ preview?.keep.name }}</b> {{ t('integrity.andWord') }} <b>{{ preview?.drop.name }}</b></div>
       <p class="faint" style="font-size:10px;margin:6px 0 0">
-        合并后，{{ preview?.drop.name }} 的 {{ impact.claims_moved }} 条知识会归到
-        {{ preview?.keep.name }} 名下；两边原有的名称都会保留为别名，以后提到哪个都能找到。
+        {{ t('integrity.impactText', { drop: preview?.drop.name, keep: preview?.keep.name, n: impact.claims_moved }) }}
       </p>
       <div class="ipstats">
-        <span>涉及知识 <b>{{ impact.affected_claims }}</b></span>
-        <span>移动 <b>{{ impact.claims_moved }}</b></span>
-        <span>证据 <b>{{ impact.affected_evidence }}</b></span>
-        <span>关系 <b>{{ impact.affected_relations }}</b></span>
+        <span>{{ t('integrity.statClaims') }} <b>{{ impact.affected_claims }}</b></span>
+        <span>{{ t('integrity.statMoved') }} <b>{{ impact.claims_moved }}</b></span>
+        <span>{{ t('integrity.statEvidence') }} <b>{{ impact.affected_evidence }}</b></span>
+        <span>{{ t('integrity.statRelations') }} <b>{{ impact.affected_relations }}</b></span>
       </div>
       <!-- 这句是整个过程里最该被看到的一句：合并不解决事实冲突。
            提前说出来，用户才知道自己在做什么，而不是合并完之后才发现。 -->
       <div v-if="impact.new_conflicts.length" class="ipwarn">
-        <b>合并不会解决事实冲突——它可能产生 {{ impact.new_conflicts.length }} 个新冲突：</b>
+        <b>{{ t('integrity.mergeWarnHead', { n: impact.new_conflicts.length }) }}</b>
         <div v-for="(c, i) in impact.new_conflicts" :key="i" class="ipconflict">
           {{ c.subject_name }} {{ c.predicate_label || c.predicate }}：
           {{ c.objects.join(' 与 ') }}
-          <span v-if="c.functional" class="tag amber">单值关系</span>
+          <span v-if="c.functional" class="tag amber">{{ t('integrity.functionalTag') }}</span>
         </div>
         <p class="faint" style="font-size:9.5px;margin:5px 0 0">
-          合并后它们会出现在冲突中心，由你决定哪条成立。旧知识不会被删掉。
+          {{ t('integrity.mergeWarnFoot') }}
         </p>
       </div>
-      <div v-else class="ipok">这一步不会产生新的冲突。</div>
+      <div v-else class="ipok">{{ t('integrity.mergeOk') }}</div>
       <div v-if="impact.type_mismatch" class="ipwarn">
-        两个主体声明的类型不同——如果这确实是同一个对象，合并后类型会取较全的一个。
+        {{ t('integrity.typeMismatch') }}
       </div>
       <div class="ipactions">
         <button class="btn primary" :disabled="busy" @click="confirmMerge">
-          合并到「{{ preview?.keep.name }}」
+          {{ t('integrity.mergeBtn', { name: preview?.keep.name }) }}
         </button>
-        <button class="btn sm" :disabled="busy" @click="markNotSame">不是同一个</button>
-        <button class="btn sm ghost" :disabled="busy" @click="swap">保留「{{ preview?.drop.name }}」</button>
+        <button class="btn sm" :disabled="busy" @click="markNotSame">{{ t('integrity.notSameBtn') }}</button>
+        <button class="btn sm ghost" :disabled="busy" @click="swap">{{ t('integrity.keepOtherBtn', { name: preview?.drop.name }) }}</button>
       </div>
     </div>
 
     <!-- 已记住：用户做过一次判断以后，系统不该再问第二遍 -->
     <div v-if="saved" class="ipok ipdialog">
-      ✓ 已记住：{{ saved }} 不是同一个。以后不会再提示这两个主体。
+      ✓ {{ t('integrity.saved', saved) }}
     </div>
     <details v-if="decisions.length" class="ipmem">
-      <summary>已记住 {{ decisions.length }} 条判断</summary>
+      <summary>{{ t('integrity.remembered', { n: decisions.length }) }}</summary>
       <div v-for="d in decisions" :key="d.id" class="iprow">
-        <span class="tag">不是同一个</span>
+        <span class="tag">{{ t('integrity.tagNotSame') }}</span>
         <b>{{ d.entity_a_name }}</b><span class="faint">≠</span><b>{{ d.entity_b_name }}</b>
         <span v-if="d.reason" class="faint">· {{ d.reason }}</span>
         <div class="grow"></div>
-        <button class="btn sm ghost" :disabled="busy" @click="undoDecision(d.id)">撤销</button>
+        <button class="btn sm ghost" :disabled="busy" @click="undoDecision(d.id)">{{ t('common.undo') }}</button>
       </div>
     </details>
 
     <!-- 已忽略的建议：和「已记住的判断」分开列，因为两者不是一回事——
          一个是关于知识库的判断，一个是关于这条提醒的偏好。 -->
     <details v-if="dismissed.length" class="ipmem">
-      <summary>已忽略 {{ dismissed.length }} 条建议</summary>
+      <summary>{{ t('integrity.dismissedSummary', { n: dismissed.length }) }}</summary>
       <div v-for="d in dismissed" :key="d.id" class="iprow">
-        <span class="tag">已忽略</span>
+        <span class="tag">{{ t('integrity.tagDismissed') }}</span>
         <b>{{ d.subject_name }}</b>
-        <span class="faint">记着</span><b>「{{ d.object_text }}」</b>
+        <span class="faint">{{ t('integrity.keepsText', { text: d.object_text }) }}</span>
         <div class="grow"></div>
-        <button class="btn sm ghost" :disabled="busy" @click="undoDismissal(d.id)">恢复提示</button>
+        <button class="btn sm ghost" :disabled="busy" @click="undoDismissal(d.id)">{{ t('integrity.dismissUndo') }}</button>
       </div>
       <p class="faint" style="font-size:9.5px;margin:6px 4px 0">
-        忽略的是「这条别再提醒我」，不是对知识的判断——所以它随时可以恢复，也没有改变任何一条知识。
+        {{ t('integrity.dismissedHint') }}
       </p>
     </details>
 
     <!-- 3. 结果 —— 包括它引起的后果 -->
     <div v-if="result" class="ipdialog">
-      <div class="ipdhead"><b>✓ 已合并「{{ result.merged.drop_name }}」到「{{ result.merged.keep_name }}」</b></div>
+      <div class="ipdhead"><b>✓ {{ t('integrity.mergedHead', { drop: result.merged.drop_name, keep: result.merged.keep_name }) }}</b></div>
       <p class="faint" style="font-size:10px;margin:6px 0 0">
-        {{ result.merged.moved_claims }} 条知识已归到 {{ result.merged.keep_name }} 名下。
+        {{ t('integrity.mergedText', { n: result.merged.moved_claims, keep: result.merged.keep_name }) }}
       </p>
       <div v-if="result.recheck.conflicts.length" class="ipwarn">
-        <b>因此产生了 {{ result.recheck.conflicts.length }} 个知识冲突：</b>
+        <b>{{ t('integrity.conflictHead', { n: result.recheck.conflicts.length }) }}</b>
         <div v-for="(c, i) in result.recheck.conflicts" :key="i" class="ipconflict">
           {{ c.subject_name }} {{ c.predicate_label || c.predicate }}：{{ c.objects.join(' 与 ') }}
         </div>
         <div class="ipactions">
-          <button class="btn primary" @click="openConflicts">立即处理冲突 →</button>
+          <button class="btn primary" @click="openConflicts">{{ t('integrity.conflictGoto') }}</button>
         </div>
       </div>
-      <div v-else class="ipok">没有产生新的冲突。</div>
+      <div v-else class="ipok">{{ t('integrity.mergedOk') }}</div>
     </div>
   </div>
 </template>

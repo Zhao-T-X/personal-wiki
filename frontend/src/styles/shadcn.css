@@ -1,0 +1,106 @@
+/* Tailwind v4 入口 + shadcn-vue 变量层。
+ *
+ * 设计语言不变：仍是 v3 暖灰米白底 + 白卡 + 赤陶色强调（#9c5a43）。
+ * 这里把 tokens.css 的语义映射进 shadcn 约定的变量名，shadcn 生成到
+ * components/ui/ 下的组件就会自动继承这套暖色视觉。
+ * 业务侧旧类（.btn/.card/.tag…）继续由 tokens.css 提供，两套并存，逐步迁移。
+ */
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* shadcn 语义变量 —— 取值来自 tokens.css 的 v3 色板 */
+  --background: #f5f3ef;
+  --foreground: #282724;
+  --card: #ffffff;
+  --card-foreground: #282724;
+  --popover: #ffffff;
+  --popover-foreground: #282724;
+  --primary: #282724;            /* v3 主按钮：近黑 */
+  --primary-foreground: #ffffff;
+  --secondary: #faf9f6;          /* surface2 */
+  --secondary-foreground: #282724;
+  --muted: #f0ece5;
+  --muted-foreground: #6f6a63;   /* sub */
+  --accent: #f4e9e3;             /* accent-soft：悬停/选中的暖色浅底 */
+  --accent-foreground: #9c5a43;
+  --destructive: #c0564b;
+  --destructive-foreground: #ffffff;
+  --border: #e8e5df;             /* line */
+  --input: #e8e5df;
+  --ring: #9c5a43;
+  --radius: 0.875rem;            /* 14px = --radius in tokens.css */
+}
+
+.dark {
+  /* 暗色版暖色系（预留，设置页开关接上即可用） */
+  --background: #201e1b;
+  --foreground: #ece9e3;
+  --card: #282623;
+  --card-foreground: #ece9e3;
+  --popover: #282623;
+  --popover-foreground: #ece9e3;
+  --primary: #ece9e3;
+  --primary-foreground: #201e1b;
+  --secondary: #322f2b;
+  --secondary-foreground: #ece9e3;
+  --muted: #322f2b;
+  --muted-foreground: #a8a29a;
+  --accent: #3a2e28;
+  --accent-foreground: #d8a893;
+  --destructive: #d98080;
+  --destructive-foreground: #201e1b;
+  --border: #383531;
+  --input: #383531;
+  --ring: #c98a72;
+}
+
+@theme inline {
+  /* shadcn 组件用到的一组 → Tailwind 语义色 */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* 品牌色直接暴露为工具类：bg-brand / text-brand / border-brand */
+  --color-brand: #9c5a43;
+  --color-brand-soft: #f4e9e3;
+  --color-mint: #61766a;
+  --color-amber: #8d6d42;
+  --color-rose: #d9809c;
+
+  /* 圆角阶梯沿用现有 --radius */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans: Inter, 'SF Pro Display', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}

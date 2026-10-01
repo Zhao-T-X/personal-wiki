@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import MarkdownIt from 'markdown-it'
 
 const props = defineProps<{ content: string }>()
+const { t } = useI18n()
 
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 
@@ -22,7 +24,7 @@ md.renderer.rules.text = (tokens, idx, options, env, self) => {
   if (!html.includes('[doc:')) return html
   return html.replace(CITE, (_m, doc: string, chunk: string) =>
     `<a class="cite" href="#/knowledge?doc=${encodeURIComponent(doc)}&chunk=${encodeURIComponent(chunk)}"`
-    + ` title="打开原文并定位到该片段">来源</a>`)
+    + ` title="${t('markdown.citeTitle')}">${t('markdown.source')}</a>`)
 }
 
 const html = computed(() => md.render(props.content || ''))

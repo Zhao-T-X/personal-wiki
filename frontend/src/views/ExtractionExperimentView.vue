@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   getExperimentCorpus,
   runCorpusExperiment,
@@ -10,6 +11,8 @@ import {
   type ExperimentSnapshot,
   type ExperimentCompare,
 } from '../api/experiment'
+
+const { t } = useI18n()
 
 const corpus = ref<ExperimentCorpusDoc[]>([])
 const corpusVersion = ref<string>('')
@@ -62,13 +65,13 @@ async function runLive() {
   try {
     await runDocumentExperiment(
       liveContent.value,
-      liveTitle.value || '实验文档',
+      liveTitle.value || t('extraction.docTitlePlaceholder'),
       'live',
     )
-    liveMsg.value = '已提交真实抽取（需 LLM 已配置）。可在下方快照中选择两次运行做对比。'
+    liveMsg.value = t('extraction.submitted')
     await loadSnapshots()
   } catch (e: any) {
-    liveMsg.value = '真实抽取失败：' + String(e?.message || e)
+    liveMsg.value = t('extraction.liveFail', { msg: String(e?.message || e) })
   }
 }
 
@@ -85,30 +88,29 @@ onMounted(() => {
 
 <template>
   <div class="exp">
-    <h2>抽取对比实验 <span v-if="corpusVersion" class="ver">Golden Corpus {{ corpusVersion }}</span></h2>
+    <h2>{{ t('extraction.title') }} <span v-if="corpusVersion" class="ver">Golden Corpus {{ corpusVersion }}</span></h2>
     <p class="hint">
-      用<strong>真实导入按钮链路</strong>（建文档 → 分块 → 抽取 → 持久化）对同一批文档在「门控关闭(Before)」与「门控开启(After)」下各跑一次，
-      比较真实抽取结果。唯一被替换的是 LLM 推断本身（用人工标注的 golden envelope 代替），其余规则均为线上代码。
+      {{ t('extraction.hint') }}
     </p>
 
     <section class="panel">
-      <h3>Golden Corpus（真实问题文档）</h3>
+      <h3>{{ t('extraction.goldenCorpusTitle') }}</h3>
       <div v-for="d in corpus" :key="d.id" class="doc">
         <div class="docname">{{ d.name }} <span class="src">{{ d.source }}</span></div>
-        <div class="row"><span class="lbl ok">应抽：</span><span class="tags">{{ d.expected_entities.join('、') }}</span></div>
-        <div class="row"><span class="lbl bad">不应抽：</span><span class="tags bad">{{ d.expected_non_entities.join('、') || '—' }}</span></div>
+        <div class="row"><span class="lbl ok">{{ t('extraction.shouldExtract') }}</span><span class="tags">{{ d.expected_entities.join('、') }}</span></div>
+        <div class="row"><span class="lbl bad">{{ t('extraction.shouldNotExtract') }}</span><span class="tags bad">{{ d.expected_non_entities.join('、') || '—' }}</span></div>
       </div>
       <button class="btn" :disabled="running" @click="runCorpus">
-        {{ running ? '运行中…' : '运行 Golden Corpus Before/After' }}
+        {{ running ? t('extraction.running') : t('extraction.runCorpus') }}
       </button>
     </section>
 
     <section v-if="error" class="err">{{ error }}</section>
 
     <section v-if="report" class="panel">
-      <h3>Before / After 汇总</h3>
+      <h3>{{ t('extraction.beforeAfterSummary') }}</h3>
       <table class="metrics">
-        <thead><tr><th>指标</th><th>Before</th><th>After</th></tr></thead>
+        <thead><tr><th>{{ t('extraction.metric') }}</th><th>{{ t('extraction.before') }}</th><th>{{ t('extraction.after') }}</th></tr></thead>
         <tbody>
           <tr v-for="(v, k) in report.aggregate" :key="k">
             <td>{{ k }}</td>
@@ -118,64 +120,64 @@ onMounted(() => {
         </tbody>
       </table>
 
-      <h3>逐文档</h3>
+      <h3>{{ t('extraction.perDoc') }}</h3>
       <div v-for="d in report.documents" :key="d.id" class="doc">
         <div class="docname">{{ d.name }}</div>
         <div class="row">
-          <span class="lbl">Before</span> 抽 {{ d.before.kept.length }} 个 · Precision {{ d.before.precision }} · Recall {{ d.before.recall }} · 丢弃 {{ d.before.dropped_entities }}
+          <span class="lbl">{{ t('extraction.before') }}</span>{{ t('extraction.beforeRow', { n: d.before.kept.length, p: d.before.precision, r: d.before.recall, d: d.before.dropped_entities }) }}
         </div>
         <div class="row">
-          <span class="lbl">After</span> 抽 {{ d.after.kept.length }} 个 · Precision {{ d.after.precision }} · Recall {{ d.after.recall }} · 丢弃 {{ d.after.dropped_entities }}
+          <span class="lbl">{{ t('extraction.after') }}</span>{{ t('extraction.beforeRow', { n: d.after.kept.length, p: d.after.precision, r: d.after.recall, d: d.after.dropped_entities }) }}
         </div>
         <div v-if="d.after.leaked_non_entities && d.after.leaked_non_entities.length" class="row bad">
-          仍泄漏负样本：{{ d.after.leaked_non_entities.join('、') }}
+          {{ t('extraction.leaked', { items: d.after.leaked_non_entities.join('、') }) }}
         </div>
-        <div v-else class="row ok">负样本已正确排除/隔离</div>
+        <div v-else class="row ok">{{ t('extraction.excluded') }}</div>
       </div>
     </section>
 
     <section class="panel">
-      <h3>真实按钮抽取（需 LLM 已配置）</h3>
-      <input v-model="liveTitle" class="inp" placeholder="文档标题" />
-      <textarea v-model="liveContent" class="ta" placeholder="粘贴一份真实文档内容…"></textarea>
-      <button class="btn" @click="runLive">用真实导入链路抽取</button>
+      <h3>{{ t('extraction.liveTitle') }}</h3>
+      <input v-model="liveTitle" class="inp" :placeholder="t('extraction.docTitlePlaceholder')" />
+      <textarea v-model="liveContent" class="ta" :placeholder="t('extraction.docContentPlaceholder')"></textarea>
+      <button class="btn" @click="runLive">{{ t('extraction.runLive') }}</button>
       <div v-if="liveMsg" class="hint">{{ liveMsg }}</div>
     </section>
 
     <section class="panel">
-      <h3>快照对比</h3>
+      <h3>{{ t('extraction.snapshotCompare') }}</h3>
       <div v-if="snapshots.length" class="snaps">
-        <label>Before
+        <label>{{ t('extraction.beforeLabel') }}
           <select v-model="beforeId">
             <option v-for="s in snapshots" :key="s.run_id" :value="s.run_id">
-              {{ s.run_id.slice(0, 8) }} · {{ s.view.experiment_tag || '—' }} · 抽 {{ s.view.kept.length }}
+              {{ s.run_id.slice(0, 8) }} · {{ s.view.experiment_tag || '—' }} · {{ t('extraction.beforeRow', { n: s.view.kept.length, p: '—', r: '—', d: '—' }) }}
             </option>
           </select>
         </label>
-        <label>After
+        <label>{{ t('extraction.afterLabel') }}
           <select v-model="afterId">
             <option v-for="s in snapshots" :key="s.run_id" :value="s.run_id">
-              {{ s.run_id.slice(0, 8) }} · {{ s.view.experiment_tag || '—' }} · 抽 {{ s.view.kept.length }}
+              {{ s.run_id.slice(0, 8) }} · {{ s.view.experiment_tag || '—' }} · {{ t('extraction.beforeRow', { n: s.view.kept.length, p: '—', r: '—', d: '—' }) }}
             </option>
           </select>
         </label>
-        <button class="btn" @click="doCompare">对比</button>
+        <button class="btn" @click="doCompare">{{ t('extraction.compare') }}</button>
       </div>
-      <div v-else class="hint">暂无快照。运行上面的实验后会出现在这里。</div>
+      <div v-else class="hint">{{ t('extraction.noSnapshots') }}</div>
 
       <div v-if="compare" class="compare">
         <div class="col">
-          <h4>Before 抽取 {{ compare.before.kept.length }} 个</h4>
+          <h4>{{ t('extraction.beforeCount', { n: compare.before.kept.length }) }}</h4>
           <span v-for="n in compare.before.kept" :key="n" class="tag">{{ n }}</span>
         </div>
         <div class="col">
-          <h4>After 抽取 {{ compare.after.kept.length }} 个</h4>
+          <h4>{{ t('extraction.afterCount', { n: compare.after.kept.length }) }}</h4>
           <span v-for="n in compare.after.kept" :key="n" class="tag">{{ n }}</span>
         </div>
         <div class="col">
-          <h4>移除（噪声下降）</h4>
+          <h4>{{ t('extraction.removed') }}</h4>
           <span v-for="n in compare.removed" :key="n" class="tag bad">{{ n }}</span>
-          <span v-if="!compare.removed.length" class="hint">无</span>
+          <span v-if="!compare.removed.length" class="hint">{{ t('extraction.none') }}</span>
         </div>
       </div>
     </section>

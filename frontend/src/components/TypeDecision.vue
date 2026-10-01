@@ -1,5 +1,9 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
 defineProps<{ decisions: { type: string; reason: string; ok: boolean }[] }>()
+
+const { t } = useI18n()
 </script>
 
 <template>
@@ -8,6 +12,6 @@ defineProps<{ decisions: { type: string; reason: string; ok: boolean }[] }>()
       <span class="tag" :class="d.ok ? 'green' : 'red'" style="flex:none">{{ d.ok ? '✓' : '✕' }}</span>
       <div><b>{{ d.type }}</b><p>{{ d.reason }}</p></div>
     </div>
-    <div v-if="!decisions.length" class="empty">暂无类型判定记录——这个对象来自资料整理，资料里没有明确说明它是什么类型</div>
+    <div v-if="!decisions.length" class="empty">{{ t('typeDecision.empty') }}</div>
   </div>
 </template>

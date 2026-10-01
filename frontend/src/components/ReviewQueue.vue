@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { api, patchJson } from '../api/client'
 import KpiStrip from './KpiStrip.vue'
 import EmptyState from './EmptyState.vue'
 import LoadBoundary from './LoadBoundary.vue'
 import { useAppStore } from '../stores/app'
-import { statusStyle } from '../utils/status'
+import { statusLabel } from '../utils/status'
 import { useAsyncState } from '../utils/useAsyncState'
 
+const { t } = useI18n()
 const router = useRouter()
 const store = useAppStore()
 
@@ -22,12 +24,6 @@ const expanded = ref<Set<string>>(new Set())
 
 /** Above this, a batch accept is a safe bulk operation; below it, ask the human. */
 const HIGH_CONFIDENCE = 0.9
-
-const KIND_META: Record<Kind, { label: string; idKey: string }> = {
-  entities: { label: '实体', idKey: 'entity' },
-  claims: { label: 'Claims', idKey: 'claim' },
-  relations: { label: '关系', idKey: 'relation' },
-}
 
 /* 不传 limit：窗口由后端默认值决定，Review Inbox 数的是同一个窗口——
    角标和它打开的这一页必须描述同一批东西。
@@ -49,6 +45,8 @@ async function load() {
   await review.reload()
 }
 onMounted(load)
+
+const kindLabel = (k: Kind) => t('rq.kind.' + k)
 
 const rows = computed(() => {
   const list = data.value[kind.value] || []
@@ -87,8 +85,8 @@ const isHigh = (r: any) => {
 const highConfidence = computed(() => rows.value.filter(isHigh))
 
 const kindHint = computed(() => {
-  if (kind.value === 'entities') return '实体候选没有置信度，需要逐个判断。'
-  return `置信度 ≥ ${Math.round(HIGH_CONFIDENCE * 100)}% 的建议可以批量接受，其余请逐条确认。`
+  if (kind.value === 'entities') return t('rq.kindHintEntities')
+  return t('rq.kindHintOther', { n: Math.round(HIGH_CONFIDENCE * 100) })
 })
 
 /* ---------- entity candidate detail（为什么创建 / 是否重复） ----------
@@ -118,7 +116,7 @@ async function loadEntityDetail(id: string, force = false) {
   } catch (e: any) {
     detailCache.value = {
       ...detailCache.value,
-      [id]: { loading: false, error: '暂时读不到这条候选的来源与相似实体。', evidence: null, duplicates: [] },
+      [id]: { loading: false, error: t('rq.entityError'), evidence: null, duplicates: [] },
     }
     void e
     return
@@ -160,7 +158,7 @@ function toggle(id: string) {
 function switchKind(k: Kind) { kind.value = k; expanded.value = new Set() }
 
 function openSource(r: any) {
-  if (!r.source_document_id) { store.toast('这条候选没有关联的来源文档'); return }
+  if (!r.source_document_id) { store.toast(t('rq.noSource')); return }
   router.push({
     path: '/knowledge',
     query: { doc: r.source_document_id, ...(r.source_chunk_id ? { chunk: r.source_chunk_id } : {}) },
@@ -174,35 +172,33 @@ function openSource(r: any) {
 async function applyStatus(items: any[], status: Decision) {
   if (!items.length) return
   const k = kind.value
-  const meta = KIND_META[k]
   busy.value = true
   const done: any[] = []
   try {
     for (const r of items) {
-      try { await patchJson(`/api/knowledge/${meta.idKey}/${r.id}/status`, { status }); done.push(r) }
+      try { await patchJson(`/api/knowledge/${k}/${r.id}/status`, { status }); done.push(r) }
       catch { /* keep going — report partial success below */ }
     }
   } finally { busy.value = false }
 
-  if (!done.length) { store.toast('操作失败，候选保持不变'); return }
+  if (!done.length) { store.toast(t('rq.failed')); return }
 
   const ids = new Set(done.map(r => r.id))
   review.set({ ...data.value, [k]: (data.value[k] as any[]).filter(r => !ids.has(r.id)) })
   expanded.value = new Set()
 
-  const verb = status === 'verified' ? '通过' : '拒绝'
-  store.toast(`已${verb} ${done.length} 条候选`, { label: '撤销', run: () => undo(done, k, verb) })
+  const verb = status === 'verified' ? t('rq.accept') : t('rq.reject')
+  store.toast(t('rq.decided', { verb, n: done.length }), { label: t('common.undo'), run: () => undo(done, k, verb) })
 }
 
 async function undo(items: any[], k: Kind, verb: string) {
-  const meta = KIND_META[k]
   let ok = 0
   for (const r of items) {
-    try { await patchJson(`/api/knowledge/${meta.idKey}/${r.id}/status`, { status: 'candidate' }); ok++ }
+    try { await patchJson(`/api/knowledge/${k}/${r.id}/status`, { status: 'candidate' }); ok++ }
     catch { /* keep going */ }
   }
   await load()
-  store.toast(ok === items.length ? `已撤销${verb}，候选已回到待审` : `已撤销 ${ok}/${items.length} 条`)
+  store.toast(ok === items.length ? t('rq.reverted', { verb }) : t('rq.revertedPart', { ok, total: items.length }))
 }
 
 const decide = (r: any, status: Decision) => applyStatus([r], status)
@@ -211,7 +207,7 @@ const acceptHighConfidence = () => applyStatus(highConfidence.value, 'verified')
 function rejectAll() {
   const list = [...rows.value]
   if (!list.length) return
-  if (!confirm(`将当前 ${list.length} 条候选全部标记为「拒绝」？拒绝后可以撤销。`)) return
+  if (!confirm(t('rq.rejectAllConfirm', { n: list.length }))) return
   applyStatus(list, 'rejected')
 }
 </script>
@@ -221,39 +217,39 @@ function rejectAll() {
     <!-- 读不到的时候，连"还有 0 件待审"都不许说。
          统计、分类计数、批量操作、列表全部在成功分支里——它们在读不到时全是谎话。 -->
     <LoadBoundary :state="review.state.value"
-                  loading-text="正在检查需要你确认的内容…"
-                  error-title="暂时无法读取待确认内容"
-                  error-text="现在读不到审核队列——这不代表没有等你确认的内容。"
+                  :loading-text="t('rq.loading')"
+                  :error-title="t('rq.errorTitle')"
+                  :error-text="t('rq.errorText')"
                   :reload="load">
     <KpiStrip :cells="[
-      { label: '待审实体', value: data.entities.length },
-      { label: '待审 Claims', value: data.claims.length },
-      { label: '待审关系', value: data.relations.length },
-      { label: '合计', value: data.entities.length + data.claims.length + data.relations.length },
+      { label: t('rq.kpi.entities'), value: data.entities.length },
+      { label: t('rq.kpi.claims'), value: data.claims.length },
+      { label: t('rq.kpi.relations'), value: data.relations.length },
+      { label: t('rq.kpi.total'), value: data.entities.length + data.claims.length + data.relations.length },
     ]" />
 
     <div class="row" style="margin:16px 0 10px;flex-wrap:wrap;gap:8px">
       <div class="seg">
-        <button v-for="(meta, k) in KIND_META" :key="k" :class="{ active: kind === k }" @click="switchKind(k as Kind)">
-          {{ meta.label }} ({{ (data[k as Kind] || []).length }})
+        <button v-for="k in (['entities', 'claims', 'relations'] as Kind[])" :key="k" :class="{ active: kind === k }" @click="switchKind(k)">
+          {{ kindLabel(k) }} ({{ (data[k] || []).length }})
         </button>
       </div>
       <div class="grow"></div>
-      <input v-model="filter" class="field wide" placeholder="搜索候选…" />
-      <button class="btn" :disabled="busy" @click="load">刷新</button>
+      <input v-model="filter" class="field wide" :placeholder="t('rq.searchPlaceholder')" />
+      <button class="btn" :disabled="busy" @click="load">{{ t('rq.refresh') }}</button>
     </div>
 
     <div v-if="rows.length" class="panel pad bulbar">
-      <span class="muted" style="font-size:9.5px">系统提出建议，由你做最终判断。{{ kindHint }}</span>
+      <span class="muted" style="font-size:9.5px">{{ t('rq.hint', { extra: kindHint }) }}</span>
       <div class="grow"></div>
       <button class="btn primary" :disabled="busy || !highConfidence.length" @click="acceptHighConfidence">
-        接受高置信（{{ highConfidence.length }}）
+        {{ t('rq.acceptHigh', { n: highConfidence.length }) }}
       </button>
-      <button class="btn danger" :disabled="busy" @click="rejectAll">全部拒绝…</button>
+      <button class="btn danger" :disabled="busy" @click="rejectAll">{{ t('rq.rejectAll') }}</button>
     </div>
 
     <div v-if="listCapped" class="notice violet" style="margin:0 0 12px">
-      该类别候选较多，本页仅展示前 200 条。处理完当前批次后刷新，系统会再放出下一批待确认内容。
+      {{ t('rq.capped') }}
     </div>
 
     <div class="panel pad" style="padding:6px">
@@ -273,44 +269,44 @@ function rejectAll() {
             </div>
           </div>
           <div class="row" style="gap:6px;flex:none">
-            <button class="btn sm" @click="toggle(r.id)">{{ isOpen(r.id) ? '收起' : '详情' }}</button>
-            <button class="btn sm" :disabled="busy" @click="decide(r, 'verified')">通过</button>
-            <button class="btn sm danger" :disabled="busy" @click="decide(r, 'rejected')">拒绝</button>
+            <button class="btn sm" @click="toggle(r.id)">{{ isOpen(r.id) ? t('rq.collapse') : t('rq.detail') }}</button>
+            <button class="btn sm" :disabled="busy" @click="decide(r, 'verified')">{{ t('rq.accept') }}</button>
+            <button class="btn sm danger" :disabled="busy" @click="decide(r, 'rejected')">{{ t('rq.reject') }}</button>
           </div>
         </div>
 
         <div v-if="isOpen(r.id)" class="canddetail">
           <!-- 实体候选：先讲清楚「为什么会有它」和「是否已经有一个」 -->
           <template v-if="kind === 'entities'">
-            <div v-if="detailOf(r.id)?.loading" class="faint" style="font-size:9px">正在查找来源与相似实体…</div>
+            <div v-if="detailOf(r.id)?.loading" class="faint" style="font-size:9px">{{ t('rq.entityLoading') }}</div>
             <!-- 详情读不到时说"读不到"，而不是摆出一个空的"为什么会有这条候选" -->
             <div v-else-if="detailOf(r.id)?.error" class="row" style="gap:10px">
               <span class="muted" style="font-size:10px">{{ detailOf(r.id)?.error }}</span>
-              <button class="btn sm" @click="loadEntityDetail(r.id, true)">重新加载</button>
+              <button class="btn sm" @click="loadEntityDetail(r.id, true)">{{ t('rq.entityErrorReload') }}</button>
             </div>
             <template v-else>
               <div v-if="duplicatesOf(r.id).length">
-                <div class="sechead" style="margin-top:0"><h3>可能的重复</h3></div>
+                <div class="sechead" style="margin-top:0"><h3>{{ t('rq.possibleDup') }}</h3></div>
                 <div v-for="d in duplicatesOf(r.id)" :key="d.id" class="item" style="cursor:default">
                   <div class="grow">
                     <b>{{ d.name }}</b>
-                    <p>{{ d.type }} · 相似度 {{ Math.round(d.similarity * 100) }}% · {{ statusStyle(d.status).label }}</p>
+                    <p>{{ d.type }} · 相似度 {{ Math.round(d.similarity * 100) }}% · {{ statusLabel(d.status) }}</p>
                   </div>
-                  <button class="btn sm" @click="router.push('/knowledge/object/' + d.id)">查看</button>
+                  <button class="btn sm" @click="router.push('/knowledge/object/' + d.id)">{{ t('rq.detail') }}</button>
                 </div>
                 <p class="muted" style="font-size:9px;margin:8px 0 0">
-                  相似度 ≥93% 会被自动合并；以下低于该阈值，需要你判断是否为同一个实体。
+                  {{ t('rq.dupHint') }}
                 </p>
               </div>
               <div v-if="evidenceOf(r.id)" :style="duplicatesOf(r.id).length ? 'margin-top:14px' : ''">
-                <div class="sechead" style="margin-top:0"><h3>来自这段原文</h3></div>
+                <div class="sechead" style="margin-top:0"><h3>{{ t('rq.fromQuote') }}</h3></div>
                 <div class="evidence">“{{ evidenceOf(r.id)?.quote }}”</div>
-                <button class="btn sm" style="margin-top:8px" @click="openEntitySource(evidenceOf(r.id))">打开原文并定位 →</button>
+                <button class="btn sm" style="margin-top:8px" @click="openEntitySource(evidenceOf(r.id))">{{ t('rq.openSource') }}</button>
               </div>
               <div v-if="!duplicatesOf(r.id).length && !evidenceOf(r.id)">
-                <div class="sechead" style="margin-top:0"><h3>为什么会有这条候选</h3></div>
+                <div class="sechead" style="margin-top:0"><h3>{{ t('rq.whyCandidate') }}</h3></div>
                 <div class="notice violet">
-                  抽取时从文档里识别出一个 <b>{{ r.type }}</b> 类实体，暂存为候选等待你确认。尚未找到关联的原文引用。
+                  {{ t('rq.whyEntity', { type: r.type }) }}
                 </div>
               </div>
             </template>
@@ -318,23 +314,23 @@ function rejectAll() {
 
           <!-- Claim：来源原文 -->
           <template v-else-if="r.source_quote">
-            <div class="sechead" style="margin-top:0"><h3>来源原文</h3></div>
+            <div class="sechead" style="margin-top:0"><h3>{{ t('rq.sourceQuote') }}</h3></div>
             <div class="evidence">“{{ r.source_quote }}”
               <div v-if="r.source_start_offset != null" class="src">offset [{{ r.source_start_offset }}, {{ r.source_end_offset }})</div>
             </div>
-            <button class="btn sm" style="margin-top:8px" @click="openSource(r)">打开原文并定位 →</button>
+            <button class="btn sm" style="margin-top:8px" @click="openSource(r)">{{ t('rq.openSource') }}</button>
           </template>
 
           <!-- 关系：说明为什么没有原文 -->
           <template v-else>
-            <div class="sechead" style="margin-top:0"><h3>为什么会有这条候选</h3></div>
+            <div class="sechead" style="margin-top:0"><h3>{{ t('rq.whyCandidate') }}</h3></div>
             <div class="notice violet">
               <template v-if="kind === 'relations'">
-                这条关系由实体间的高确定性断言派生，确认后进入图谱。该候选没有可定位的原文引用。
+                {{ t('rq.whyRelation') }}
               </template>
-              <template v-else>该候选没有附带的原文引用。</template>
+              <template v-else>{{ t('rq.noQuote') }}</template>
             </div>
-            <button v-if="r.source_document_id" class="btn sm" style="margin-top:8px" @click="openSource(r)">打开来源文档 →</button>
+            <button v-if="r.source_document_id" class="btn sm" style="margin-top:8px" @click="openSource(r)">{{ t('rq.openDoc') }}</button>
           </template>
         </div>
       </div>
@@ -342,20 +338,20 @@ function rejectAll() {
       <!-- 这句话只在"确实读到了、而且确实没有"时才出现 -->
       <EmptyState
         v-if="!rows.length"
-        :title="filter ? '没有匹配的候选' : '目前没有需要确认的内容'"
-        :text="filter ? '换个关键词，或清除搜索查看全部候选。' : '导入并抽取文档后，新候选会出现在这里；确认过它们才会被当作可信知识使用。'"
+        :title="filter ? t('rq.emptyFilter') : t('rq.emptyTitle')"
+        :text="filter ? t('rq.emptyFilterText') : t('rq.emptyText')"
       >
         <template #action>
-          <button v-if="filter" class="btn" @click="filter = ''">清除搜索</button>
-          <button v-else class="btn primary" @click="router.push('/knowledge')">去导入文档</button>
+          <button v-if="filter" class="btn" @click="filter = ''">{{ t('rq.clearSearch') }}</button>
+          <button v-else class="btn primary" @click="router.push('/knowledge')">{{ t('rq.goImport') }}</button>
         </template>
       </EmptyState>
     </div>
     </LoadBoundary>
 
     <div class="notice violet" style="margin-top:12px">
-      通过（verified）的知识会成为可信锚点进入图谱与问答；拒绝（rejected）会被检索与图谱排除。两种操作都可以在提示条里「撤销」。
-      <span v-if="kind === 'entities'" style="cursor:pointer;text-decoration:underline" @click="router.push('/knowledge')">在知识库中查看实体详情 →</span>
+      {{ t('rq.verdict') }}
+      <span v-if="kind === 'entities'" style="cursor:pointer;text-decoration:underline" @click="router.push('/knowledge')">{{ t('rq.viewEntity') }}</span>
     </div>
   </div>
 </template>

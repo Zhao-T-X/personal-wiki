@@ -11,6 +11,7 @@
  *   从不删除）。
  */
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { api, patchJson } from '../api/client'
 import type { Claim } from '../api/types'
@@ -19,7 +20,9 @@ import StatusTag from '../components/StatusTag.vue'
 import PageHead from '../components/PageHead.vue'
 import { useAppStore } from '../stores/app'
 import { toCard } from '../utils/claim'
+import { statusLabel } from '../utils/status'
 
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const store = useAppStore()
@@ -34,13 +37,11 @@ const quality = ref<any>(null)
 const history = ref<any>(null)
 const showHistory = ref(false)
 
-const RELATION_LABEL: Record<string, string> = {
-  duplicate: '重复', coexists: '并存', supersedes: '取代', contradicts: '矛盾', unclear: '待定',
-}
-
-/** Status words surfaced in toasts — keep them in the user's language, never the raw enum. */
-const STATUS_LABEL: Record<string, string> = {
-  verified: '已确认', rejected: '已否定', candidate: '待确认', archived: '已归档',
+/** Relationship words surfaced in the UI — keep them in the user's language, never the raw enum. */
+function relationLabel(r: string) {
+  return ({ duplicate: t('claim.relDuplicate'), coexists: t('claim.relCoexists'),
+    supersedes: t('claim.relSupersedes'), contradicts: t('claim.relContradicts'),
+    unclear: t('claim.relUnclear') } as Record<string, string>)[r] || r
 }
 
 const card = computed(() => (c.value ? toCard(c.value) : null))
@@ -103,7 +104,7 @@ async function setStatus(status: string) {
   if (!c.value) return
   try {
     await patchJson(`/api/knowledge/claim/${c.value.id}/status`, { status })
-    store.toast(status === 'verified' ? '已提交审核，等待确认' : '已标记为「' + (STATUS_LABEL[status] || status) + '」')
+    store.toast(status === 'verified' ? t('claim.submittedReview') : t('claim.markedAs', { label: statusLabel(status) }))
     c.value = { ...c.value, status }
   } catch (e: any) { store.toast(e.message) }
 }
@@ -113,10 +114,10 @@ const day = (v: string | null | undefined) => (v || '').slice(0, 10) || '—'
 
 <template>
   <div class="page" v-if="c && card">
-    <PageHead title="知识详情">
+    <PageHead :title="t('claim.title')">
       <template #actions>
-        <button class="btn ghost" @click="router.back()">← 返回</button>
-        <button class="btn" @click="router.push('/research')">就此创建研究</button>
+        <button class="btn ghost" @click="router.back()">{{ t('claim.back') }}</button>
+        <button class="btn" @click="router.push('/research')">{{ t('claim.createResearch') }}</button>
       </template>
     </PageHead>
 
@@ -125,16 +126,16 @@ const day = (v: string | null | undefined) => (v || '').slice(0, 10) || '—'
 
     <!-- 历史：这条知识怎么变成现在这样 -->
     <div class="sechead" style="margin-top:18px">
-      <h3>历史</h3>
-      <span v-if="history?.superseded_count" class="tag" style="margin:0">{{ history.superseded_count }} 次变化</span>
+      <h3>{{ t('claim.history') }}</h3>
+      <span v-if="history?.superseded_count" class="tag" style="margin:0">{{ t('claim.timesChanged', { n: history.superseded_count }) }}</span>
       <div class="grow"></div>
       <button class="btn sm" @click="showHistory ? showHistory = false : revealHistory()">
-        {{ showHistory ? '收起' : '查看历史' }}
+        {{ showHistory ? t('claim.collapse') : t('claim.viewHistory') }}
       </button>
     </div>
     <div v-if="showHistory" id="claim-history" class="panel pad">
       <div v-if="history?.cycles" class="notice red" style="margin-bottom:10px">
-        这条知识的历史数据存在环（互相取代），显示可能不完整。
+        {{ t('claim.cycleWarn') }}
       </div>
       <div class="evochain">
         <div v-for="(n, i) in (history?.chain || [])" :key="n.id" class="evonode"
@@ -144,50 +145,48 @@ const day = (v: string | null | undefined) => (v || '').slice(0, 10) || '—'
             <div class="row">
               <b class="evovalue">{{ n.object || '—' }}</b>
               <StatusTag :status="n.status" />
-              <span v-if="n.is_current" class="evocur">当前</span>
+              <span v-if="n.is_current" class="evocur">{{ t('claim.current') }}</span>
             </div>
             <p class="evometa">
               <template v-if="n.is_current">
-                生效中 · 依据 {{ n.sources }} 个来源
+                {{ t('claim.effective', { n: n.sources }) }}
               </template>
               <template v-else>
-                {{ day(n.effective_from) }} → {{ day(n.effective_to) }}
-                · 依据 {{ n.sources }} 个来源
-                · 被「{{ history?.chain?.[Number(i) + 1]?.object || '后续陈述' }}」取代
+                {{ t('claim.effectiveOld', { from: day(n.effective_from), to: day(n.effective_to), n: n.sources, next: (history?.chain?.[Number(i) + 1]?.object || t('claim.subsequent')) }) }}
               </template>
             </p>
           </div>
         </div>
-        <div v-if="!history?.chain?.length" class="empty">读不到历史记录。</div>
+        <div v-if="!history?.chain?.length" class="empty">{{ t('claim.readHistoryFail') }}</div>
       </div>
       <p class="faint" style="font-size:9.5px;margin:10px 0 0">
-        被取代的陈述不会被删除：它保留自己的依据与生效期间，只是不再是当前结论。
+        {{ t('claim.noDeleteNote') }}
       </p>
     </div>
 
     <!-- 依据：真实引文 + 可定位的原文 -->
     <div class="sechead" style="margin-top:18px">
-      <h3>依据</h3>
+      <h3>{{ t('claim.evidence') }}</h3>
       <span class="tag" :class="c.source_quote ? 'green' : 'red'" style="margin:0">
-        {{ sources != null ? sources : (c.source_quote ? 1 : 0) }} 个来源
+        {{ t('claim.sources', { n: sources != null ? sources : (c.source_quote ? 1 : 0) }) }}
       </span>
     </div>
     <div class="panel pad">
       <div v-if="c.source_quote" class="evidence">“{{ c.source_quote }}”
-        <div class="src"><span>{{ docTitle || '来源文档' }}</span></div>
-        <button class="btn sm" style="margin-top:9px" @click="openSource">打开原文并定位 →</button>
+        <div class="src"><span>{{ docTitle || t('claim.sourceDoc') }}</span></div>
+        <button class="btn sm" style="margin-top:9px" @click="openSource">{{ t('claim.openSource') }}</button>
       </div>
-      <div v-else class="empty">这条知识缺少可定位的引文——可能来自没有引用信息的整理批次。</div>
+      <div v-else class="empty">{{ t('claim.missingQuote') }}</div>
       <p v-if="(sources ?? 0) > 1" class="faint" style="font-size:9.5px;margin:10px 0 0">
-        其中 {{ sources - 1 }} 个来自另一个来源对同一事实的重复陈述——它让这条知识更有说服力。
+        {{ t('claim.duplicateNote', { n: sources - 1 }) }}
       </p>
     </div>
 
     <!-- 与其他陈述的关系（取代已在「历史」中呈现） -->
     <template v-if="otherRelations.length">
       <div class="sechead">
-        <h3>相关陈述</h3>
-        <span class="tag" style="margin:0">{{ otherRelations.length }} 条</span>
+        <h3>{{ t('claim.related') }}</h3>
+        <span class="tag" style="margin:0">{{ t('claim.relatedCount', { n: otherRelations.length }) }}</span>
       </div>
       <div class="panel pad" style="padding:6px">
         <div v-for="r in otherRelations" :key="r.id" class="item"
@@ -195,7 +194,7 @@ const day = (v: string | null | undefined) => (v || '').slice(0, 10) || '—'
           <span class="tag"
                 :class="r.relationship === 'contradicts' ? 'amber'
                         : r.relationship === 'duplicate' ? 'green' : ''">
-            {{ RELATION_LABEL[r.relationship] || r.relationship }}
+            {{ relationLabel(r.relationship) }}
           </span>
           <div class="grow">
             <b>{{ r.subject_name }} · {{ r.object_name || r.object_text || '—' }}</b>
@@ -207,27 +206,27 @@ const day = (v: string | null | undefined) => (v || '').slice(0, 10) || '—'
     </template>
 
     <div class="row" style="margin-top:14px;gap:8px">
-      <button class="btn" @click="setStatus('verified')">✓ 确认这条</button>
-      <button class="btn" @click="setStatus('rejected')">✕ 标记不成立</button>
+      <button class="btn" @click="setStatus('verified')">{{ t('claim.confirm') }}</button>
+      <button class="btn" @click="setStatus('rejected')">{{ t('claim.reject') }}</button>
       <div class="grow"></div>
-      <span class="faint" style="font-size:9px">状态：<StatusTag :status="c.status" /></span>
+      <span class="faint" style="font-size:9px">{{ t('claim.status') }}<StatusTag :status="c.status" /></span>
     </div>
 
     <!-- 技术细节：判断可信度时用不到，所以不占第一屏 -->
     <details v-if="store.developerMode" class="tech">
-      <summary>技术细节（仅开发者模式）</summary>
+      <summary>{{ t('claim.techDetails') }}</summary>
       <div class="propgrid">
         <div class="prop"><span>Claim Type</span><b>{{ c.claim_type }}</b></div>
         <div class="prop"><span>Polarity</span><b>{{ c.polarity }}</b></div>
         <div class="prop"><span>Modality</span><b>{{ c.modality }}</b></div>
         <div class="prop"><span>Confidence</span><b>{{ c.confidence ?? '—' }}</b></div>
         <div class="prop"><span>Ontology</span><b>{{ c.ontology_version || '—' }}</b></div>
-        <div class="prop"><span>进入图谱</span><b>{{ inGraph() ? '是' : '否' }}</b></div>
+        <div class="prop"><span>{{ t('claim.inGraph') }}</span><b>{{ inGraph() ? t('claim.inGraphYes') : t('claim.inGraphNo') }}</b></div>
         <div class="prop"><span>Context</span><b>{{ c.context?.condition || Object.keys(c.context || {}).join(', ') || '—' }}</b></div>
       </div>
       <div v-if="quality" class="qbox">
         <div class="qhead">
-          <span>质量评分</span>
+          <span>{{ t('claim.qualityScore') }}</span>
           <b class="grade" :class="'g-' + quality.grade">{{ quality.grade }}</b>
           <span class="faint">{{ Math.round(quality.overall * 100) }}%</span>
         </div>
@@ -241,20 +240,20 @@ const day = (v: string | null | undefined) => (v || '').slice(0, 10) || '—'
         </div>
       </div>
       <p class="faint" style="font-size:9.5px;margin:10px 0 0">
-        <template v-if="inGraph()">确定性为 asserted，满足进入关系图谱的条件。</template>
-        <template v-else>没有进入关系图谱：modality = {{ c.modality }}，Normalize 规则要求因果类断言具备 asserted 以上确定性才会派生为 Relation。</template>
+        <template v-if="inGraph()">{{ t('claim.graphNoteAsserted') }}</template>
+        <template v-else>{{ t('claim.graphNoteElse', { modality: c.modality }) }}</template>
       </p>
     </details>
-    <p v-else class="faint" style="font-size:9.5px;margin-top:14px">更详细的技术信息（类型、置信度、来源上下文）可在「开发者模式」中查看。</p>
+    <p v-else class="faint" style="font-size:9.5px;margin-top:14px">{{ t('claim.devModeHint') }}</p>
     </div>
 
     <div class="page" v-else-if="loadError">
-    <PageHead title="知识不存在" :subtitle="loadError">
+    <PageHead :title="t('claim.notExist')" :subtitle="loadError">
       <template #actions>
-        <button class="btn" @click="router.back()">← 返回</button>
+        <button class="btn" @click="router.back()">{{ t('claim.back') }}</button>
       </template>
     </PageHead>
-    <div class="empty">找不到这条知识（{{ loadError }}）——它可能已被删除或合并。</div>
+    <div class="empty">{{ t('claim.notExistBody', { error: loadError }) }}</div>
   </div>
 </template>
 

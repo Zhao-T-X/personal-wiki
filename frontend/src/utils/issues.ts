@@ -32,14 +32,16 @@ interface Destination {
   push: (to: string) => unknown
 }
 
+import { i18n } from '../i18n'
+
 /** 每一类问题能被处置的地方。键是后端的 `kind`，不是页面自己想出来的名字。 */
 const DESTINATIONS: Record<string, { path: string; label: string }> = {
-  claim_conflict: { path: '/review', label: '处理冲突' },
-  duplicate_entity: { path: '/review', label: '查看' },
-  object_link: { path: '/review', label: '查看' },
+  claim_conflict: { path: '/review', label: 'issues.resolveConflict' },
+  duplicate_entity: { path: '/review', label: 'issues.view' },
+  object_link: { path: '/review', label: 'issues.view' },
 }
 
-const FALLBACK = { path: '/review', label: '查看' }
+const FALLBACK = { path: '/review', label: 'issues.view' }
 
 /** 报告一次操作带回来的问题。返回是否报告了——调用方偶尔需要知道。 */
 export function reportIssues(
@@ -55,10 +57,10 @@ export function reportIssues(
   // 这句话只在操作已经成功之后才可能出现，所以先说「已完成」——否则用户会以为
   // 刚才那一步失败了，而它其实成功了，只是顺带暴露了一个问题。
   const head = list.length === 1
-    ? '已完成，但发现 1 个需要你处理的问题'
-    : `已完成，但发现 ${list.length} 个需要你处理的问题`
+    ? i18n.global.t('issues.headSingle')
+    : i18n.global.t('issues.headMulti', { n: list.length })
   store.toast(`${head}：${first.title}`, {
-    label: where.label,
+    label: i18n.global.t(where.label),
     run: () => router.push(where.path),
   })
   return true

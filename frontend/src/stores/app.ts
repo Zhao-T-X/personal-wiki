@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { api } from '../api/client'
+import { i18n } from '../i18n'
 import type { Health } from '../api/types'
 
 /** Optional affordance attached to a toast, so destructive actions stay reversible. */
@@ -48,25 +49,25 @@ async function pollExtraction(store: ExtractionStore) {
 
   if (Date.now() - active.startedAt > EXTRACTION_POLL_MAX_MS) {
     store.clearExtraction()
-    store.toast(`《${active.title}》抽取跟踪超时，已停止`)
+    store.toast(i18n.global.t('progress.timeout', { title: active.title }))
     return
   }
 
   try {
     const runs = await api<any[]>('/api/runs?task_type=extract&limit=5')
     const run = runs.find((r: any) => r.document_id === active.documentId)
-    if (!run) { active.stage = '正在分块文档'; settledTicks = 0; return }
+    if (!run) { active.stage = 'progress.chunking'; settledTicks = 0; return }
     active.runId = run.id
     active.status = run.status
     active.stepCount = run.step_count || 0
     if (run.status !== 'started') {
-      active.stage = '正在整理结果…'
+      active.stage = 'progress.settling'
       // The caller's POST normally clears this state. If that request hangs (or
       // the page was reloaded mid-extraction), polling must converge on its own.
       settledTicks += 1
       if (settledTicks >= 3) {
         store.clearExtraction()
-        store.toast(`《${active.title}》抽取已结束`)
+        store.toast(i18n.global.t('progress.done', { title: active.title }))
       }
       return
     }
@@ -78,11 +79,11 @@ async function pollExtraction(store: ExtractionStore) {
       // `input_summary` is "batch 3/8 · 4 chunks · 5120 chars" — a real denominator.
       const m = /batch (\d+)\/(\d+)/.exec(batchStep.input_summary || '')
       if (m) active.batch = { done: Number(m[1]), total: Number(m[2]) }
-      active.stage = '正在抽取知识'
+      active.stage = 'progress.extracting'
     } else if (steps[steps.length - 1]?.name === 'extract_repair') {
-      active.stage = '修正格式后重试'
+      active.stage = 'progress.repair'
     } else {
-      active.stage = '正在分块文档'
+      active.stage = 'progress.chunking'
     }
   } catch { /* transient failure — keep polling */ }
 }
@@ -146,7 +147,7 @@ export const useAppStore = defineStore('app', {
       settledTicks = 0
       this.extraction = {
         documentId, title, startedAt: Date.now(),
-        runId: null, status: 'started', stage: '正在读取文档', batch: null, stepCount: 0,
+        runId: null, status: 'started', stage: 'progress.reading', batch: null, stepCount: 0,
       }
       extractionTimer = window.setInterval(() => void pollExtraction(this), 2500)
     },

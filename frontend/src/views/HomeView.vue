@@ -8,8 +8,10 @@
  * 但"确实什么都没有"和"读不到"必须分开：一次失败的请求曾经把整页退回成
  * 新用户空库的首屏，那对一个知识库产品来说是能说出的最坏的一句话——用户会
  * 理解成"我的知识全没了"。所以首用提示只在 `success && 空` 时出现。 */
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, type Component } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+import { CircleCheck, FileText, Plus, RefreshCw, Sparkles, Telescope, TriangleAlert } from 'lucide-vue-next'
 import { api } from '../api/client'
 import type { DocumentRow, Entity } from '../api/types'
 import LoadBoundary from '../components/LoadBoundary.vue'
@@ -20,12 +22,11 @@ import { fmtDateTime } from '../utils/time'
 import { entityTypeLabel } from '../utils/entityType'
 
 const router = useRouter()
+const { t } = useI18n()
 
-const DEFAULT_EXAMPLES = [
-  '我的知识里有哪些核心概念？',
-  '最近导入的内容讲了什么？',
-  '有哪些结论在不同来源里互相冲突？',
-]
+function defaultExamples(): string[] {
+  return [t('home.example1'), t('home.example2'), t('home.example3')]
+}
 
 interface Changes {
   day: string
@@ -48,10 +49,10 @@ interface HomeData {
 
 const greeting = computed(() => {
   const h = new Date().getHours()
-  if (h < 5) return '夜深了'
-  if (h < 12) return '早上好'
-  if (h < 18) return '下午好'
-  return '晚上好'
+  if (h < 5) return t('home.greeting.night')
+  if (h < 12) return t('home.greeting.morning')
+  if (h < 18) return t('home.greeting.afternoon')
+  return t('home.greeting.evening')
 })
 
 function dayOf(value: unknown) { return String(value || '').slice(0, 10) }
@@ -69,11 +70,11 @@ function changesOf(ops: any[], rels: any[]): Changes | null {
   const superseding = ops.filter(o => onDay(o) && (
     o.kind === 'SUPERSEDE' || (o.kind === 'CORRECT' && o.result?.superseded_claim_id)))
   return {
-    // 「今天」只在真的匹配本地日期时才说，否则如实显示那一天。
-    day: newest === dayOf(new Date().toISOString()) ? '今天' : newest,
+    // day 永远存原始日期；「今天」在渲染时判断（否则切换语言后这行不会跟着变）。
+    day: newest,
     added: ops.filter(o => onDay(o) && o.kind === 'CREATE').length,
     updated: superseding.slice(0, 3).map(o => ({
-      label: o.payload?.subject ? `${o.payload.subject} 已更新` : '一条知识已更新',
+      label: o.payload?.subject ? t('home.itemUpdated', { name: o.payload.subject }) : t('home.someUpdated'),
       claim_id: o.result?.claim_id || o.result?.superseded_claim_id || null,
     })),
     evidenced: rels.filter(r => onDay(r) && r.relationship === 'duplicate').length,
@@ -123,14 +124,14 @@ const home = useAsyncState<HomeData>(async () => {
     },
     staleCandidates: health?.stale_candidates || 0,
     // Example questions come from the user's own open questions when they have any.
-    examples: open.length ? open.slice(0, 3).map(q => q.content) : [...DEFAULT_EXAMPLES],
+    examples: open.length ? open.slice(0, 3).map(q => q.content) : defaultExamples(),
     changes: changesOf(ops, rels),
     window7: window7Of(ops, rels),
   }
 }, {
   entities: [] as Entity[], docs: [] as DocumentRow[], openQuestions: 0, conflicts: 0,
   review: { entities: 0, claims: 0, relations: 0 }, staleCandidates: 0,
-  examples: [...DEFAULT_EXAMPLES], changes: null, window7: null,
+  examples: defaultExamples(), changes: null, window7: null,
 })
 
 /** True once the home data has loaded successfully — gates example chips and the
@@ -144,6 +145,11 @@ const conflicts = computed(() => home.data.value.conflicts)
 const review = computed(() => home.data.value.review)
 const staleCandidates = computed(() => home.data.value.staleCandidates)
 const examples = computed(() => home.data.value.examples)
+/** 默认示例在渲染时求值：语言切换后示例文案立即跟着变（数据里只存用户自己的问题）。 */
+const exampleChips = computed(() => examples.value.length ? examples.value : defaultExamples())
+const todayStr = dayOf(new Date().toISOString())
+/** 日期或「今天」标签：today 判断放在渲染层，保证跟随 locale。 */
+function dayLabel(day: string) { return day === todayStr ? t('home.today') : day }
 const changes = computed(() => home.data.value.changes)
 const window7 = computed(() => home.data.value.window7)
 
@@ -155,19 +161,19 @@ const dueTotal = computed(() => pendingTotal.value + conflicts.value)
 
 /** One list, so the panel can be empty, partial or full without special cases. */
 const changeRows = computed(() => {
-  const rows: { key: string; icon: string; cls: string; text: string; to?: any }[] = []
+  const rows: { key: string; icon: Component; cls: string; text: string; to?: any }[] = []
   if (changes.value) {
     for (const [i, u] of changes.value.updated.entries()) {
-      rows.push({ key: 'u' + i, icon: '↻', cls: 'upd', text: u.label,
+      rows.push({ key: 'u' + i, icon: RefreshCw, cls: 'upd', text: u.label,
                   to: u.claim_id ? '/knowledge/claim/' + u.claim_id : undefined })
     }
     if (changes.value.added)
-      rows.push({ key: 'added', icon: '+', cls: 'add', text: `${changes.value.added} 条新知识` })
+      rows.push({ key: 'added', icon: Plus, cls: 'add', text: t('home.addedN', { n: changes.value.added }) })
     if (changes.value.evidenced)
-      rows.push({ key: 'ev', icon: '✓', cls: 'ok', text: `${changes.value.evidenced} 条获得了新证据` })
+      rows.push({ key: 'ev', icon: CircleCheck, cls: 'ok', text: t('home.evidencedN', { n: changes.value.evidenced }) })
   }
   if (conflicts.value)
-    rows.push({ key: 'cf', icon: '⚠', cls: 'wrn', text: `${conflicts.value} 条与现有知识冲突`,
+    rows.push({ key: 'cf', icon: TriangleAlert, cls: 'wrn', text: t('home.conflictN', { n: conflicts.value }),
                 to: { path: '/research', query: { tab: 'conflicts' } } })
   return rows
 })
@@ -200,8 +206,8 @@ function openDocument(id: string) {
          文件/网址/文本/自然语言都从它进；不再单独放一个大拖拽框。 -->
     <div class="home-hero">
       <div class="eyebrow">{{ greeting }}</div>
-      <h1 class="hero-title">把正在看的东西，变成你的知识</h1>
-      <p class="hero-sub">整理、理解、研究，并让每一条知识都能被追溯和纠正。</p>
+      <h1 class="hero-title">{{ t('home.heroTitle') }}</h1>
+      <p class="hero-sub">{{ t('home.heroSub') }}</p>
 
       <!-- 一个入口，四条路径：问、记、研究、纠正。判断与执行都在组件里，
            用已经存在的接口——首页不再自己决定一句话该去哪里。 -->
@@ -209,88 +215,88 @@ function openDocument(id: string) {
 
       <!-- 示例问题只在真的读到内容时给；读不到时不冒充"你还没有内容" -->
       <div v-if="loaded && hasContent" class="row" style="justify-content:center;gap:8px;margin-top:14px;flex-wrap:wrap">
-        <span v-for="e in examples" :key="e" class="tag" style="cursor:pointer" @click="onebox?.ask(e)">{{ e }}</span>
+        <span v-for="e in exampleChips" :key="e" class="tag" style="cursor:pointer" @click="onebox?.ask(e)">{{ e }}</span>
       </div>
       <p v-else-if="firstUse" class="faint" style="font-size:10px;margin-top:14px;line-height:1.8">
-        还没有内容时，先丢一篇进来。它会读过之后告诉你整理出了什么，之后你问它就有据可依。
+        {{ t('home.firstUse') }}
       </p>
     </div>
 
     <!-- 读不到首页数据时说"读不到"。绝不退回成上面那句新用户提示：
          对用户来说"我的知识全没了"和"这次没读到"是两个完全不同的结论。 -->
-    <LoadBoundary :state="home.state.value" loading-text="正在读取你的知识库…"
-                  error-title="首页内容暂时无法加载"
-                  error-text="这次没能读到你的知识库——这不代表里面的内容有问题，也不代表它是空的。"
+    <LoadBoundary :state="home.state.value" :loading-text="t('home.loading')"
+                  :error-title="t('home.errorTitle')"
+                  :error-text="t('home.errorText')"
                   :reload="loadAll" />
 
     <template v-if="loaded">
     <!-- 需要你的判断 —— 只在真的有事时出现，这才是首页的职责 -->
     <div v-if="dueTotal" class="panel pad" style="max-width:720px;margin:34px auto 0">
       <div class="row">
-        <h3 style="font-size:13px;margin:0">{{ dueTotal }} 项需要你的判断</h3>
+        <h3 style="font-size:13px;margin:0">{{ t('home.dueTotal', { n: dueTotal }) }}</h3>
         <div class="grow"></div>
-        <button class="btn primary" @click="router.push('/review')">开始确认 →</button>
+        <button class="btn primary" @click="router.push('/review')">{{ t('home.startReview') }}</button>
       </div>
       <div class="duerows">
-        <div class="duerow"><span>候选对象</span><b>{{ review.entities }}</b></div>
-        <div class="duerow"><span>待确认知识</span><b>{{ review.claims }}</b></div>
-        <div class="duerow"><span>待确认关系</span><b>{{ review.relations }}</b></div>
+        <div class="duerow"><span>{{ t('home.due.entities') }}</span><b>{{ review.entities }}</b></div>
+        <div class="duerow"><span>{{ t('home.due.claims') }}</span><b>{{ review.claims }}</b></div>
+        <div class="duerow"><span>{{ t('home.due.relations') }}</span><b>{{ review.relations }}</b></div>
         <div class="duerow clickable" :class="{ warn: conflicts > 0 }" @click="router.push({ path: '/research', query: { tab: 'conflicts' } })">
-          <span>知识冲突</span><b>{{ conflicts }}</b>
+          <span>{{ t('home.due.conflicts') }}</span><b>{{ conflicts }}</b>
         </div>
-        <div v-if="staleCandidates" class="duerow"><span>陈旧候选（&gt;90 天）</span><b>{{ staleCandidates }}</b></div>
+        <div v-if="staleCandidates" class="duerow"><span>{{ t('home.due.stale') }}</span><b>{{ staleCandidates }}</b></div>
       </div>
     </div>
 
     <div v-if="hasContent" class="grid g2" style="max-width:920px;margin:30px auto 0">
       <div>
-        <div class="sechead"><h3>最近知识</h3><span class="more" @click="router.push('/knowledge')">进入知识空间 →</span></div>
+        <div class="sechead"><h3>{{ t('home.recentKnowledge') }}</h3><span class="more" @click="router.push('/knowledge')">{{ t('home.intoKnowledge') }}</span></div>
         <div class="panel pad" style="padding:6px">
           <div v-for="e in entities" :key="e.id" class="item" @click="router.push('/knowledge/object/' + e.id)">
-            <div class="ico-badge ib-blue">✦</div>
+            <div class="ico-badge ib-blue"><Sparkles :size="14" /></div>
             <div class="grow"><b>{{ e.name }}</b><p>{{ entityTypeLabel(e.type) }} · {{ e.description?.slice(0, 40) || '—' }}</p></div>
             <StatusTag :status="e.status" />
           </div>
-          <div v-if="!entities.length" class="empty">还没有知识对象</div>
+          <div v-if="!entities.length" class="empty">{{ t('home.noEntities') }}</div>
         </div>
       </div>
       <div>
         <!-- 知识变化，而不是操作日志：这是「它会自己维护」第一次被用户看见的地方 -->
         <div class="sechead">
-          <h3>最近知识变化</h3>
-          <span v-if="changes" class="faint" style="font-size:9px">{{ changes.day }}</span>
+          <h3>{{ t('home.recentChanges') }}</h3>
+          <span v-if="changes" class="faint" style="font-size:9px">{{ dayLabel(changes.day) }}</span>
         </div>
         <div class="panel pad">
           <div v-for="r in changeRows" :key="r.key" class="chgrow" :class="[r.cls, { clickable: !!r.to }]"
                @click="gotoChange(r)">
-            <span class="ci">{{ r.icon }}</span><b>{{ r.text }}</b>
+            <span class="ci"><component :is="r.icon" :size="13" /></span><b>{{ r.text }}</b>
           </div>
-          <div v-if="!changeRows.length" class="empty">还没有知识变化</div>
+          <div v-if="!changeRows.length" class="empty">{{ t('home.noChanges') }}</div>
           <!-- 一眼看出它不是静态数据库，而是在持续工作 -->
           <div v-if="window7" class="w7">
-            <span class="wlbl">最近 7 天</span>
-            <span>新增 <b>{{ window7.added }}</b></span>
-            <span>更新 <b>{{ window7.updated }}</b></span>
-            <span>获得新证据 <b>{{ window7.evidenced }}</b></span>
-            <span v-if="dueTotal">待确认 <b>{{ dueTotal }}</b></span>
+            <span class="wlbl">{{ t('home.last7') }}</span>
+            <span>{{ t('home.w7added') }} <b>{{ window7.added }}</b></span>
+            <span>{{ t('home.w7updated') }} <b>{{ window7.updated }}</b></span>
+            <span>{{ t('home.w7evidenced') }} <b>{{ window7.evidenced }}</b></span>
+            <span v-if="dueTotal">{{ t('home.w7due') }} <b>{{ dueTotal }}</b></span>
           </div>
         </div>
 
-        <div class="sechead"><h3>开放问题</h3><span class="more" @click="router.push('/research')">进入研究空间 →</span></div>
+        <div class="sechead"><h3>{{ t('home.openQuestions') }}</h3><span class="more" @click="router.push('/research')">{{ t('home.intoResearch') }}</span></div>
         <div class="panel pad" style="padding:6px">
           <div class="item" @click="router.push('/research')">
-            <div class="ico-badge ib-blue">◇</div>
-            <div class="grow"><b>{{ openQuestions }} 个开放问题</b><p>在研究空间查看与继续研究</p></div>
-            <span class="tag blue">开放中</span>
+            <div class="ico-badge ib-blue"><Telescope :size="14" /></div>
+            <div class="grow"><b>{{ t('home.openQuestionsN', { n: openQuestions }) }}</b><p>{{ t('home.openQuestionsSub') }}</p></div>
+            <span class="tag blue">{{ t('home.openTag') }}</span>
           </div>
         </div>
 
-        <div v-if="docs.length" class="sechead"><h3>最近加入</h3><span class="more" @click="router.push('/knowledge')">全部 →</span></div>
+        <div v-if="docs.length" class="sechead"><h3>{{ t('home.recentDocs') }}</h3><span class="more" @click="router.push('/knowledge')">{{ t('home.allDocs') }}</span></div>
         <div v-if="docs.length" class="panel pad" style="padding:6px">
           <div v-for="d in docs.slice(0, 4)" :key="d.id" class="item" @click="openDocument(d.id)">
-            <div class="ico-badge ib-blue">▤</div>
-            <div class="grow"><b>{{ d.title }}</b><p>{{ d.chunk_count }} 片段 · {{ fmtDateTime(d.updated_at) }}</p></div>
-            <StatusTag v-if="d.last_run_status" :status="d.last_run_status" /><span v-else class="tag amber">未分析</span>
+            <div class="ico-badge ib-blue"><FileText :size="14" /></div>
+            <div class="grow"><b>{{ d.title }}</b><p>{{ t('home.chunksN', { n: d.chunk_count }) }} · {{ fmtDateTime(d.updated_at) }}</p></div>
+            <StatusTag v-if="d.last_run_status" :status="d.last_run_status" /><span v-else class="tag amber">{{ t('home.unanalyzed') }}</span>
           </div>
         </div>
       </div>
@@ -300,14 +306,14 @@ function openDocument(id: string) {
     <!-- v3 双卡：问答 / 研究的轻导航，不是新功能，只是两条既有路径的入口 -->
     <div v-if="loaded && hasContent" class="grid g2 minigrid">
       <div class="panel pad mini">
-        <h3>问答</h3>
-        <p>直接询问你的知识库。答案同时展示相关知识与依据。</p>
-        <button class="minilink" @click="router.push('/qa')">开始提问 →</button>
+        <h3>{{ t('home.miniQaTitle') }}</h3>
+        <p>{{ t('home.miniQaDesc') }}</p>
+        <button class="minilink" @click="router.push('/qa')">{{ t('home.miniQaLink') }}</button>
       </div>
       <div class="panel pad mini">
-        <h3>研究</h3>
-        <p>围绕一个主题收集资料，形成可追溯的候选知识，再决定是否采纳。</p>
-        <button class="minilink" @click="router.push('/research')">开始研究 →</button>
+        <h3>{{ t('home.miniResearchTitle') }}</h3>
+        <p>{{ t('home.miniResearchDesc') }}</p>
+        <button class="minilink" @click="router.push('/research')">{{ t('home.miniResearchLink') }}</button>
       </div>
     </div>
   </div>
